@@ -31,7 +31,7 @@ jobs:
       - run: pytest
 
   frontend:
-    name: Frontend lint, typecheck, build
+    name: Frontend lint, tests, build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -46,5 +46,6 @@ jobs:
       # `npm ci` installs exactly what package-lock.json says (reproducible).
       - run: npm ci
       - run: npm run lint
+      - run: npm test
       # `npm run build` runs `tsc -b` (typecheck) and then the Vite build.
       - run: npm run build

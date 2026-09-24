@@ -1,25 +1,31 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchUpcoming, listApplications, STATUSES } from '../api'
+import { fetchUpcoming, listApplications, STATUSES, updateApplication } from '../api'
 import type { Application, ApplicationStatus } from '../api'
-import StatusBadge from '../components/StatusBadge'
+import StatusSelect from '../components/StatusSelect'
 import { formatDate, localToday } from '../dates'
+import { useDebounced } from '../hooks'
 import { statusLabel } from '../status'
 
-function useDebounced<T>(value: T, ms: number): T {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), ms)
-    return () => clearTimeout(t)
-  }, [value, ms])
-  return debounced
+export const PAGE_SIZE = 20
+
+interface Filters {
+  q: string
+  company: string
+  status: ApplicationStatus | ''
+  dateFrom: string
+  dateTo: string
 }
 
-function UpcomingPanel() {
+const NO_FILTERS: Filters = { q: '', company: '', status: '', dateFrom: '', dateTo: '' }
+
+function UpcomingPanel({ reloadKey }: { reloadKey: number }) {
   const [items, setItems] = useState<Application[]>([])
   useEffect(() => {
-    fetchUpcoming().then(setItems).catch(() => setItems([]))
-  }, [])
+    fetchUpcoming()
+      .then(setItems)
+      .catch(() => setItems([]))
+  }, [reloadKey])
   if (items.length === 0) return null
 
   const today = localToday()
@@ -44,36 +50,86 @@ function UpcomingPanel() {
   )
 }
 
+const inputClass =
+  'rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+
 export default function Applications() {
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<ApplicationStatus | ''>('')
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS)
+  const [page, setPage] = useState(0)
   const [items, setItems] = useState<Application[]>([])
   const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(true) // true only until the first response
   const [error, setError] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<number | null>(null) // row with a status change in flight
+  // Bumped after a status change to refetch the list and the reminders panel.
+  const [reloadKey, setReloadKey] = useState(0)
 
-  // Wait for a pause in typing so we don't fire a request per keystroke.
-  const q = useDebounced(search.trim(), 300)
+  // Changing any filter returns to page 1; otherwise you could be left on a
+  // page that no longer exists.
+  function setFilter(patch: Partial<Filters>) {
+    setFilters((f) => ({ ...f, ...patch }))
+    setPage(0)
+  }
+
+  // Text fields wait for a pause in typing; dropdowns and dates apply at once.
+  const q = useDebounced(filters.q.trim(), 300)
+  const company = useDebounced(filters.company.trim(), 300)
+  const { status, dateFrom, dateTo } = filters
 
   useEffect(() => {
     // `cancelled` drops the result of an outdated request, so a slow earlier
     // response can't overwrite a newer one.
     let cancelled = false
-    listApplications({ q: q || undefined, status: status || undefined })
+    listApplications({
+      q,
+      company,
+      status: status || undefined,
+      date_from: dateFrom,
+      date_to: dateTo,
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+    })
       .then((res) => {
         if (cancelled) return
+        // Deleting or re-filtering can leave us past the last page: step back.
+        if (res.items.length === 0 && res.total > 0 && page > 0) {
+          setPage(Math.ceil(res.total / PAGE_SIZE) - 1)
+          return
+        }
         setItems(res.items)
         setTotal(res.total)
         setError(null)
+        setLoading(false)
       })
-      .catch((err) => !cancelled && setError(err.message))
-      .finally(() => !cancelled && setLoading(false))
+      .catch((err) => {
+        if (cancelled) return
+        setError(err.message)
+        setLoading(false)
+      })
     return () => {
       cancelled = true
     }
-  }, [q, status])
+  }, [q, company, status, dateFrom, dateTo, page, reloadKey])
 
-  const filtered = q !== '' || status !== ''
+  async function changeStatus(app: Application, next: ApplicationStatus) {
+    if (next === app.status) return
+    setBusyId(app.id)
+    setError(null)
+    try {
+      await updateApplication(app.id, { status: next })
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not change status')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const filtered = q !== '' || company !== '' || status !== '' || dateFrom !== '' || dateTo !== ''
+  const badRange = dateFrom !== '' && dateTo !== '' && dateFrom > dateTo
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const firstShown = total === 0 ? 0 : page * PAGE_SIZE + 1
+  const lastShown = page * PAGE_SIZE + items.length
 
   return (
     <>
@@ -87,21 +143,30 @@ export default function Applications() {
         </Link>
       </div>
 
-      <UpcomingPanel />
+      <UpcomingPanel reloadKey={reloadKey} />
 
-      <div className="flex flex-col gap-3 sm:flex-row mb-4">
+      <div className="grid gap-3 mb-4 sm:grid-cols-2 lg:grid-cols-6">
         <input
           type="search"
           placeholder="Search company, role, location, notes…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          aria-label="Search"
+          value={filters.q}
+          onChange={(e) => setFilter({ q: e.target.value })}
+          className={`${inputClass} sm:col-span-2 lg:col-span-3`}
+        />
+        <input
+          type="search"
+          placeholder="Company"
+          aria-label="Company"
+          value={filters.company}
+          onChange={(e) => setFilter({ company: e.target.value })}
+          className={`${inputClass} lg:col-span-2`}
         />
         <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value as ApplicationStatus | '')}
+          value={filters.status}
+          onChange={(e) => setFilter({ status: e.target.value as ApplicationStatus | '' })}
           aria-label="Filter by status"
-          className="rounded-lg border border-slate-300 px-3 py-2 bg-white"
+          className={inputClass}
         >
           <option value="">All statuses</option>
           {STATUSES.map((s) => (
@@ -110,8 +175,40 @@ export default function Applications() {
             </option>
           ))}
         </select>
+        <label className="flex items-center gap-2 text-sm text-slate-600 sm:col-span-1 lg:col-span-2">
+          Applied from
+          <input
+            type="date"
+            value={filters.dateFrom}
+            onChange={(e) => setFilter({ dateFrom: e.target.value })}
+            className={`${inputClass} flex-1`}
+          />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-600 sm:col-span-1 lg:col-span-2">
+          to
+          <input
+            type="date"
+            value={filters.dateTo}
+            onChange={(e) => setFilter({ dateTo: e.target.value })}
+            className={`${inputClass} flex-1`}
+          />
+        </label>
+        {filtered && (
+          <button
+            type="button"
+            onClick={() => setFilter(NO_FILTERS)}
+            className="text-sm text-indigo-600 hover:underline justify-self-start lg:col-span-2 self-center"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
+      {badRange && (
+        <p role="alert" className="text-sm text-amber-700 mb-3">
+          The start date is after the end date, so nothing can match.
+        </p>
+      )}
       {error && (
         <p role="alert" className="rounded-lg bg-red-50 text-red-700 text-sm px-3 py-2 mb-4">
           {error}
@@ -138,30 +235,54 @@ export default function Applications() {
         <>
           <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white">
             {items.map((a) => (
-              <li key={a.id}>
-                <Link
-                  to={`/applications/${a.id}`}
-                  className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-slate-50"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium text-slate-900 truncate">{a.company}</p>
-                    <p className="text-sm text-slate-600 truncate">
-                      {a.role}
-                      {a.location ? ` · ${a.location}` : ''}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    <StatusBadge status={a.status} />
-                    <span className="text-xs text-slate-500">{formatDate(a.date_applied)}</span>
-                  </div>
+              <li key={a.id} className="flex items-center gap-4 px-4 py-3 hover:bg-slate-50">
+                <Link to={`/applications/${a.id}`} className="min-w-0 flex-1">
+                  <p className="font-medium text-slate-900 truncate">{a.company}</p>
+                  <p className="text-sm text-slate-600 truncate">
+                    {a.role}
+                    {a.location ? ` · ${a.location}` : ''}
+                  </p>
                 </Link>
+                {/* Sits beside the link (not inside it): a control nested in a link is invalid HTML. */}
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <StatusSelect
+                    value={a.status}
+                    label={`Status for ${a.company}`}
+                    disabled={busyId === a.id}
+                    onChange={(next) => changeStatus(a, next)}
+                  />
+                  <span className="text-xs text-slate-500">{formatDate(a.date_applied)}</span>
+                </div>
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-sm text-slate-500">
-            {total} application{total === 1 ? '' : 's'}
-            {items.length < total ? ` (showing ${items.length})` : ''}
-          </p>
+
+          <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
+            <span>
+              Showing {firstShown}–{lastShown} of {total}
+            </span>
+            {pageCount > 1 && (
+              <nav aria-label="Pagination" className="flex items-center gap-3">
+                <button
+                  onClick={() => setPage((p) => p - 1)}
+                  disabled={page === 0}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1 hover:bg-slate-100 disabled:opacity-50 disabled:hover:bg-white"
+                >
+                  Previous
+                </button>
+                <span>
+                  Page {page + 1} of {pageCount}
+                </span>
+                <button
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={page + 1 >= pageCount}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1 hover:bg-slate-100 disabled:opacity-50 disabled:hover:bg-white"
+                >
+                  Next
+                </button>
+              </nav>
+            )}
+          </div>
         </>
       )}
     </>

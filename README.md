@@ -14,7 +14,7 @@ This project is built with [Claude Code](https://claude.com/claude-code) as a de
 - **Backend:** Python, FastAPI
 - **Database:** SQLAlchemy 2.0; SQLite for local dev, PostgreSQL in production (planned)
 - **Auth:** JWT (PyJWT) + bcrypt
-- **Testing / CI:** pytest, GitHub Actions (planned)
+- **Testing / CI:** pytest; Vitest, Testing Library and MSW; GitHub Actions runs both on every push
 
 ## Running locally
 
@@ -43,7 +43,8 @@ Open the app, sign up, and you should land on a page showing your email and **AP
 **Tests:**
 
 ```bash
-cd backend && pytest
+cd backend && pytest      # API tests (in-memory SQLite)
+cd frontend && npm test  # UI tests (Vitest + Testing Library, API mocked with MSW)
 ```
 
 ## API overview

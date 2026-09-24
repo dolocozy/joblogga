@@ -3,7 +3,7 @@ import AuthForm from '../components/AuthForm'
 import { useAuth } from '../auth'
 
 export default function Login() {
-  const { login } = useAuth()
+  const { login, sessionExpired } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   // If a protected page bounced us here, return to it after logging in.
@@ -14,6 +14,7 @@ export default function Login() {
       title="Log in"
       submitLabel="Log in"
       passwordAutoComplete="current-password"
+      notice={sessionExpired ? 'Your session has expired. Please log in again.' : undefined}
       onSubmit={async (email, password) => {
         await login(email, password)
         navigate(from, { replace: true })

@@ -14,6 +14,13 @@ export const tokenStore = {
   clear: () => localStorage.removeItem(TOKEN_KEY),
 }
 
+// AuthProvider registers this so an expired session can be handled in one place
+// instead of every page having to notice 401s itself.
+let onUnauthorized: (() => void) | null = null
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  onUnauthorized = handler
+}
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -49,6 +56,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (!res.ok) {
+    // A 401 on a request that carried a token means the session is over (expired
+    // or revoked). Wrong-password 401s from the login form don't count: those are
+    // an ordinary error to show next to the form.
+    if (res.status === 401 && token && !path.startsWith('/auth/login')) {
+      tokenStore.clear()
+      onUnauthorized?.()
+    }
     const body = await res.json().catch(() => null)
     throw new ApiError(res.status, errorMessage(body?.detail, `Request failed (${res.status})`))
   }
@@ -130,13 +144,20 @@ export interface ApplicationInput {
 
 export interface ApplicationFilters {
   q?: string
+  company?: string
   status?: ApplicationStatus
+  date_from?: string // YYYY-MM-DD
+  date_to?: string
+  limit?: number
+  offset?: number
 }
 
 export function listApplications(filters: ApplicationFilters = {}) {
   const params = new URLSearchParams()
-  if (filters.q) params.set('q', filters.q)
-  if (filters.status) params.set('status', filters.status)
+  // Skip unset/empty values so the URL only carries filters actually in use.
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== '') params.set(key, String(value))
+  }
   const qs = params.toString()
   return request<{ items: Application[]; total: number }>(`/applications${qs ? `?${qs}` : ''}`)
 }
@@ -148,7 +169,9 @@ export const getApplication = (id: number) => request<ApplicationDetail>(`/appli
 export const createApplication = (input: ApplicationInput) =>
   request<ApplicationDetail>('/applications', { method: 'POST', body: JSON.stringify(input) })
 
-export const updateApplication = (id: number, input: ApplicationInput) =>
+// PATCH: send only the fields to change (the form sends all of them; the
+// quick status dropdown on the list sends just `status`).
+export const updateApplication = (id: number, input: Partial<ApplicationInput>) =>
   request<ApplicationDetail>(`/applications/${id}`, { method: 'PATCH', body: JSON.stringify(input) })
 
 export const deleteApplication = (id: number) =>

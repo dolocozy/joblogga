@@ -10,6 +10,7 @@ interface Props {
   footerLinkText: string
   footerLinkTo: string
   passwordAutoComplete: 'current-password' | 'new-password'
+  notice?: string // neutral info shown above the form, e.g. "session expired"
 }
 
 export default function AuthForm(props: Props) {
@@ -42,6 +43,12 @@ export default function AuthForm(props: Props) {
         className="w-full max-w-sm bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4"
       >
         <h2 className="text-xl font-semibold text-slate-900">{props.title}</h2>
+
+        {props.notice && !error && (
+          <p role="status" className="rounded-lg bg-amber-50 text-amber-800 text-sm px-3 py-2">
+            {props.notice}
+          </p>
+        )}
 
         {error && (
           <p role="alert" className="rounded-lg bg-red-50 text-red-700 text-sm px-3 py-2">

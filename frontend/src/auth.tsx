@@ -8,6 +8,9 @@ interface AuthContextValue {
   // True until we've checked whether a saved token is still valid. Without
   // this, a logged-in user would flash the login page on every refresh.
   loading: boolean
+  // True after a logged-in session ended on the server side (e.g. token expired),
+  // so the login page can explain why the user is back there.
+  sessionExpired: boolean
   login: (email: string, password: string) => Promise<void>
   signup: (email: string, password: string) => Promise<void>
   logout: () => void
@@ -18,6 +21,17 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(() => api.tokenStore.get() !== null)
+  const [sessionExpired, setSessionExpired] = useState(false)
+
+  // Any request that comes back 401 while logged in ends the session: dropping
+  // `user` makes ProtectedRoute redirect to the login page.
+  useEffect(() => {
+    api.setUnauthorizedHandler(() => {
+      setUser(null)
+      setSessionExpired(true)
+    })
+    return () => api.setUnauthorizedHandler(null)
+  }, [])
 
   // On first load, if a token is saved, ask the server who it belongs to.
   // The server is the source of truth: an expired or invalid token gets a 401
@@ -39,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { access_token } = await api.login(email, password)
     api.tokenStore.set(access_token)
     setUser(await api.fetchMe())
+    setSessionExpired(false)
   }, [])
 
   const signup = useCallback(
@@ -52,11 +67,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     api.tokenStore.clear()
     setUser(null)
+    setSessionExpired(false)
   }, [])
 
   const value = useMemo(
-    () => ({ user, loading, login, signup, logout }),
-    [user, loading, login, signup, logout],
+    () => ({ user, loading, sessionExpired, login, signup, logout }),
+    [user, loading, sessionExpired, login, signup, logout],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
