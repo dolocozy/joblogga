@@ -111,7 +111,7 @@ Failed logins are limited three ways, and signups per address:
 
 Only failures count, unknown emails count the same as real ones (so the limit reveals nothing), and a locked caller is refused before the password is even checked. Refusals return `429` with a `Retry-After` header and a plain-language message.
 
-Limits are held in the API process's memory: fine for one server, reset on restart, and would move to Redis or the database to run several instances. Client addresses come from `X-Forwarded-For` counted from the right by `TRUSTED_PROXY_HOPS` (the left side is written by the client, so it is never trusted).
+Limits are held in the API process's memory: fine for one server, reset on restart, and would move to Redis or the database to run several instances. Knowing each visitor's real address behind a host's proxies is the hard part, and it was measured, not assumed. On Render a request passes Cloudflare and then Render's load balancer, and a forged `X-Forwarded-For` becomes the server's connection address, so that address is never trusted. The API uses `CF-Connecting-IP` (Cloudflare rejects or overwrites a forged one), falls back to counting `X-Forwarded-For` three entries from the right (the left side is written by the client), and if neither works puts everyone in one shared, stricter bucket instead of trusting anything forgeable. Settings: `TRUSTED_CLIENT_IP_HEADER`, `TRUSTED_PROXY_HOPS`.
 
 ## Auth design
 

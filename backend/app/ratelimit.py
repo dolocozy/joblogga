@@ -1,8 +1,9 @@
+import ipaddress
 import logging
 import math
 import time
 from collections import OrderedDict, deque
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 logger = logging.getLogger("joblogga.ratelimit")
 
@@ -131,24 +132,69 @@ def wait_message(seconds: int) -> str:
     return f"Too many attempts. Try again in {minutes} minute{'s' if minutes != 1 else ''}."
 
 
-def resolve_client_ip(peer: str | None, forwarded_for: str | None, trusted_hops: int) -> str:
-    """The address the request really came from.
+def _valid_ip(value: str | None) -> str | None:
+    """The address in normal form, or None if `value` isn't an IP address at all."""
+    if not value:
+        return None
+    try:
+        return str(ipaddress.ip_address(value.strip()))
+    except ValueError:
+        return None
 
-    With no proxy in front (trusted_hops = 0) that is the direct connection. Behind
-    N trusted proxies, each one appends the address it received the request from to
-    X-Forwarded-For, so the client's address is the Nth entry *from the right*.
-    Entries further left were written by the client itself and are ignored: taking
-    the leftmost one (a common shortcut) lets anyone pick their own "address" and
-    dodge every per-address limit.
+
+def resolve_client_ip(
+    peer: str | None,
+    headers: Mapping[str, str],
+    trusted_hops: int = 0,
+    trusted_header: str | None = None,
+) -> str:
+    """The address the request really came from, decided only by things a client cannot forge.
+
+    Rate limits are per client address, and clients control some of what arrives:
+
+    - The connection address is the caller's only when nothing sits in front of the
+      app. Behind a proxy that address is the proxy's, or, on hosts that tell the
+      server to trust forwarding headers, whatever the client wrote at the start of
+      X-Forwarded-For (measured on Render: a forged "6.6.6.6" became the connection
+      address). So once a proxy is configured, it is never used.
+    - X-Forwarded-For grows as it passes each proxy, each appending the address it
+      received the request from. Entries on the LEFT may be the client's own
+      inventions; taking the leftmost (a common shortcut) lets anyone choose their
+      "address". Counting `trusted_hops` from the RIGHT reaches the entry written by
+      the proxies we control.
+    - A header the edge sets itself (Cloudflare's CF-Connecting-IP, which it
+      overwrites or rejects if a client supplies one) is the most direct answer, so
+      it is preferred when configured.
+
+    If a proxy is configured but none of this yields an address, everything shares
+    one "unknown" address. That can only make limits stricter, never let a forged
+    address slip past them.
     """
-    if trusted_hops > 0 and forwarded_for:
-        entries = [e.strip() for e in forwarded_for.split(",") if e.strip()]
+    if trusted_hops <= 0 and not trusted_header:
+        return peer or "unknown"  # nothing in front of us: the connection is the caller
+    if trusted_header:
+        found = _valid_ip(headers.get(trusted_header))
+        if found:
+            return found
+    if trusted_hops > 0:
+        entries = [e.strip() for e in (headers.get("x-forwarded-for") or "").split(",") if e.strip()]
         if len(entries) >= trusted_hops:
-            return entries[-trusted_hops]
-    return peer or "unknown"
+            found = _valid_ip(entries[-trusted_hops])
+            if found:
+                return found
+    return "unknown"
 
 
-def log_refusal(scope: str, ip: str, forwarded_for: str | None, trusted_hops: int) -> None:
-    # No email or password in the log line. The raw header and hop count are kept so
-    # the proxy setup can be checked against what the host actually sends.
-    logger.warning("rate limited scope=%s ip=%s x_forwarded_for=%r trusted_hops=%d", scope, ip, forwarded_for, trusted_hops)
+def log_refusal(scope: str, ip: str, headers: Mapping[str, str], trusted_hops: int, trusted_header: str | None) -> None:
+    # No email or password in the log line. The raw forwarding values and the
+    # configuration are kept so the proxy setup can be checked against what the
+    # host actually sends.
+    logger.warning(
+        "rate limited scope=%s ip=%s x_forwarded_for=%r %s=%r trusted_hops=%d",
+        scope,
+        ip,
+        headers.get("x-forwarded-for"),
+        trusted_header or "trusted_header",
+        headers.get(trusted_header) if trusted_header else None,
+        trusted_hops,
+    )

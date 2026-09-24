@@ -185,26 +185,57 @@ def test_wait_message_rounds_up_to_whole_minutes(seconds, text):
 
 # --- the address behind proxies ---------------------------------------------
 
+# Header values captured from the live Render service (client address replaced by a
+# documentation address). Render's chain is: client -> Cloudflare -> Render's load
+# balancer -> app, so X-Forwarded-For ends with [client, cloudflare edge, render internal].
+REAL = "203.0.113.7"
+RENDER_XFF = f"{REAL}, 172.70.80.71, 10.29.95.36"
+# A client that sends its own X-Forwarded-For gets it PREPENDED, ahead of the real chain.
+RENDER_XFF_FORGED = f"6.6.6.6,{REAL}, 172.71.150.25, 10.24.47.3"
+
 
 @pytest.mark.parametrize(
-    ("peer", "header", "hops", "expected"),
+    ("peer", "headers", "hops", "header", "expected"),
     [
-        ("10.0.0.5", None, 0, "10.0.0.5"),  # no proxy: the connection itself
-        ("10.0.0.5", "8.8.8.8", 0, "10.0.0.5"),  # ...and the header is not trusted at all
-        ("10.0.0.5", "203.0.113.7", 1, "203.0.113.7"),  # one proxy: the address it appended
-        ("10.0.0.5", "6.6.6.6, 203.0.113.7", 1, "203.0.113.7"),  # a client-written entry on the left is ignored
-        ("10.0.0.5", "spoof-1, spoof-2, 203.0.113.7", 1, "203.0.113.7"),
-        ("10.0.0.5", "6.6.6.6, 203.0.113.7, 172.16.0.9", 2, "203.0.113.7"),  # two proxies: second from the right
-        ("10.0.0.5", "  203.0.113.7  ", 1, "203.0.113.7"),  # whitespace tolerated
-        ("10.0.0.5", "2001:db8::1", 1, "2001:db8::1"),  # IPv6
-        ("10.0.0.5", None, 1, "10.0.0.5"),  # expected a header, none came: fall back
-        ("10.0.0.5", "", 1, "10.0.0.5"),
-        ("10.0.0.5", "203.0.113.7", 2, "10.0.0.5"),  # fewer entries than proxies: not what we configured, fall back
-        (None, None, 0, "unknown"),
+        # Nothing in front of the app: the connection itself, and headers are not trusted at all.
+        ("10.0.0.5", {}, 0, None, "10.0.0.5"),
+        ("10.0.0.5", {"x-forwarded-for": "8.8.8.8"}, 0, None, "10.0.0.5"),
+        (None, {}, 0, None, "unknown"),
+        # Counting from the right: the entry the trusted proxies wrote.
+        ("10.0.0.5", {"x-forwarded-for": "203.0.113.7"}, 1, None, "203.0.113.7"),
+        ("10.0.0.5", {"x-forwarded-for": "6.6.6.6, 203.0.113.7"}, 1, None, "203.0.113.7"),  # client-written left side ignored
+        ("10.0.0.5", {"x-forwarded-for": "a, b, 203.0.113.7, 172.16.0.9"}, 2, None, "203.0.113.7"),
+        # Render's real chain (three hops from the right is the client).
+        ("6.6.6.6", {"x-forwarded-for": RENDER_XFF}, 3, None, REAL),
+        ("6.6.6.6", {"x-forwarded-for": RENDER_XFF_FORGED}, 3, None, REAL),  # forged prefix does not matter
+        ("6.6.6.6", {"x-forwarded-for": RENDER_XFF_FORGED}, 1, None, "10.24.47.3"),  # the misconfiguration I first shipped: an internal address
+        # A trusted header wins when present and valid, whatever X-Forwarded-For says.
+        ("6.6.6.6", {"cf-connecting-ip": REAL, "x-forwarded-for": RENDER_XFF_FORGED}, 3, "cf-connecting-ip", REAL),
+        ("6.6.6.6", {"cf-connecting-ip": "2001:0db8:0000:0000:0000:0000:0000:0001"}, 0, "cf-connecting-ip", "2001:db8::1"),  # normalised
+        ("6.6.6.6", {"cf-connecting-ip": f"  {REAL}  "}, 0, "cf-connecting-ip", REAL),
+        # ...and it falls back to counting hops if the header is missing or is not an address.
+        ("6.6.6.6", {"x-forwarded-for": RENDER_XFF}, 3, "cf-connecting-ip", REAL),
+        ("6.6.6.6", {"cf-connecting-ip": "not-an-ip", "x-forwarded-for": RENDER_XFF}, 3, "cf-connecting-ip", REAL),
+        # Configured for a proxy but nothing usable arrived: one shared bucket. NEVER the
+        # connection address (forgeable on Render) and never a value a client could choose.
+        ("6.6.6.6", {}, 3, "cf-connecting-ip", "unknown"),
+        ("6.6.6.6", {"x-forwarded-for": REAL}, 3, None, "unknown"),  # fewer entries than proxies
+        ("6.6.6.6", {"cf-connecting-ip": "junk"}, 0, "cf-connecting-ip", "unknown"),
+        ("6.6.6.6", {"x-forwarded-for": "6.6.6.6, junk, also-junk, more-junk"}, 3, None, "unknown"),  # position 3 from the right is not an address
     ],
 )
-def test_resolve_client_ip(peer, header, hops, expected):
-    assert resolve_client_ip(peer, header, hops) == expected
+def test_resolve_client_ip(peer, headers, hops, header, expected):
+    assert resolve_client_ip(peer, headers, hops, header) == expected
+
+
+def test_a_forger_can_never_choose_the_resolved_address():
+    """Whatever a client puts in the parts of the request it controls, the result is the same."""
+    real_chain = "172.70.80.71, 10.29.95.36"  # what the trusted infrastructure appends
+    seen = {
+        resolve_client_ip("6.6.6.6", {"x-forwarded-for": f"{forged}{REAL}, {real_chain}"}, 3, None)
+        for forged in ("", "1.1.1.1,", "8.8.8.8, 9.9.9.9,", "junk,", "::1,")
+    }
+    assert seen == {REAL}
 
 
 # --- the endpoints ----------------------------------------------------------
@@ -317,6 +348,7 @@ def test_refusals_are_logged_without_secrets(client, ip, clock, caplog):
         attempt(client)
     (record,) = [r for r in caplog.records if r.name == "joblogga.ratelimit"]
     assert "scope=login_ip_email" in record.getMessage()
+    assert "x_forwarded_for=" in record.getMessage() and "trusted_hops=" in record.getMessage()
     assert "203.0.113.1" in record.getMessage()
     assert GOOD["email"] not in record.getMessage()
     assert "wrong-password" not in record.getMessage()
@@ -325,23 +357,63 @@ def test_refusals_are_logged_without_secrets(client, ip, clock, caplog):
 # --- spoofing through the real address parsing ------------------------------
 
 
-def test_forging_x_forwarded_for_does_not_dodge_the_limit(client, clock, monkeypatch):
-    monkeypatch.setattr(settings, "trusted_proxy_hops", 1)
-    client.post("/auth/signup", json=GOOD, headers={"X-Forwarded-For": "203.0.113.50"})
-    statuses = []
-    for i in range(6):
-        # The attacker invents a new "client address" each time, on the left...
-        spoofed = f"{i}.{i}.{i}.{i}, 203.0.113.99"  # ...but the proxy appends the real one on the right.
-        res = client.post("/auth/login", json={"email": GOOD["email"], "password": "nope-nope-nope"}, headers={"X-Forwarded-For": spoofed})
-        statuses.append(res.status_code)
+def render_headers(client, forged_prefix=""):
+    """What Render delivers for a request from `client` (optionally with a forged X-Forwarded-For prefix)."""
+    return {"X-Forwarded-For": f"{forged_prefix}{client}, 172.70.80.71, 10.29.95.36", "CF-Connecting-IP": client}
+
+
+@pytest.fixture
+def on_render(monkeypatch):
+    """The production configuration: trust Cloudflare's header, count 3 hops as the fallback."""
+    monkeypatch.setattr(settings, "trusted_client_ip_header", "cf-connecting-ip")
+    monkeypatch.setattr(settings, "trusted_proxy_hops", 3)
+
+
+def bad_login(client, headers):
+    return client.post("/auth/login", json={"email": GOOD["email"], "password": "nope-nope-nope"}, headers=headers).status_code
+
+
+def test_forging_x_forwarded_for_does_not_dodge_the_limit(client, clock, on_render):
+    client.post("/auth/signup", json=GOOD, headers=render_headers("203.0.113.50"))
+    # The attacker invents a different "client" every time, in front of the real chain.
+    statuses = [bad_login(client, render_headers("203.0.113.99", forged_prefix=f"{i}.{i}.{i}.{i},")) for i in range(6)]
     assert statuses == [401, 401, 401, 401, 401, 429]
 
 
-def test_different_real_addresses_get_separate_allowances(client, clock, monkeypatch):
-    monkeypatch.setattr(settings, "trusted_proxy_hops", 1)
-    client.post("/auth/signup", json=GOOD, headers={"X-Forwarded-For": "203.0.113.50"})
+def test_it_also_holds_when_only_the_x_forwarded_for_fallback_is_available(client, clock, monkeypatch):
+    monkeypatch.setattr(settings, "trusted_client_ip_header", None)
+    monkeypatch.setattr(settings, "trusted_proxy_hops", 3)
+    client.post("/auth/signup", json=GOOD, headers=render_headers("203.0.113.50"))
+    headers = lambda i: {"X-Forwarded-For": f"{i}.{i}.{i}.{i},203.0.113.99, 172.70.80.71, 10.29.95.36"}  # noqa: E731
+    assert [bad_login(client, headers(i)) for i in range(6)] == [401, 401, 401, 401, 401, 429]
+
+
+def test_a_rotating_infrastructure_address_does_not_split_one_client_into_many(client, clock, on_render):
+    """The bug in my first version: the rightmost entry is Render's internal load balancer,
+    which changes between requests, so one attacker looked like several."""
+    client.post("/auth/signup", json=GOOD, headers=render_headers("203.0.113.50"))
+    statuses = []
+    for internal in ("10.24.36.13", "10.24.47.3", "10.29.95.36", "10.24.36.13", "10.24.47.3", "10.29.95.36"):
+        headers = {"X-Forwarded-For": f"203.0.113.99, 172.70.80.71, {internal}", "CF-Connecting-IP": "203.0.113.99"}
+        statuses.append(bad_login(client, headers))
+    assert statuses == [401, 401, 401, 401, 401, 429]
+
+
+def test_different_real_addresses_get_separate_allowances(client, clock, on_render):
+    client.post("/auth/signup", json=GOOD, headers=render_headers("203.0.113.50"))
     for _ in range(5):
-        client.post("/auth/login", json={"email": GOOD["email"], "password": "nope-nope-nope"}, headers={"X-Forwarded-For": "203.0.113.99"})
-    blocked = client.post("/auth/login", json=GOOD, headers={"X-Forwarded-For": "203.0.113.99"})
-    other = client.post("/auth/login", json=GOOD, headers={"X-Forwarded-For": "203.0.113.77"})
+        bad_login(client, render_headers("203.0.113.99"))
+    blocked = client.post("/auth/login", json=GOOD, headers=render_headers("203.0.113.99"))
+    other = client.post("/auth/login", json=GOOD, headers=render_headers("203.0.113.77"))
     assert (blocked.status_code, other.status_code) == (429, 200)
+
+
+def test_requests_that_arrive_without_the_expected_headers_share_one_stricter_bucket(client, clock, on_render):
+    client.post("/auth/signup", json=GOOD, headers=render_headers("203.0.113.50"))
+    assert [bad_login(client, {}) for _ in range(6)] == [401, 401, 401, 401, 401, 429]  # counted together, not free
+
+
+def test_when_no_proxy_is_configured_headers_are_ignored_entirely(client, clock):
+    client.post("/auth/signup", json=GOOD)
+    forged = lambda i: {"X-Forwarded-For": f"{i}.{i}.{i}.{i}", "CF-Connecting-IP": f"9.9.9.{i}"}  # noqa: E731
+    assert [bad_login(client, forged(i)) for i in range(6)] == [401, 401, 401, 401, 401, 429]

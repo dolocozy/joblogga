@@ -44,4 +44,9 @@ def get_current_user(
 def client_ip(request: Request) -> str:
     """The caller's address, for rate limiting (see resolve_client_ip)."""
     peer = request.client.host if request.client else None
-    return resolve_client_ip(peer, request.headers.get("x-forwarded-for"), settings.trusted_proxy_hops)
+    return resolve_client_ip(
+        peer,
+        request.headers,
+        settings.trusted_proxy_hops,
+        (settings.trusted_client_ip_header or "").lower() or None,
+    )

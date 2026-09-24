@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     # so this must match the host: too low and many visitors share one address,
     # too high and clients can forge theirs.
     trusted_proxy_hops: int = Field(default=0, ge=0, le=10)
+    # A header the hosting edge sets to the visitor's address and that clients
+    # cannot forge (Cloudflare's "cf-connecting-ip" on Render). Preferred over
+    # counting hops when set.
+    trusted_client_ip_header: str | None = None
 
     @property
     def sqlalchemy_url(self) -> str:

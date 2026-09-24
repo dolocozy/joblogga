@@ -20,12 +20,19 @@ services:
       # tokens: keep it stable, because changing it logs every user out.
       - key: SECRET_KEY
         generateValue: true
-      # Rate limits are per client address. Render's proxy adds the visitor's address
-      # to X-Forwarded-For, and this says how many proxies to count from the right
-      # (never the left: clients write that part). Verify against the "rate limited"
-      # lines in the service logs, which print the raw header and the address used.
+      # Rate limits are per client address, so the API must know each visitor's real
+      # address. On Render, requests pass Cloudflare and then Render's own load
+      # balancer, and the connection address the server sees can be FORGED via
+      # X-Forwarded-For (measured), so it is never used. Instead:
+      #  1. cf-connecting-ip: set by Cloudflare, which rejects or overwrites a
+      #     client-supplied one. Preferred.
+      #  2. Fallback: X-Forwarded-For counted 3 entries from the right (client,
+      #     Cloudflare edge, Render internal). The left side is client-written.
+      # Check against the "rate limited" lines in the service logs.
+      - key: TRUSTED_CLIENT_IP_HEADER
+        value: cf-connecting-ip
       - key: TRUSTED_PROXY_HOPS
-        value: "1"
+        value: "3"
       # Secrets you paste in the dashboard; deliberately not stored in this file.
       - key: DATABASE_URL
         sync: false

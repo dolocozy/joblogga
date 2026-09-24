@@ -20,7 +20,13 @@ ClientIp = Annotated[str, Depends(client_ip)]
 
 
 def too_many_attempts(request: Request, scope: str, ip: str, retry_after: int) -> HTTPException:
-    ratelimit.log_refusal(scope, ip, request.headers.get("x-forwarded-for"), settings.trusted_proxy_hops)
+    ratelimit.log_refusal(
+        scope,
+        ip,
+        request.headers,
+        settings.trusted_proxy_hops,
+        (settings.trusted_client_ip_header or "").lower() or None,
+    )
     return HTTPException(
         status.HTTP_429_TOO_MANY_REQUESTS,
         detail=ratelimit.wait_message(retry_after),
