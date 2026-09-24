@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchUpcoming, listApplications, STATUSES, updateApplication } from '../api'
+import { exportApplicationsCsv, fetchUpcoming, listApplications, STATUSES, updateApplication } from '../api'
 import type { Application, ApplicationStatus } from '../api'
 import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader } from '../components/Ledger'
 import StatusSelect from '../components/StatusSelect'
 import { formatDate, localToday } from '../dates'
+import { saveFile } from '../download'
 import { useDebounced } from '../hooks'
 import { statusLabel } from '../status'
 
@@ -58,6 +59,7 @@ export default function Applications() {
   const [loading, setLoading] = useState(true) // true only until the first response
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null) // row with a status change in flight
+  const [exporting, setExporting] = useState(false)
   // Bumped after a status change to refetch the list and the reminders panel.
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -122,6 +124,19 @@ export default function Applications() {
     }
   }
 
+  // Exports everything, not just what the filters show: it doubles as a backup.
+  async function exportCsv() {
+    setExporting(true)
+    setError(null)
+    try {
+      saveFile(await exportApplicationsCsv(), `joblogga-applications-${localToday()}.csv`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not export')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const filtered = q !== '' || company !== '' || status !== '' || dateFrom !== '' || dateTo !== ''
   const badRange = dateFrom !== '' && dateTo !== '' && dateFrom > dateTo
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -137,9 +152,17 @@ export default function Applications() {
     <>
       <div className="mb-6 flex items-center justify-between gap-4">
         <h1 className="text-3xl">Applications</h1>
-        <Link to="/applications/new" className="btn btn-primary">
-          Add application
-        </Link>
+        <div className="flex items-center gap-3">
+          {/* Nothing to export on a brand-new account. */}
+          {(total > 0 || filtered) && (
+            <button type="button" onClick={exportCsv} disabled={exporting} className="btn btn-secondary">
+              {exporting ? 'Exporting…' : 'Export CSV'}
+            </button>
+          )}
+          <Link to="/applications/new" className="btn btn-primary">
+            Add application
+          </Link>
+        </div>
       </div>
 
       <UpcomingPanel reloadKey={reloadKey} />

@@ -1,13 +1,19 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { localToday } from '../dates'
+import { saveFile } from '../download'
 import { server } from '../test/server'
 import { makeApplication, manyApplications, mockList, mockUpcoming, renderApp, signIn, url } from '../test/helpers'
+
+// The real saveFile clicks a hidden link; here we only need to know it was asked to.
+vi.mock('../download', () => ({ saveFile: vi.fn() }))
 
 beforeEach(() => {
   signIn()
   mockUpcoming()
+  vi.mocked(saveFile).mockClear()
 })
 
 const lastParams = (seen: URL[]) => Object.fromEntries(seen.at(-1)!.searchParams)
@@ -249,6 +255,105 @@ describe('quick status change', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Nope')
     expect(screen.getByRole('combobox', { name: 'Status for Globex' })).toHaveValue('applied')
     expect(screen.getByRole('combobox', { name: 'Status for Globex' })).toBeEnabled()
+  })
+})
+
+describe('CSV export', () => {
+  const CSV = 'Company,Role\r\nGlobex,Analyst\r\n'
+  const mockExport = (seen: URL[] = []) => {
+    server.use(
+      http.get(url('/applications/export.csv'), ({ request }) => {
+        seen.push(new URL(request.url))
+        return new HttpResponse(CSV, { headers: { 'Content-Type': 'text/csv' } })
+      }),
+    )
+    return seen
+  }
+
+  it('is offered once there are applications', async () => {
+    mockList([makeApplication({ company: 'Globex' })])
+    renderApp('/applications')
+    expect(await screen.findByRole('button', { name: 'Export CSV' })).toBeInTheDocument()
+  })
+
+  it('is not offered on a brand-new account with nothing to export', async () => {
+    mockList([])
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+    expect(screen.queryByRole('button', { name: 'Export CSV' })).not.toBeInTheDocument()
+  })
+
+  it('downloads a dated file containing the exported data', async () => {
+    const user = userEvent.setup()
+    mockList([makeApplication({ company: 'Globex' })])
+    mockExport()
+    renderApp('/applications')
+
+    await user.click(await screen.findByRole('button', { name: 'Export CSV' }))
+
+    await waitFor(() => expect(saveFile).toHaveBeenCalledTimes(1))
+    const [blob, filename] = vi.mocked(saveFile).mock.calls[0]
+    expect(filename).toBe(`joblogga-applications-${localToday()}.csv`)
+    expect(await blob.text()).toBe(CSV)
+  })
+
+  it('exports everything, even while filters are applied', async () => {
+    const user = userEvent.setup()
+    mockList([makeApplication({ company: 'Globex' })])
+    const seen = mockExport()
+    renderApp('/applications')
+    await user.selectOptions(await screen.findByRole('combobox', { name: 'Filter by status' }), 'applied')
+    await screen.findByText('Globex')
+
+    await user.click(screen.getByRole('button', { name: 'Export CSV' }))
+
+    await waitFor(() => expect(seen).toHaveLength(1))
+    expect(seen[0].search).toBe('') // no filters sent: it is a backup, not a report
+  })
+
+  it('stays available when the filters currently show no rows', async () => {
+    const user = userEvent.setup()
+    mockList([])
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by status' }), 'offer')
+
+    expect(await screen.findByRole('button', { name: 'Export CSV' })).toBeInTheDocument()
+  })
+
+  it('shows progress and blocks a second click while the file is being prepared', async () => {
+    const user = userEvent.setup()
+    mockList([makeApplication({ company: 'Globex' })])
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    server.use(
+      http.get(url('/applications/export.csv'), async () => {
+        await gate
+        return new HttpResponse(CSV, { headers: { 'Content-Type': 'text/csv' } })
+      }),
+    )
+    renderApp('/applications')
+
+    await user.click(await screen.findByRole('button', { name: 'Export CSV' }))
+
+    const busy = await screen.findByRole('button', { name: 'Exporting…' })
+    expect(busy).toBeDisabled()
+    release()
+    expect(await screen.findByRole('button', { name: 'Export CSV' })).toBeEnabled()
+  })
+
+  it('shows the error and downloads nothing when the export fails', async () => {
+    const user = userEvent.setup()
+    mockList([makeApplication({ company: 'Globex' })])
+    server.use(http.get(url('/applications/export.csv'), () => HttpResponse.json({ detail: 'Export failed' }, { status: 500 })))
+    renderApp('/applications')
+
+    await user.click(await screen.findByRole('button', { name: 'Export CSV' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Export failed')
+    expect(saveFile).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Export CSV' })).toBeEnabled() // can retry
   })
 })
 

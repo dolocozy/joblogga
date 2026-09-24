@@ -1,11 +1,12 @@
 from datetime import date, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
+from app.export import applications_to_csv
 from app.deps import get_current_user
 from app.models import Application, ApplicationStatus, StatusChange, User
 from app.schemas import (
@@ -94,6 +95,33 @@ def list_applications(
         .offset(offset)
     ).all()
     return ApplicationList(items=[ApplicationOut.model_validate(i) for i in items], total=total)
+
+
+# Declared BEFORE "/{application_id}" so "export.csv" and "upcoming" aren't parsed as ids.
+@router.get("/export.csv")
+def export_applications(db: DbSession, user: CurrentUser) -> Response:
+    """Every one of the user's applications as a CSV file (their backup).
+
+    Deliberately ignores list filters: an export that silently leaves rows out
+    would be a poor backup.
+    """
+    applications = db.scalars(
+        select(Application)
+        .where(Application.user_id == user.id)
+        # Load each application's history in one extra query, not one per row.
+        .options(selectinload(Application.history))
+        .order_by(Application.date_applied.desc(), Application.id.desc())
+    ).all()
+    filename = f"joblogga-applications-{date.today().isoformat()}.csv"
+    return Response(
+        content=applications_to_csv(applications),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            # Personal data: browsers and proxies should not keep a copy.
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 # Declared BEFORE "/{application_id}" so "upcoming" isn't parsed as an id.

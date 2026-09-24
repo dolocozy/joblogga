@@ -42,7 +42,10 @@ function errorMessage(detail: unknown, fallback: string): string {
   return fallback
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+// Sends a request with the saved token attached and turns failures into ApiErrors.
+// Everything that talks to the API goes through here, so an expired session is
+// handled in one place. Returns the raw response for the caller to read.
+async function send(path: string, options: RequestInit = {}): Promise<Response> {
   const headers = new Headers(options.headers)
   if (options.body) headers.set('Content-Type', 'application/json')
   const token = tokenStore.get()
@@ -66,6 +69,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const body = await res.json().catch(() => null)
     throw new ApiError(res.status, errorMessage(body?.detail, `Request failed (${res.status})`))
   }
+  return res
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await send(path, options)
   // 204 No Content (e.g. after DELETE) has no body to parse.
   if (res.status === 204) return undefined as T
   return res.json()
@@ -201,3 +209,11 @@ export interface Stats {
 // `weeks` limits every figure to the last N weeks; null means all time.
 export const fetchStats = (weeks: number | null) =>
   request<Stats>(`/stats${weeks ? `?weeks=${weeks}` : ''}`)
+
+// The whole logbook as a CSV file, for backup or a spreadsheet. The endpoint needs
+// the login token, so this can't be a plain link: we fetch it and hand the bytes
+// to the browser as a download.
+export async function exportApplicationsCsv(): Promise<Blob> {
+  const res = await send('/applications/export.csv')
+  return res.blob()
+}

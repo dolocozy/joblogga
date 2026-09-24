@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ApiError,
   deleteApplication,
+  exportApplicationsCsv,
   fetchMe,
   fetchUpcoming,
   listApplications,
@@ -130,5 +131,41 @@ describe('expired sessions', () => {
     await fetchMe().catch(() => {})
 
     expect(handler).not.toHaveBeenCalled()
+  })
+})
+
+describe('exportApplicationsCsv', () => {
+  it('fetches the export with the login token and returns the file contents', async () => {
+    tokenStore.set('abc123')
+    let auth: string | null = null
+    server.use(
+      http.get(url('/applications/export.csv'), ({ request }) => {
+        auth = request.headers.get('authorization')
+        return new HttpResponse('Company,Role\r\nAcme,Engineer\r\n', { headers: { 'Content-Type': 'text/csv' } })
+      }),
+    )
+
+    const blob = await exportApplicationsCsv()
+
+    expect(auth).toBe('Bearer abc123')
+    expect(await blob.text()).toBe('Company,Role\r\nAcme,Engineer\r\n')
+  })
+
+  it('ends the session if the token has expired, like any other request', async () => {
+    tokenStore.set('expired')
+    const handler = vi.fn()
+    setUnauthorizedHandler(handler)
+    server.use(http.get(url('/applications/export.csv'), () => HttpResponse.json({ detail: 'Not authenticated' }, { status: 401 })))
+
+    await expect(exportApplicationsCsv()).rejects.toMatchObject({ status: 401 })
+
+    expect(tokenStore.get()).toBeNull()
+    expect(handler).toHaveBeenCalledTimes(1)
+    setUnauthorizedHandler(null)
+  })
+
+  it('reports a server error with its message', async () => {
+    server.use(http.get(url('/applications/export.csv'), () => HttpResponse.json({ detail: 'Export failed' }, { status: 500 })))
+    await expect(exportApplicationsCsv()).rejects.toThrow('Export failed')
   })
 })

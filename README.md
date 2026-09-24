@@ -76,9 +76,12 @@ Interactive docs are at http://localhost:8000/docs when the backend is running.
 | GET | `/auth/me` | Current user |
 | POST | `/applications` | Create (records the initial status) |
 | GET | `/applications` | List; filters `status`, `company`, `q`, `date_from`, `date_to`; `limit`/`offset` |
+| GET | `/applications/export.csv` | Every application as a CSV file (your backup); includes status history; ignores list filters |
 | GET | `/applications/upcoming` | Open applications with a follow-up overdue or due within `days` (default 7) |
 | GET / PATCH / DELETE | `/applications/{id}` | Read (with status history) / partial update / delete |
 | GET | `/stats` | Dashboard numbers: totals, per-status counts, response rate, weekly series; `weeks=N` limits everything to the last N weeks (omit for all time) |
+
+The CSV neutralizes cells that start with `=`, `+`, `-` or `@` (a leading apostrophe) so a hostile job posting cannot run as a formula when the file is opened in Excel, and starts with a UTF-8 marker so accents open correctly.
 
 Every `/applications` query is scoped to the logged-in user; another user's application returns 404.
 
