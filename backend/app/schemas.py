@@ -186,3 +186,31 @@ class ApplicationDetail(ApplicationOut):
 class ApplicationList(BaseModel):
     items: list[ApplicationOut]
     total: int  # matches ignoring limit/offset, so the UI can paginate
+
+
+# --- stats --------------------------------------------------------------------
+
+
+class StatusCount(BaseModel):
+    status: ApplicationStatus
+    count: int
+
+
+class ResponseRate(BaseModel):
+    responded: int  # numerator
+    eligible: int  # denominator
+    # responded / eligible as a fraction 0..1, or None when nothing is eligible
+    # yet. None is deliberately not 0: "no data" and "0% replied" are different.
+    rate: float | None
+
+
+class WeekCount(BaseModel):
+    week_start: date  # the Monday that starts the week
+    count: int
+
+
+class StatsOut(BaseModel):
+    total: int
+    by_status: list[StatusCount]  # always all six statuses, in pipeline order
+    response: ResponseRate
+    per_week: list[WeekCount]  # oldest first, empty weeks included as 0

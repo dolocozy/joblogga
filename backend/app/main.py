@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import models  # noqa: F401  (registers tables on Base.metadata)
 from app.config import settings
 from app.db import Base, engine
-from app.routers import applications, auth
+from app.routers import applications, auth, stats
 
 
 @asynccontextmanager
@@ -33,6 +33,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(applications.router)
+app.include_router(stats.router)
 
 
 @app.get("/health")
