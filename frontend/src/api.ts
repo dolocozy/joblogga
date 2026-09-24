@@ -176,3 +176,20 @@ export const updateApplication = (id: number, input: Partial<ApplicationInput>) 
 
 export const deleteApplication = (id: number) =>
   request<void>(`/applications/${id}`, { method: 'DELETE' })
+
+// --- dashboard stats --------------------------------------------------------
+
+export interface Stats {
+  total: number
+  by_status: { status: ApplicationStatus; count: number }[]
+  response: {
+    responded: number
+    eligible: number
+    rate: number | null // 0..1, or null when nothing is eligible yet
+  }
+  per_week: { week_start: string; count: number }[] // week_start is a Monday
+}
+
+// `weeks` limits every figure to the last N weeks; null means all time.
+export const fetchStats = (weeks: number | null) =>
+  request<Stats>(`/stats${weeks ? `?weeks=${weeks}` : ''}`)

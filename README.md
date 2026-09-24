@@ -2,7 +2,7 @@
 
 A multi-user job application tracker: log applications, move them through a status pipeline, set follow-up reminders, and see how your search is going.
 
-> **Status:** early development. Auth and application tracking (create, edit, delete, status history, search/filter, follow-up reminders) work. Dashboard charts, Kanban view and CSV export are next.
+> **Status:** early development. Auth and application tracking (create, edit, delete, status history, search/filter, follow-up reminders) work. A dashboard with response rate and charts is built. Kanban view and CSV export are next.
 
 ## Built with Claude Code
 
@@ -10,7 +10,7 @@ This project is built with [Claude Code](https://claude.com/claude-code) as a de
 
 ## Tech stack
 
-- **Frontend:** React + TypeScript, Vite, Tailwind CSS
+- **Frontend:** React + TypeScript, Vite, Tailwind CSS, Recharts
 - **Backend:** Python, FastAPI
 - **Database:** SQLAlchemy 2.0; SQLite for local dev, PostgreSQL in production (planned)
 - **Auth:** JWT (PyJWT) + bcrypt
@@ -59,6 +59,7 @@ Interactive docs are at http://localhost:8000/docs when the backend is running.
 | GET | `/applications` | List; filters `status`, `company`, `q`, `date_from`, `date_to`; `limit`/`offset` |
 | GET | `/applications/upcoming` | Open applications with a follow-up overdue or due within `days` (default 7) |
 | GET / PATCH / DELETE | `/applications/{id}` | Read (with status history) / partial update / delete |
+| GET | `/stats` | Dashboard numbers: totals, per-status counts, response rate, weekly series; `weeks=N` limits everything to the last N weeks (omit for all time) |
 
 Every `/applications` query is scoped to the logged-in user; another user's application returns 404.
 
@@ -67,6 +68,13 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 - `users`: email (unique), bcrypt hash.
 - `applications`: belongs to a user; company, role, job link, date applied, resume version, salary min/max, location, notes, current status, follow-up date.
 - `status_changes`: append-only log (`from_status`, `to_status`, timestamp) written whenever an application's status changes, so the full timeline is kept.
+
+## Dashboard
+
+- **Response rate** = (Screening + Interview + Offer + Rejected) ÷ (all applications − Withdrawn). A rejection is a response; a withdrawal is your decision, so it is excluded from both sides of the ratio. When nothing is eligible the rate is "no data" (shown as a dash), not 0%.
+- Status is each application's *current* status, so one that reached Interview and was then withdrawn counts as withdrawn.
+- One time-range filter scopes every number and chart, so they always agree. Each chart has a "View as table" twin so no value depends on hovering.
+- The charts are loaded on demand, so the login and list pages don't download the charting library.
 
 ## Auth design
 

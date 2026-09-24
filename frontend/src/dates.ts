@@ -25,3 +25,8 @@ export function formatDateTime(iso: string): string {
     minute: '2-digit',
   })
 }
+
+// "2026-03-01" -> "Mar 1", for tight spaces like chart axis labels.
+export function formatShortDate(ymd: string): string {
+  return new Date(`${ymd}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}

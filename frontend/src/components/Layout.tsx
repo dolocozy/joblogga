@@ -1,5 +1,8 @@
-import { Link, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth'
+
+const navLink = ({ isActive }: { isActive: boolean }) =>
+  `text-sm font-medium ${isActive ? 'text-slate-900' : 'text-slate-500 hover:text-slate-900'}`
 
 // Shared page frame (header + content area) for every logged-in page.
 export default function Layout() {
@@ -8,9 +11,19 @@ export default function Layout() {
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200">
         <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold text-slate-900">
-            Joblogga
-          </Link>
+          <div className="flex items-center gap-6">
+            <Link to="/" className="text-xl font-bold text-slate-900">
+              Joblogga
+            </Link>
+            <nav aria-label="Main" className="flex items-center gap-4">
+              <NavLink to="/" end className={navLink}>
+                Applications
+              </NavLink>
+              <NavLink to="/dashboard" className={navLink}>
+                Dashboard
+              </NavLink>
+            </nav>
+          </div>
           <div className="flex items-center gap-4 text-sm">
             <span className="text-slate-600 hidden sm:inline">{user?.email}</span>
             <button

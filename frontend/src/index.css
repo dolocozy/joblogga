@@ -1,1 +1,14 @@
 @import "tailwindcss";
+
+/* Chart colors, defined once and referenced by role so they can be re-themed in
+   one place. Values come from a palette validated for colorblind separation and
+   contrast (series-1 clears 3:1 on the surface). The app is light-only today;
+   a dark theme would redefine these under a dark selector. */
+:root {
+  --viz-surface: #fcfcfb;
+  --viz-ink: #0b0b0b; /* values, primary labels */
+  --viz-ink-2: #52514e; /* axis text, secondary labels: 7.7:1 on the surface */
+  --viz-grid: #e1e0d9; /* hairline gridlines */
+  --viz-axis: #c3c2b7; /* baseline */
+  --viz-series-1: #2a78d6;
+}

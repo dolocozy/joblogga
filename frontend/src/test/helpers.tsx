@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw'
 import { MemoryRouter } from 'react-router-dom'
 import App from '../App'
 import { API_URL, tokenStore } from '../api'
-import type { Application, ApplicationDetail } from '../api'
+import type { Application, ApplicationDetail, Stats } from '../api'
 import { server } from './server'
 
 export const url = (path: string) => `${API_URL}${path}`
@@ -80,4 +80,35 @@ export function manyApplications(count: number): Application[] {
   return Array.from({ length: count }, (_, i) =>
     makeApplication({ id: i + 1, company: `Company ${i + 1}`, role: `Role ${i + 1}` }),
   )
+}
+
+export function makeStats(overrides: Partial<Stats> = {}): Stats {
+  return {
+    total: 10,
+    by_status: [
+      { status: 'applied', count: 2 },
+      { status: 'screening', count: 3 },
+      { status: 'interview', count: 1 },
+      { status: 'offer', count: 1 },
+      { status: 'rejected', count: 1 },
+      { status: 'withdrawn', count: 2 },
+    ],
+    response: { responded: 4, eligible: 8, rate: 0.5 },
+    per_week: [
+      { week_start: '2026-03-02', count: 3 },
+      { week_start: '2026-03-09', count: 7 },
+    ],
+    ...overrides,
+  }
+}
+
+/** Fake `GET /stats`; records each request URL so tests can check the `weeks` param. */
+export function mockStats(stats: Stats = makeStats(), seen: URL[] = []) {
+  server.use(
+    http.get(url('/stats'), ({ request }) => {
+      seen.push(new URL(request.url))
+      return HttpResponse.json(stats)
+    }),
+  )
+  return seen
 }
