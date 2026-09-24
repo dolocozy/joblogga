@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -8,6 +9,12 @@ from app.config import settings
 from app.db import engine
 from app.migrations import upgrade_database
 from app.routers import applications, auth, stats
+
+
+# Without this only warnings reach the host's log viewer. INFO adds the migration
+# lines ("Running upgrade ... -> ...", "Existing database recognised") that show what
+# each deploy changed in the database.
+logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
 
 
 @asynccontextmanager

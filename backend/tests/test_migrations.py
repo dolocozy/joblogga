@@ -147,6 +147,13 @@ def test_a_column_of_the_wrong_size_is_drift_too(engine):
         upgrade_database(engine)
 
 
+def test_adopting_an_existing_database_is_logged_so_deploys_are_traceable(engine, caplog):
+    Base.metadata.create_all(engine)
+    with caplog.at_level("INFO", logger="joblogga.migrations"):
+        upgrade_database(engine)
+    assert any("Existing database recognised" in r.getMessage() and BASELINE in r.getMessage() for r in caplog.records)
+
+
 # --- the next schema change, applied to a database that has real rows -------
 
 
