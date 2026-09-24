@@ -20,6 +20,12 @@ services:
       # tokens: keep it stable, because changing it logs every user out.
       - key: SECRET_KEY
         generateValue: true
+      # Rate limits are per client address. Render's proxy adds the visitor's address
+      # to X-Forwarded-For, and this says how many proxies to count from the right
+      # (never the left: clients write that part). Verify against the "rate limited"
+      # lines in the service logs, which print the raw header and the address used.
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
       # Secrets you paste in the dashboard; deliberately not stored in this file.
       - key: DATABASE_URL
         sync: false

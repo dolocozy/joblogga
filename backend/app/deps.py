@@ -1,11 +1,13 @@
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import get_db
 from app.models import User
+from app.ratelimit import resolve_client_ip
 from app.security import decode_access_token
 
 # Reads the "Authorization: Bearer <token>" header. It also makes Swagger UI
@@ -37,3 +39,9 @@ def get_current_user(
     if user is None:
         raise unauthorized
     return user
+
+
+def client_ip(request: Request) -> str:
+    """The caller's address, for rate limiting (see resolve_client_ip)."""
+    peer = request.client.host if request.client else None
+    return resolve_client_ip(peer, request.headers.get("x-forwarded-for"), settings.trusted_proxy_hops)

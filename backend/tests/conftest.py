@@ -13,9 +13,18 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app import ratelimit
 from app.config import normalize_database_url
 from app.db import Base, get_db
 from app.main import app
+
+
+@pytest.fixture(autouse=True)
+def _fresh_rate_limits():
+    """Rate-limit counters are process-wide; without this, attempts in one test
+    would count against the next (every test comes from the same test address)."""
+    ratelimit.limits.reset_all()
+    yield
 
 
 @pytest.fixture

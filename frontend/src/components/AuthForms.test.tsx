@@ -259,3 +259,50 @@ describe('a slow server (free hosting sleeps when idle)', () => {
     expect(screen.queryByText(/waking the server/i)).not.toBeInTheDocument()
   })
 })
+
+describe('when the server says too many attempts (429)', () => {
+  const TOO_MANY = 'Too many attempts. Try again in 15 minutes.'
+  const tooMany = () => HttpResponse.json({ detail: TOO_MANY }, { status: 429, headers: { 'Retry-After': '900' } })
+
+  it('login shows the wait message and can be retried later', async () => {
+    const user = userEvent.setup()
+    watch('/auth/login', tooMany)
+    renderApp('/login')
+    await screen.findByLabelText('Email')
+
+    await user.type(email(), 'me@example.com')
+    await user.type(password(), 'correct-horse-battery')
+    await user.click(screen.getByRole('button', { name: 'Log in' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(TOO_MANY)
+    expect(screen.getByRole('button', { name: 'Log in' })).toBeEnabled() // not stuck
+    expect(email()).toHaveValue('me@example.com') // input kept
+  })
+
+  it('signup shows it too', async () => {
+    const user = userEvent.setup()
+    watch('/auth/signup', tooMany)
+    renderApp('/signup')
+    await screen.findByLabelText('Email')
+
+    await user.type(email(), 'me@example.com')
+    await user.type(password(), 'correct-horse-battery')
+    await user.click(screen.getByRole('button', { name: 'Sign up' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(TOO_MANY)
+  })
+
+  it('is not mistaken for an expired session', async () => {
+    const user = userEvent.setup()
+    watch('/auth/login', tooMany)
+    renderApp('/')
+    await screen.findByLabelText('Email')
+
+    await user.type(email(), 'me@example.com')
+    await user.type(password(), 'correct-horse-battery')
+    await user.click(screen.getByRole('button', { name: 'Log in' }))
+
+    await screen.findByRole('alert')
+    expect(screen.queryByText(/session has expired/i)).not.toBeInTheDocument()
+  })
+})

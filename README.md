@@ -98,6 +98,21 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 - One time-range filter scopes every number and chart, so they always agree. Each chart has a "View as table" twin so no value depends on hovering.
 - The charts are loaded on demand, so the login and list pages don't download the charting library.
 
+## Rate limiting
+
+Failed logins are limited three ways, and signups per address:
+
+| Limit | Allowance | Why |
+| --- | --- | --- |
+| Per address and account | 5 failures / 15 min | Stops guessing at one account, without letting an attacker lock the real owner out from another address |
+| Per account, any address | 20 failures / hour | Stops guessing spread over many addresses |
+| Per address, any account | 50 failures / 15 min | Stops one address trying many accounts |
+| Signups per address | 10 / hour | Slows account spam |
+
+Only failures count, unknown emails count the same as real ones (so the limit reveals nothing), and a locked caller is refused before the password is even checked. Refusals return `429` with a `Retry-After` header and a plain-language message.
+
+Limits are held in the API process's memory: fine for one server, reset on restart, and would move to Redis or the database to run several instances. Client addresses come from `X-Forwarded-For` counted from the right by `TRUSTED_PROXY_HOPS` (the left side is written by the client, so it is never trusted).
+
 ## Auth design
 
 - **Passwords** are hashed with bcrypt (per-password random salt); plaintext is never stored, and responses never include the hash.

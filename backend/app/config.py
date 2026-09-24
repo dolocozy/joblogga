@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Resolve .env and the default SQLite file next to the backend folder, not the
@@ -43,6 +44,12 @@ class Settings(BaseSettings):
     secret_key: str
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
+
+    # How many reverse proxies sit in front of the API and add to X-Forwarded-For
+    # (0 = none: use the direct connection). Rate limits are per client address,
+    # so this must match the host: too low and many visitors share one address,
+    # too high and clients can forge theirs.
+    trusted_proxy_hops: int = Field(default=0, ge=0, le=10)
 
     @property
     def sqlalchemy_url(self) -> str:
