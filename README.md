@@ -121,6 +121,30 @@ Limits are held in the API process's memory: fine for one server, reset on resta
 - Wrong email and wrong password return the identical error, and unknown emails still run a bcrypt check, so neither the message nor the response time reveals which emails are registered.
 - The frontend keeps the token in `localStorage` and re-validates it against `/auth/me` on load. `localStorage` is readable by page scripts (XSS); an httpOnly cookie would avoid that at the cost of CSRF handling.
 
+## Database migrations
+
+The schema lives in versioned migration files (`backend/alembic/versions`), applied automatically when the API starts.
+
+**Changing the schema:**
+
+```bash
+cd backend && source .venv/bin/activate
+# 1. edit the model in app/models.py
+# 2. generate a migration from the difference, then READ and edit it
+alembic revision --autogenerate -m "add priority to applications"
+# 3. run the tests: they build the schema from the migrations and fail if it differs from the models
+pytest
+```
+
+Rules that keep production data safe:
+
+- **Migrations never import app code.** They use plain SQLAlchemy types, so an old migration keeps meaning the same thing however the models change. (Autogenerate writes `app.db.UtcDateTime`; replace it with `sa.DateTime(timezone=True)`.)
+- **Autogenerate is a draft.** It cannot see renames (it drops and re-adds) or data changes. Review every file.
+- **Make changes backward compatible.** During a deploy the old version keeps serving while the new one migrates, so new columns must be nullable or have defaults, and removing or renaming something takes two releases: add the new thing and deploy, then remove the old thing later.
+- **Export your data first** (Export CSV) before a risky change: Neon's free plan only keeps about 6 hours of history.
+
+**How startup behaves:** a new database is built from the migrations. A database made by the older startup code (tables, no migration history) is checked against the expected schema and, if it matches, simply marked as being at the baseline, so no data is touched; if it does not match, startup stops instead of guessing. The whole upgrade is one transaction with a lock, so a failure on Postgres leaves the database exactly as it was, and the host keeps serving the previous version.
+
 ## Deployment
 
 | Piece | Where | Config |
@@ -134,7 +158,7 @@ Notes:
 - Render deploys only when the GitHub CI checks pass (`autoDeployTrigger: checksPass`).
 - Render's free web service sleeps after 15 idle minutes and takes about a minute to wake. The landing page pings the API on load so it is usually awake by the time you log in, and a slow login explains itself.
 - CI runs the backend tests on both SQLite and a real Postgres service, since production uses Postgres.
-- Tables are created at startup. Changing an existing table later will need a migration tool (Alembic), which is not set up yet.
+- The database schema is managed with Alembic migrations, applied automatically when the API starts (see below).
 
 ## License
 

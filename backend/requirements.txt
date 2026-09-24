@@ -8,3 +8,4 @@ bcrypt>=4.2
 pyjwt>=2.9
 pytest>=8.3
 httpx>=0.28
+alembic>=1.14

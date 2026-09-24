@@ -19,6 +19,15 @@ from app.db import Base, get_db
 from app.main import app
 
 
+def reset_database(engine) -> None:
+    """Empty the database completely, including Alembic's record of which
+    migrations have run (a leftover version row would make the next startup think
+    tables exist that do not)."""
+    Base.metadata.drop_all(engine)
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+
+
 @pytest.fixture(autouse=True)
 def _fresh_rate_limits():
     """Rate-limit counters are process-wide; without this, attempts in one test
@@ -60,6 +69,7 @@ def client():
             # forever. Fail after 10s with a clear error instead of hanging CI.
             conn.execute(text("SET LOCAL lock_timeout = '10s'"))
             Base.metadata.drop_all(conn)
+            conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
         cleanup.dispose()
     engine.dispose()
 

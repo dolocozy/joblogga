@@ -4,17 +4,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import models  # noqa: F401  (registers tables on Base.metadata)
 from app.config import settings
-from app.db import Base, engine
+from app.db import engine
+from app.migrations import upgrade_database
 from app.routers import applications, auth, stats
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    # Creates any missing tables at startup. Fine while the schema is tiny; we'll
-    # switch to Alembic migrations once we need to change existing tables.
-    Base.metadata.create_all(engine)
+    # Applies any pending database migrations before serving traffic (see
+    # app/migrations.py). If one fails, the app does not start.
+    upgrade_database(engine)
     yield
 
 

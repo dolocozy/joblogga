@@ -10,6 +10,8 @@ def test_app_starts_up_and_creates_its_tables():
     problem would surface on Postgres. The other tests build tables themselves."""
     from fastapi.testclient import TestClient
 
+    from sqlalchemy import text
+
     from app.db import Base, engine
     from app.main import app
 
@@ -21,3 +23,5 @@ def test_app_starts_up_and_creates_its_tables():
             assert {"users", "applications", "status_changes"} <= set(inspect(engine).get_table_names()) or engine.url.get_backend_name() == "sqlite"
     finally:
         Base.metadata.drop_all(engine)
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
