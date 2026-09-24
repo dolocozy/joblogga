@@ -70,13 +70,18 @@ export default function ApplicationForm({ initial = EMPTY, submitLabel, onSubmit
     id,
   )
 
+  // Fields whose value is wrong until it is finished: the link ("h" is not a URL yet)
+  // and the salaries (a max of "1" is below a min of 90000 while "100000" is being typed).
+  const SETTLED = new Set(['job_url', 'salary_min', 'salary_max'])
+
   // Wires a text control to its state, revealing its error once it's been used.
   const bind = (name: 'company' | 'role' | 'job_url' | 'date_applied' | 'salary_min' | 'salary_max', set: (v: string) => void) => ({
     onChange: (e: { target: { value: string } }) => {
       set(e.target.value)
-      fields.visit(name)
+      const reveal = SETTLED.has(name) ? fields.settle : fields.visit
+      reveal(name)
       // Min and max are checked against each other, so editing one revisits the other.
-      if (name === 'salary_min') fields.visit('salary_max')
+      if (name === 'salary_min') fields.settle('salary_max')
     },
     onBlur: () => fields.visit(name),
   })

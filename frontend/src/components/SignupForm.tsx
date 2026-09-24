@@ -52,7 +52,7 @@ export default function SignupForm() {
             value={email}
             onChange={(e) => {
               setEmail(e.target.value)
-              fields.visit('email')
+              fields.settle('email') // an address is invalid until it is finished: wait for a pause
             }}
             onBlur={() => fields.visit('email')}
             className="input"

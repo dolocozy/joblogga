@@ -1,12 +1,21 @@
-import { fireEvent, screen } from '@testing-library/react'
+import { act, fireEvent, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { localToday } from '../dates'
+import { SETTLE_MS } from '../hooks'
 import { server } from '../test/server'
 import { makeDetail, renderApp, signIn, url } from '../test/helpers'
 
 beforeEach(() => signIn())
+afterEach(() => vi.useRealTimers())
+
+// Lets the "wait for a pause" timer elapse (see useFieldErrors).
+const pause = () => act(async () => void vi.advanceTimersByTime(SETTLE_MS + 50))
+const typing = () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+  return userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+}
 
 describe('add application form', () => {
   it('sends blanks as null, salary as numbers, and defaults date and status', async () => {
@@ -154,16 +163,32 @@ describe('add application: inline validation', () => {
     expect(screen.getByText('Enter the company name')).toBeInTheDocument()
   })
 
-  it('rejects a job link that is not http(s), live as you type', async () => {
-    const user = userEvent.setup()
+  it('rejects a job link that is not http(s), once you pause typing', async () => {
+    const user = typing()
     renderApp('/applications/new')
     const link = await screen.findByLabelText('Job posting link')
 
     await user.type(link, 'javascript:alert(1)')
+    expect(screen.queryByText(/start the link/i)).not.toBeInTheDocument()
+    await pause()
     expect(screen.getByText('Start the link with http:// or https://')).toBeInTheDocument()
 
     await user.clear(link)
     await user.type(link, 'https://example.com/job')
+    expect(screen.queryByText(/start the link/i)).not.toBeInTheDocument()
+  })
+
+  it('does not complain about a link while it is being typed', async () => {
+    const user = typing()
+    renderApp('/applications/new')
+    const link = await screen.findByLabelText('Job posting link')
+
+    for (const char of 'https://exam') {
+      await user.type(link, char) // "h", "ht", "htt"... are all unfinished
+      expect(screen.queryByText(/start the link/i)).not.toBeInTheDocument()
+    }
+    await user.type(link, 'ple.com')
+    await pause()
     expect(screen.queryByText(/start the link/i)).not.toBeInTheDocument()
   })
 
@@ -177,23 +202,25 @@ describe('add application: inline validation', () => {
   })
 
   it('only accepts whole numbers for salary', async () => {
-    const user = userEvent.setup()
+    const user = typing()
     renderApp('/applications/new')
 
     await user.type(await screen.findByLabelText('Salary min'), '90k')
+    await pause()
 
     expect(screen.getByText('Enter a whole number, 0 or more')).toBeInTheDocument()
     expect(fieldMessage('Salary min')).toBeTruthy()
   })
 
   it('checks max salary against min salary, whichever one you edit last', async () => {
-    const user = userEvent.setup()
+    const user = typing()
     renderApp('/applications/new')
     const min = await screen.findByLabelText('Salary min')
     const max = screen.getByLabelText('Salary max')
 
     await user.type(min, '90000')
     await user.type(max, '70000')
+    await pause()
     expect(screen.getByText('Max salary cannot be lower than min salary')).toBeInTheDocument()
 
     // Lowering the min fixes it; the max message updates without touching the max.
@@ -202,11 +229,26 @@ describe('add application: inline validation', () => {
     expect(screen.queryByText(/cannot be lower/i)).not.toBeInTheDocument()
   })
 
+  it('does not say the max is too low while a larger number is still being typed', async () => {
+    const user = typing()
+    renderApp('/applications/new')
+    await user.type(await screen.findByLabelText('Salary min'), '90000')
+    const max = screen.getByLabelText('Salary max')
+
+    for (const digit of '100000') {
+      await user.type(max, digit) // "1", "10", "100"... are each below 90000
+      expect(screen.queryByText(/cannot be lower/i)).not.toBeInTheDocument()
+    }
+    await pause()
+    expect(screen.queryByText(/cannot be lower/i)).not.toBeInTheDocument() // 100000 is fine
+  })
+
   it('does not compare salaries when the min is not a number yet', async () => {
-    const user = userEvent.setup()
+    const user = typing()
     renderApp('/applications/new')
     await user.type(await screen.findByLabelText('Salary min'), 'abc')
     await user.type(screen.getByLabelText('Salary max'), '5')
+    await pause()
 
     expect(screen.queryByText(/cannot be lower/i)).not.toBeInTheDocument()
   })
