@@ -9,9 +9,15 @@ from app.config import settings
 # SQLite only allows a connection to be used by the thread that created it, but
 # FastAPI may run a request's code on different threads, so we relax that check.
 # It's safe here because each request gets its own session (see get_db).
-_connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
+_is_sqlite = settings.sqlalchemy_url.startswith("sqlite")
+_connect_args = {"check_same_thread": False} if _is_sqlite else {}
+# Hosted Postgres (Neon) suspends an idle database after a few minutes and drops
+# its connections. pool_pre_ping tests a pooled connection before using it, and
+# pool_recycle retires connections before the host would, so the first request
+# after a quiet spell reconnects instead of failing.
+_pool_options = {} if _is_sqlite else {"pool_pre_ping": True, "pool_recycle": 300}
 
-engine = create_engine(settings.database_url, connect_args=_connect_args)
+engine = create_engine(settings.sqlalchemy_url, connect_args=_connect_args, **_pool_options)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 

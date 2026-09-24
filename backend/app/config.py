@@ -8,6 +8,20 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE = BACKEND_DIR / ".env"
 
 
+def normalize_database_url(url: str) -> str:
+    """Make a hosted-Postgres URL usable by SQLAlchemy with our driver (psycopg 3).
+
+    Hosts hand out URLs that start with "postgres://" or "postgresql://", which
+    SQLAlchemy would read as "use the psycopg2 driver". We install psycopg 3, so
+    the driver has to be named explicitly. SQLite and already-explicit URLs pass
+    through untouched.
+    """
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix) :]
+    return url
+
+
 class Settings(BaseSettings):
     """App configuration, loaded from environment variables (or a .env file).
 
@@ -29,6 +43,10 @@ class Settings(BaseSettings):
     secret_key: str
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
+
+    @property
+    def sqlalchemy_url(self) -> str:
+        return normalize_database_url(self.database_url)
 
     @property
     def cors_origin_list(self) -> list[str]:
