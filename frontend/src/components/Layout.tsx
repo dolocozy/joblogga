@@ -10,9 +10,9 @@ const navLink = ({ isActive }: { isActive: boolean }) =>
 export default function Layout() {
   const { user, logout } = useAuth()
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen overflow-x-clip">
       <header className="border-b border-rule">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 md:px-6">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 md:px-6">
           <div className="flex items-center gap-6">
             <Wordmark to="/applications" />
             <nav aria-label="Main" className="flex items-center gap-5">
@@ -26,7 +26,7 @@ export default function Layout() {
           </div>
           <div className="flex items-center gap-4 text-sm">
             <span className="hidden text-ink-soft sm:inline">{user?.email}</span>
-            <button onClick={logout} className="btn btn-secondary btn-sm">
+            <button onClick={logout} className="btn btn-secondary btn-sm whitespace-nowrap">
               Log out
             </button>
           </div>

@@ -2,7 +2,7 @@
 
 A multi-user job application tracker: log applications, move them through a status pipeline, set follow-up reminders, and see how your search is going.
 
-> **Status:** early development. Auth and application tracking (create, edit, delete, status history, search/filter, follow-up reminders) work. A dashboard with response rate and charts is built. Kanban view and CSV export are next.
+> **Status:** early development. Auth and application tracking (create, edit, delete, status history, search/filter, follow-up reminders) work. The dashboard, CSV export, Kanban board and login rate limiting are built.
 
 ## Built with Claude Code
 
@@ -47,6 +47,17 @@ cd backend && pytest      # API tests (in-memory SQLite)
 cd frontend && npm test  # UI tests (Vitest + Testing Library, API mocked with MSW)
 ```
 
+## Kanban board
+
+The Applications page has a List/Board toggle. On the board each status is a column, and moving a card between columns changes its status (and is recorded in the status history like any other change). It works with:
+
+- **Mouse:** drag a card (a few pixels of movement starts a drag, so clicking a card still opens it).
+- **Touch:** press and hold briefly, then drag, so swiping still scrolls the board.
+- **Keyboard and screen readers:** focus a card's grip, press Space to lift, Left/Right to move a column at a time, Space to drop, Escape to cancel. Each step is announced.
+- **No dragging at all:** every card has a status dropdown.
+
+A drop moves the card immediately and puts it back with an error if the server refuses. The board loads up to 200 applications at once and notes when there are more; it shares the list's search, company and date filters. Drag-and-drop is built on `@dnd-kit` and loaded only when the board is opened.
+
 ## Design
 
 The interface is styled as a logbook: warm paper, dark ink, pine green for actions, brick red for trouble, and a highlighter yellow behind overdue follow-ups. Titles are set in a serif, dates and numbers in a monospace so columns line up like a ledger. The applications list is a ruled ledger with a small stage meter per status, not a stack of cards.
@@ -59,7 +70,7 @@ The rules that keep it from looking generic are enforced by a test (`frontend/sr
 | --- | --- |
 | `/` | Landing page with the login form (logged in: redirects to `/applications`) |
 | `/login`, `/signup` | Stand-alone forms |
-| `/applications`, `/applications/new`, `/applications/:id` | Your applications |
+| `/applications`, `/applications/new`, `/applications/:id` | Your applications, as a ledger list or (`?view=board`) a Kanban board |
 | `/dashboard` | Response rate and charts |
 
 Visiting a protected page while logged out sends you to `/`, and logging in returns you to the page you asked for.

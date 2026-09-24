@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { exportApplicationsCsv, fetchUpcoming, listApplications, STATUSES, updateApplication } from '../api'
 import type { Application, ApplicationStatus } from '../api'
 import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader } from '../components/Ledger'
@@ -7,9 +7,15 @@ import StatusSelect from '../components/StatusSelect'
 import { formatDate, localToday } from '../dates'
 import { saveFile } from '../download'
 import { useDebounced } from '../hooks'
+import { isOverdue } from '../overdue'
 import { statusLabel } from '../status'
 
 export const PAGE_SIZE = 20
+// The board shows everything matching the filters at once (no pages), up to the API's maximum.
+export const BOARD_LIMIT = 200
+
+// Loaded on demand: it carries the drag-and-drop library, which people who only use the list never need.
+const Board = lazy(() => import('../components/Board'))
 
 interface Filters {
   q: string
@@ -52,6 +58,9 @@ function UpcomingPanel({ reloadKey }: { reloadKey: number }) {
 }
 
 export default function Applications() {
+  // The list/board choice lives in the URL (?view=board), so a refresh or a shared link keeps it.
+  const [params, setParams] = useSearchParams()
+  const view = params.get('view') === 'board' ? 'board' : 'list'
   const [filters, setFilters] = useState<Filters>(NO_FILTERS)
   const [page, setPage] = useState(0)
   const [items, setItems] = useState<Application[]>([])
@@ -60,6 +69,7 @@ export default function Applications() {
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null) // row with a status change in flight
   const [exporting, setExporting] = useState(false)
+  const [moving, setMoving] = useState<ReadonlySet<number>>(new Set()) // board cards whose move is being saved
   // Bumped after a status change to refetch the list and the reminders panel.
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -79,19 +89,21 @@ export default function Applications() {
     // `cancelled` drops the result of an outdated request, so a slow earlier
     // response can't overwrite a newer one.
     let cancelled = false
+    const board = view === 'board'
     listApplications({
       q,
       company,
-      status: status || undefined,
+      // The board's columns are the statuses, so the status filter doesn't apply there.
+      status: board ? undefined : status || undefined,
       date_from: dateFrom,
       date_to: dateTo,
-      limit: PAGE_SIZE,
-      offset: page * PAGE_SIZE,
+      limit: board ? BOARD_LIMIT : PAGE_SIZE,
+      offset: board ? 0 : page * PAGE_SIZE,
     })
       .then((res) => {
         if (cancelled) return
         // Deleting or re-filtering can leave us past the last page: step back.
-        if (res.items.length === 0 && res.total > 0 && page > 0) {
+        if (!board && res.items.length === 0 && res.total > 0 && page > 0) {
           setPage(Math.ceil(res.total / PAGE_SIZE) - 1)
           return
         }
@@ -108,7 +120,7 @@ export default function Applications() {
     return () => {
       cancelled = true
     }
-  }, [q, company, status, dateFrom, dateTo, page, reloadKey])
+  }, [q, company, status, dateFrom, dateTo, page, reloadKey, view])
 
   async function changeStatus(app: Application, next: ApplicationStatus) {
     if (next === app.status) return
@@ -121,6 +133,34 @@ export default function Applications() {
       setError(err instanceof Error ? err.message : 'Could not change status')
     } finally {
       setBusyId(null)
+    }
+  }
+
+  function changeView(next: 'list' | 'board') {
+    if (next === view) return
+    setLoading(true) // the other view needs different data, so show "Loading" instead of the wrong rows
+    setParams(next === 'board' ? { view: 'board' } : {}, { replace: true })
+  }
+
+  // Dropping a card on another column changes its status. The card moves at once
+  // and is put back, with an error, if the server refuses, so dragging feels instant.
+  async function moveCard(app: Application, next: ApplicationStatus) {
+    if (next === app.status) return
+    setMoving((m) => new Set(m).add(app.id))
+    setError(null)
+    setItems((list) => list.map((a) => (a.id === app.id ? { ...a, status: next } : a)))
+    try {
+      await updateApplication(app.id, { status: next })
+      setReloadKey((k) => k + 1) // refresh from the server, and the reminders panel
+    } catch (err) {
+      setItems((list) => list.map((a) => (a.id === app.id ? { ...a, status: app.status } : a)))
+      setError(err instanceof Error ? err.message : 'Could not move the application')
+    } finally {
+      setMoving((m) => {
+        const rest = new Set(m)
+        rest.delete(app.id)
+        return rest
+      })
     }
   }
 
@@ -137,22 +177,35 @@ export default function Applications() {
     }
   }
 
-  const filtered = q !== '' || company !== '' || status !== '' || dateFrom !== '' || dateTo !== ''
+  // The status filter only exists in the list; the board's columns are the statuses.
+  const statusFiltering = view === 'list' && status !== ''
+  const filtered = q !== '' || company !== '' || statusFiltering || dateFrom !== '' || dateTo !== ''
   const badRange = dateFrom !== '' && dateTo !== '' && dateFrom > dateTo
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const firstShown = total === 0 ? 0 : page * PAGE_SIZE + 1
   const lastShown = page * PAGE_SIZE + items.length
 
   const today = localToday()
-  // Only open applications can be overdue: nobody follows up on a rejection.
-  const isOverdue = (a: Application) =>
-    a.follow_up_date !== null && a.follow_up_date < today && a.status !== 'rejected' && a.status !== 'withdrawn'
 
   return (
     <>
-      <div className="mb-6 flex items-center justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <h1 className="text-3xl">Applications</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div role="group" aria-label="View" className="flex">
+            {(['list', 'board'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={view === v}
+                onClick={() => changeView(v)}
+                // Two halves of one control: only the outer corners are rounded.
+                className={`btn btn-sm border border-ink ${v === 'list' ? 'rounded-r-none' : '-ml-px rounded-l-none'} ${view === v ? 'bg-ink text-sheet' : 'text-ink hover:bg-ink/5'}`}
+              >
+                {v === 'list' ? 'List' : 'Board'}
+              </button>
+            ))}
+          </div>
           {/* Nothing to export on a brand-new account. */}
           {(total > 0 || filtered) && (
             <button type="button" onClick={exportCsv} disabled={exporting} className="btn btn-secondary">
@@ -182,21 +235,23 @@ export default function Applications() {
           aria-label="Company"
           value={filters.company}
           onChange={(e) => setFilter({ company: e.target.value })}
-          className="input lg:col-span-2"
+          className={`input ${view === 'list' ? 'lg:col-span-2' : 'lg:col-span-3'}`}
         />
-        <select
-          value={filters.status}
-          onChange={(e) => setFilter({ status: e.target.value as ApplicationStatus | '' })}
-          aria-label="Filter by status"
-          className="input"
-        >
-          <option value="">All statuses</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {statusLabel(s)}
-            </option>
-          ))}
-        </select>
+        {view === 'list' && (
+          <select
+            value={filters.status}
+            onChange={(e) => setFilter({ status: e.target.value as ApplicationStatus | '' })}
+            aria-label="Filter by status"
+            className="input"
+          >
+            <option value="">All statuses</option>
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {statusLabel(s)}
+              </option>
+            ))}
+          </select>
+        )}
         <label className="flex items-center gap-2 text-sm text-ink-soft lg:col-span-2">
           Applied from
           <input
@@ -249,6 +304,22 @@ export default function Applications() {
             </>
           )}
         </div>
+      ) : view === 'board' ? (
+        <>
+          {/* Breaks out of the page column so all six status columns fit on a wide screen; narrower screens scroll sideways. */}
+          <div className="relative left-1/2 w-screen -translate-x-1/2 px-4 md:px-6">
+            <div className="mx-auto max-w-[100rem]">
+              <Suspense fallback={<p className="text-ink-soft">Loading the board…</p>}>
+                <Board items={items} moving={moving} onMove={moveCard} />
+              </Suspense>
+            </div>
+          </div>
+          {total > items.length && (
+            <p className="mt-2 text-sm text-ink-soft">
+              Showing the newest {items.length} of {total} applications. Use the filters to narrow them down.
+            </p>
+          )}
+        </>
       ) : (
         <>
           <LedgerHeader />
@@ -276,7 +347,7 @@ export default function Applications() {
                 <DateCell label="Applied">{formatDate(a.date_applied)}</DateCell>
                 <DateCell label="Follow up">
                   {a.follow_up_date ? (
-                    <FollowUp text={formatDate(a.follow_up_date)} overdue={isOverdue(a)} />
+                    <FollowUp text={formatDate(a.follow_up_date)} overdue={isOverdue(a, today)} />
                   ) : (
                     <span className="text-ink-soft">None</span>
                   )}
