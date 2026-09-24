@@ -1,14 +1,90 @@
 @import "tailwindcss";
 
-/* Chart colors, defined once and referenced by role so they can be re-themed in
-   one place. Values come from a palette validated for colorblind separation and
-   contrast (series-1 clears 3:1 on the surface). The app is light-only today;
-   a dark theme would redefine these under a dark selector. */
+/* Joblogga design system: a logbook. Warm paper, dark ink, one pen color (pine)
+   for actions, a red pen (brick) for trouble, and a highlighter (marker) for
+   follow-up dates. Every text/background pairing below was contrast-checked. */
+@theme {
+  --color-paper: #f4efe5; /* page */
+  --color-sheet: #fffcf6; /* forms, login, chart panels */
+  --color-ink: #1f2622; /* text: 13.5:1 on paper */
+  --color-ink-soft: #565c57; /* secondary text: 6.0:1 on paper */
+  --color-rule: #d6ccb8; /* ledger lines (decorative only) */
+  --color-pencil: #857d6a; /* control borders: 3.6:1 or better */
+  --color-pine: #2d5b4c; /* primary actions, links, offers: 6.8:1 on paper */
+  --color-pine-deep: #234a3d; /* pine, pressed/hover */
+  --color-brick: #b2401f; /* overdue, rejected, delete: 5.0:1 on paper */
+  --color-brick-deep: #8f3218;
+  --color-marker: #f0c94a; /* highlighter; only ever behind ink text (9.7:1) */
+
+  --font-serif: "Newsreader Variable", Georgia, serif;
+  --font-sans: "Hanken Grotesk Variable", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* Two radii, by role: small for fields and sheets, a touch more for buttons. */
+  --radius-field: 2px;
+  --radius-button: 4px;
+}
+
+@layer base {
+  body {
+    @apply bg-paper font-sans text-ink antialiased;
+  }
+  /* Titles are set in the serif; body and figures stay in the sans. */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-serif);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center rounded-button px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-primary {
+    @apply bg-pine text-sheet hover:bg-pine-deep;
+  }
+  .btn-secondary {
+    @apply border border-ink text-ink hover:bg-ink/5;
+  }
+  .btn-danger {
+    @apply px-2 text-brick hover:text-brick-deep hover:underline;
+  }
+  .btn-sm {
+    @apply px-3 py-1;
+  }
+  .link {
+    @apply text-pine underline underline-offset-2 hover:text-pine-deep;
+  }
+  .field-label {
+    @apply text-sm font-semibold text-ink;
+  }
+  .input {
+    @apply block w-full rounded-field border border-pencil bg-sheet px-3 py-2 text-ink placeholder:text-pencil aria-invalid:border-brick aria-invalid:border-2;
+  }
+  .sheet {
+    @apply rounded-field border border-rule bg-sheet;
+  }
+  /* Dates, salaries and counts sit in mono so columns line up like a ledger. */
+  .figure {
+    @apply font-mono text-sm;
+  }
+}
+
+/* Chart colors, defined once and referenced by role. Series 1 is pine: it clears
+   3:1 on the sheet (7.6:1) and both charts have a single series, so identity comes
+   from the chart title. The app is light-only today. */
 :root {
-  --viz-surface: #fcfcfb;
-  --viz-ink: #0b0b0b; /* values, primary labels */
-  --viz-ink-2: #52514e; /* axis text, secondary labels: 7.7:1 on the surface */
-  --viz-grid: #e1e0d9; /* hairline gridlines */
-  --viz-axis: #c3c2b7; /* baseline */
-  --viz-series-1: #2a78d6;
+  --viz-surface: var(--color-sheet);
+  --viz-ink: var(--color-ink);
+  --viz-ink-2: var(--color-ink-soft);
+  --viz-grid: var(--color-rule);
+  --viz-axis: var(--color-pencil);
+  --viz-series-1: var(--color-pine);
 }

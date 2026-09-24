@@ -17,7 +17,7 @@ describe('loading and display', () => {
     renderApp('/applications/3')
 
     expect(await screen.findByRole('heading', { name: /Globex/ })).toBeInTheDocument()
-    expect(screen.getByLabelText('Company *')).toHaveValue('Globex')
+    expect(screen.getByLabelText('Company')).toHaveValue('Globex')
     expect(screen.getByLabelText('Location')).toHaveValue('Remote')
     expect(screen.getByLabelText('Status')).toHaveValue('interview')
     expect(screen.getByLabelText('Resume version')).toHaveValue('tech-focused')
@@ -39,8 +39,8 @@ describe('loading and display', () => {
     const history = (await screen.findByText('Status history')).closest('section')!
     const entries = within(history).getAllByRole('listitem')
     expect(entries).toHaveLength(2)
-    expect(entries[0]).toHaveTextContent(/Applied\s*→\s*Interview/)
-    expect(entries[1]).toHaveTextContent('Started as')
+    expect(entries[0]).toHaveTextContent('Moved from Applied to Interview')
+    expect(entries[1]).toHaveTextContent('Started as Applied')
   })
 
   it('shows "not found" for a missing application', async () => {

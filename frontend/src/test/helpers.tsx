@@ -38,8 +38,9 @@ export function makeDetail(overrides: Partial<ApplicationDetail> = {}): Applicat
   }
 }
 
-/** Renders the whole app at `route`, like a browser landing on that URL. */
-export function renderApp(route = '/') {
+/** Renders the whole app at `route`, like a browser landing on that URL. Pass an
+ * object to also supply router state (e.g. a saved return path). */
+export function renderApp(route: string | { pathname: string; state?: unknown } = '/') {
   return render(
     <MemoryRouter initialEntries={[route]}>
       <App />

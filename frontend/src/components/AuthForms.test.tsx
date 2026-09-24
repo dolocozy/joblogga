@@ -1,0 +1,218 @@
+import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { http, HttpResponse } from 'msw'
+import { describe, expect, it } from 'vitest'
+import { server } from '../test/server'
+import { mockList, mockUpcoming, renderApp, url, USER } from '../test/helpers'
+
+const email = () => screen.getByLabelText('Email')
+const password = () => screen.getByLabelText('Password')
+
+// Records requests to an endpoint so tests can assert whether a submit went out.
+function watch(path: string, reply: () => Response) {
+  const bodies: unknown[] = []
+  server.use(
+    http.post(url(path), async ({ request }) => {
+      bodies.push(await request.json())
+      return reply()
+    }),
+  )
+  return bodies
+}
+
+describe('inline validation replaces the browser popups', () => {
+  it.each(['/login', '/signup'])('%s turns native validation off and stays quiet until used', async (route) => {
+    renderApp(route)
+    await screen.findByLabelText('Email')
+
+    // noValidate means the browser never shows its own tooltip.
+    expect(document.querySelector('form')).toHaveAttribute('novalidate')
+    // A fresh form has no errors on it.
+    expect(email()).not.toBeInvalid()
+    expect(password()).not.toBeInvalid()
+    // The password has no native length rule to trigger a popup either.
+    expect(password()).not.toHaveAttribute('minlength')
+  })
+
+  it('shows an email error as you type, without needing to leave the field', async () => {
+    const user = userEvent.setup()
+    renderApp('/signup')
+    await screen.findByLabelText('Email')
+
+    await user.type(email(), 'not-an-email')
+    expect(screen.getByText('Enter an email address like name@example.com')).toBeInTheDocument()
+    expect(email()).toBeInvalid()
+
+    await user.clear(email())
+    await user.type(email(), 'me@example.com')
+    expect(screen.queryByText(/enter an email address/i)).not.toBeInTheDocument()
+    expect(email()).not.toBeInvalid()
+  })
+
+  it('reports an emptied field once it has been touched', async () => {
+    const user = userEvent.setup()
+    renderApp('/login')
+    await screen.findByLabelText('Email')
+
+    await user.type(email(), 'a')
+    await user.clear(email())
+
+    expect(screen.getByText('Enter your email address')).toBeInTheDocument()
+  })
+
+  it('shows an error when a field is left empty (on blur)', async () => {
+    const user = userEvent.setup()
+    renderApp('/login')
+    await screen.findByLabelText('Email')
+
+    await user.click(email())
+    await user.tab() // leave it empty
+
+    expect(screen.getByText('Enter your email address')).toBeInTheDocument()
+    // The password wasn't touched, so it says nothing yet.
+    expect(screen.queryByText('Enter your password')).not.toBeInTheDocument()
+  })
+
+  it('ties each message to its field for screen readers', async () => {
+    const user = userEvent.setup()
+    renderApp('/signup')
+    await screen.findByLabelText('Email')
+    // The rule is a hint before there is anything to correct.
+    expect(password()).toHaveAccessibleDescription('At least 8 characters.')
+
+    await user.type(password(), 'abc')
+
+    expect(password()).toHaveAttribute('aria-invalid', 'true')
+    expect(password()).toHaveAccessibleDescription('Use at least 8 characters (3 so far)')
+  })
+})
+
+describe('signup password rule', () => {
+  it('starts as a hint and becomes a live count as you type', async () => {
+    const user = userEvent.setup()
+    renderApp('/signup')
+    await screen.findByLabelText('Email')
+    expect(screen.getByText('At least 8 characters.')).toBeInTheDocument()
+
+    await user.type(password(), 'abc')
+    expect(screen.getByText('Use at least 8 characters (3 so far)')).toBeInTheDocument()
+
+    await user.type(password(), 'de')
+    expect(screen.getByText('Use at least 8 characters (5 so far)')).toBeInTheDocument()
+    expect(screen.queryByText(/3 so far/)).not.toBeInTheDocument() // updated, not stacked
+  })
+
+  it('clears the error, and shows the hint again, at exactly 8 characters', async () => {
+    const user = userEvent.setup()
+    renderApp('/signup')
+    await screen.findByLabelText('Email')
+
+    await user.type(password(), '1234567')
+    expect(screen.getByText(/7 so far/)).toBeInTheDocument()
+    await user.type(password(), '8')
+
+    expect(screen.queryByText(/so far/)).not.toBeInTheDocument()
+    expect(password()).not.toBeInvalid()
+    expect(screen.getByText('At least 8 characters.')).toBeInTheDocument()
+  })
+
+  it('rejects a password over the 72-byte limit, counting bytes not characters', async () => {
+    const user = userEvent.setup()
+    renderApp('/signup')
+    await screen.findByLabelText('Email')
+
+    // 40 emoji is 40 characters but 160 bytes.
+    await user.click(password())
+    await user.paste('😀'.repeat(40))
+
+    expect(screen.getByText(/at most 72 bytes/i)).toBeInTheDocument()
+  })
+
+  it('asks for a password if it is emptied after typing', async () => {
+    const user = userEvent.setup()
+    renderApp('/signup')
+    await screen.findByLabelText('Email')
+
+    await user.type(password(), 'a')
+    await user.clear(password())
+
+    expect(screen.getByText('Choose a password')).toBeInTheDocument()
+  })
+})
+
+describe('submitting', () => {
+  it('blocks an invalid submit, shows every error, and focuses the first bad field', async () => {
+    const user = userEvent.setup()
+    const bodies = watch('/auth/signup', () => HttpResponse.json(USER, { status: 201 }))
+    renderApp('/signup')
+    await screen.findByLabelText('Email')
+
+    await user.click(screen.getByRole('button', { name: 'Sign up' }))
+
+    expect(bodies).toHaveLength(0)
+    expect(screen.getByText('Enter your email address')).toBeInTheDocument()
+    expect(screen.getByText('Choose a password')).toBeInTheDocument()
+    expect(email()).toHaveFocus()
+  })
+
+  it('focuses the password when only the password is bad', async () => {
+    const user = userEvent.setup()
+    watch('/auth/signup', () => HttpResponse.json(USER, { status: 201 }))
+    renderApp('/signup')
+    await screen.findByLabelText('Email')
+
+    await user.type(email(), 'me@example.com')
+    await user.type(password(), 'short')
+    await user.click(screen.getByRole('button', { name: 'Sign up' }))
+
+    expect(password()).toHaveFocus()
+  })
+
+  it('does not enforce a length on login (only signup sets that rule)', async () => {
+    const user = userEvent.setup()
+    const bodies = watch('/auth/login', () => HttpResponse.json({ detail: 'Incorrect email or password' }, { status: 401 }))
+    renderApp('/login')
+    await screen.findByLabelText('Email')
+
+    await user.type(email(), 'me@example.com')
+    await user.type(password(), 'abc')
+    await user.click(screen.getByRole('button', { name: 'Log in' }))
+
+    // The short password went to the server, which is the judge of it.
+    expect(await screen.findByRole('alert')).toHaveTextContent('Incorrect email or password')
+    expect(bodies).toEqual([{ email: 'me@example.com', password: 'abc' }])
+  })
+
+  it('trims stray spaces around the email before sending', async () => {
+    const user = userEvent.setup()
+    const bodies = watch('/auth/login', () => HttpResponse.json({ detail: 'Incorrect email or password' }, { status: 401 }))
+    renderApp('/login')
+    await screen.findByLabelText('Email')
+
+    await user.type(email(), '  me@example.com  ')
+    await user.type(password(), 'correct-horse-battery')
+    await user.click(screen.getByRole('button', { name: 'Log in' }))
+
+    await screen.findByRole('alert')
+    expect(bodies).toEqual([{ email: 'me@example.com', password: 'correct-horse-battery' }])
+  })
+
+  it('a valid signup goes through and lands in the app', async () => {
+    const user = userEvent.setup()
+    watch('/auth/signup', () => HttpResponse.json(USER, { status: 201 }))
+    server.use(
+      http.post(url('/auth/login'), () => HttpResponse.json({ access_token: 'tok' })),
+      http.get(url('/auth/me'), () => HttpResponse.json(USER)),
+    )
+    mockList([])
+    mockUpcoming()
+    renderApp('/signup')
+    await screen.findByLabelText('Email')
+
+    await user.type(email(), 'me@example.com')
+    await user.type(password(), 'correct-horse-battery')
+    await user.click(screen.getByRole('button', { name: 'Sign up' }))
+
+    expect(await screen.findByRole('heading', { name: 'Applications' })).toBeInTheDocument()
+  })
+})

@@ -15,30 +15,30 @@ const lastParams = (seen: URL[]) => Object.fromEntries(seen.at(-1)!.searchParams
 describe('list', () => {
   it('shows applications with company, role, location, status and date', async () => {
     mockList([makeApplication({ company: 'Globex', role: 'Analyst', location: 'Remote', status: 'interview' })])
-    renderApp('/')
+    renderApp('/applications')
 
     expect(await screen.findByText('Globex')).toBeInTheDocument()
-    expect(screen.getByText('Analyst · Remote')).toBeInTheDocument()
+    expect(screen.getByText('Analyst, Remote')).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Status for Globex' })).toHaveValue('interview')
     expect(screen.getByText(/showing 1–1 of 1/i)).toBeInTheDocument()
   })
 
   it('links each row to its detail page', async () => {
     mockList([makeApplication({ id: 42, company: 'Globex' })])
-    renderApp('/')
+    renderApp('/applications')
     expect(await screen.findByRole('link', { name: /Globex/ })).toHaveAttribute('href', '/applications/42')
   })
 
   it('shows a first-run empty state with a link to add one', async () => {
     mockList([])
-    renderApp('/')
+    renderApp('/applications')
     expect(await screen.findByText(/no applications yet/i)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /add your first one/i })).toBeInTheDocument()
   })
 
   it('shows an error if the list cannot be loaded', async () => {
     server.use(http.get(url('/applications'), () => HttpResponse.json({ detail: 'Server exploded' }, { status: 500 })))
-    renderApp('/')
+    renderApp('/applications')
     expect(await screen.findByRole('alert')).toHaveTextContent('Server exploded')
   })
 })
@@ -47,7 +47,7 @@ describe('filters', () => {
   it('sends the search text, debounced (not one request per keystroke)', async () => {
     const user = userEvent.setup()
     const seen = mockList([])
-    renderApp('/')
+    renderApp('/applications')
     await screen.findByText(/no applications yet/i)
 
     await user.type(screen.getByRole('searchbox', { name: 'Search' }), 'acme')
@@ -61,7 +61,7 @@ describe('filters', () => {
   it('sends the company filter', async () => {
     const user = userEvent.setup()
     const seen = mockList([])
-    renderApp('/')
+    renderApp('/applications')
     await screen.findByText(/no applications yet/i)
 
     await user.type(screen.getByRole('searchbox', { name: 'Company' }), 'glob')
@@ -72,7 +72,7 @@ describe('filters', () => {
   it('sends the status filter immediately', async () => {
     const user = userEvent.setup()
     const seen = mockList([])
-    renderApp('/')
+    renderApp('/applications')
     await screen.findByText(/no applications yet/i)
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by status' }), 'rejected')
@@ -82,7 +82,7 @@ describe('filters', () => {
 
   it('sends the date range', async () => {
     const seen = mockList([])
-    renderApp('/')
+    renderApp('/applications')
     await screen.findByText(/no applications yet/i)
 
     fireEvent.change(screen.getByLabelText('Applied from'), { target: { value: '2026-01-01' } })
@@ -93,7 +93,7 @@ describe('filters', () => {
 
   it('warns when the start date is after the end date', async () => {
     mockList([])
-    renderApp('/')
+    renderApp('/applications')
     await screen.findByText(/no applications yet/i)
 
     fireEvent.change(screen.getByLabelText('Applied from'), { target: { value: '2026-05-01' } })
@@ -105,7 +105,7 @@ describe('filters', () => {
   it('shows a "no matches" state when filters exclude everything, and Clear filters resets', async () => {
     const user = userEvent.setup()
     const seen = mockList([])
-    renderApp('/')
+    renderApp('/applications')
     await screen.findByText(/no applications yet/i)
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by status' }), 'offer')
@@ -122,7 +122,7 @@ describe('filters', () => {
 describe('pagination', () => {
   it('shows one page at a time with position and page count', async () => {
     mockList(manyApplications(45))
-    renderApp('/')
+    renderApp('/applications')
 
     expect(await screen.findByText('Company 1')).toBeInTheDocument()
     expect(screen.queryByText('Company 21')).not.toBeInTheDocument()
@@ -134,7 +134,7 @@ describe('pagination', () => {
   it('moves forward and back, disabling Next on the last page', async () => {
     const user = userEvent.setup()
     const seen = mockList(manyApplications(45))
-    renderApp('/')
+    renderApp('/applications')
     await screen.findByText('Company 1')
 
     await user.click(screen.getByRole('button', { name: 'Next' }))
@@ -152,7 +152,7 @@ describe('pagination', () => {
 
   it('hides pagination controls when everything fits on one page', async () => {
     mockList(manyApplications(5))
-    renderApp('/')
+    renderApp('/applications')
     await screen.findByText('Company 1')
     expect(screen.queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument()
   })
@@ -160,7 +160,7 @@ describe('pagination', () => {
   it('returns to page 1 when a filter changes', async () => {
     const user = userEvent.setup()
     const seen = mockList(manyApplications(45))
-    renderApp('/')
+    renderApp('/applications')
     await screen.findByText('Company 1')
     await user.click(screen.getByRole('button', { name: 'Next' }))
     await screen.findByText('Company 21')
@@ -185,7 +185,7 @@ describe('pagination', () => {
         return HttpResponse.json({ items: all.slice(offset, offset + 20), total: offset === 0 && seen.length > 1 ? 20 : 45 })
       }),
     )
-    renderApp('/')
+    renderApp('/applications')
     await screen.findByText('Company 1')
 
     await user.click(screen.getByRole('button', { name: 'Next' }))
@@ -209,7 +209,7 @@ describe('quick status change', () => {
         return HttpResponse.json({ ...all[0], history: [] })
       }),
     )
-    renderApp('/')
+    renderApp('/applications')
 
     await user.selectOptions(await screen.findByRole('combobox', { name: 'Status for Globex' }), 'interview')
 
@@ -230,7 +230,7 @@ describe('quick status change', () => {
         return HttpResponse.json({ ...all[0], history: [] })
       }),
     )
-    renderApp('/')
+    renderApp('/applications')
     expect(await screen.findByText('Follow-ups due soon')).toBeInTheDocument()
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Status for Globex' }), 'rejected')
@@ -242,13 +242,49 @@ describe('quick status change', () => {
     const user = userEvent.setup()
     mockList([makeApplication({ id: 5, company: 'Globex', status: 'applied' })])
     server.use(http.patch(url('/applications/5'), () => HttpResponse.json({ detail: 'Nope' }, { status: 500 })))
-    renderApp('/')
+    renderApp('/applications')
 
     await user.selectOptions(await screen.findByRole('combobox', { name: 'Status for Globex' }), 'offer')
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Nope')
     expect(screen.getByRole('combobox', { name: 'Status for Globex' })).toHaveValue('applied')
     expect(screen.getByRole('combobox', { name: 'Status for Globex' })).toBeEnabled()
+  })
+})
+
+describe('follow-up column', () => {
+  it('highlights an overdue follow-up on an open application, with the word "overdue"', async () => {
+    mockList([makeApplication({ id: 1, company: 'Globex', status: 'screening', follow_up_date: '2000-01-01' })])
+    renderApp('/applications')
+
+    const row = (await screen.findByText('Globex')).closest('li')!
+    const mark = row.querySelector('mark')
+    expect(mark).toHaveTextContent('Jan 1, 2000')
+    expect(row).toHaveTextContent(/overdue/i)
+  })
+
+  it('does not flag a follow-up that is still in the future, or has no date', async () => {
+    mockList([
+      makeApplication({ id: 1, company: 'Future', follow_up_date: '2999-01-01' }),
+      makeApplication({ id: 2, company: 'Nodate', follow_up_date: null }),
+    ])
+    renderApp('/applications')
+    await screen.findByText('Future')
+
+    expect(document.querySelector('mark')).toBeNull()
+    expect(screen.getByText('Nodate').closest('li')).toHaveTextContent('None')
+  })
+
+  it('never calls a rejected or withdrawn application overdue', async () => {
+    mockList([
+      makeApplication({ id: 1, company: 'Nope', status: 'rejected', follow_up_date: '2000-01-01' }),
+      makeApplication({ id: 2, company: 'Left', status: 'withdrawn', follow_up_date: '2000-01-01' }),
+    ])
+    renderApp('/applications')
+    await screen.findByText('Nope')
+
+    expect(document.querySelector('mark')).toBeNull()
+    expect(screen.queryByText(/overdue/i)).not.toBeInTheDocument()
   })
 })
 
@@ -259,18 +295,18 @@ describe('follow-up reminders panel', () => {
       makeApplication({ id: 9, company: 'Overdue Inc', follow_up_date: '2000-01-01' }),
       makeApplication({ id: 10, company: 'Future LLC', follow_up_date: '2999-01-01' }),
     ])
-    renderApp('/')
+    renderApp('/applications')
 
     const panel = (await screen.findByText('Follow-ups due soon')).closest('section')!
     const rows = within(panel).getAllByRole('listitem')
     expect(within(rows[0]).getByRole('link')).toHaveAttribute('href', '/applications/9')
-    expect(rows[0]).toHaveTextContent('Overdue')
-    expect(rows[1]).not.toHaveTextContent('Overdue')
+    expect(rows[0]).toHaveTextContent(/overdue/i)
+    expect(rows[1]).not.toHaveTextContent(/overdue/i)
   })
 
   it('is hidden when there is nothing due', async () => {
     mockList([])
-    renderApp('/')
+    renderApp('/applications')
     await screen.findByText(/no applications yet/i)
     expect(screen.queryByText('Follow-ups due soon')).not.toBeInTheDocument()
   })

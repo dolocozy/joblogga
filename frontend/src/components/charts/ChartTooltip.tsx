@@ -18,7 +18,7 @@ export default function ChartTooltip({ active, payload, unit }: Props) {
   if (!active || !payload || payload.length === 0) return null
   const row = payload[0].payload as ChartRow
   return (
-    <div className="rounded-lg border border-black/10 bg-white px-3 py-2 shadow-sm text-sm">
+    <div className="rounded-field border border-rule bg-sheet px-3 py-2 text-sm shadow-sm">
       <p className="text-xs text-[var(--viz-ink-2)]">{row.tooltipTitle}</p>
       <p className="mt-1 flex items-center gap-2">
         {/* A short line-key in the series color, not a filled box. */}

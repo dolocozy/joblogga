@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchUpcoming, listApplications, STATUSES, updateApplication } from '../api'
 import type { Application, ApplicationStatus } from '../api'
+import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader } from '../components/Ledger'
 import StatusSelect from '../components/StatusSelect'
 import { formatDate, localToday } from '../dates'
 import { useDebounced } from '../hooks'
@@ -30,18 +31,17 @@ function UpcomingPanel({ reloadKey }: { reloadKey: number }) {
 
   const today = localToday()
   return (
-    <section className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
-      <h2 className="font-semibold text-amber-900 mb-2">Follow-ups due soon</h2>
-      <ul className="space-y-1 text-sm">
+    <section className="mb-8 border-y border-rule py-4">
+      <h2 className="mb-2 text-lg">Follow-ups due soon</h2>
+      <ul className="space-y-1.5 text-sm">
         {items.map((a) => (
-          <li key={a.id} className="flex items-center justify-between gap-2">
-            <Link to={`/applications/${a.id}`} className="text-slate-900 hover:underline">
-              {a.company} <span className="text-slate-500">· {a.role}</span>
+          <li key={a.id} className="flex flex-wrap items-baseline justify-between gap-x-4">
+            <Link to={`/applications/${a.id}`} className="hover:underline">
+              <span className="font-semibold">{a.company}</span> <span className="text-ink-soft">{a.role}</span>
             </Link>
             {/* YYYY-MM-DD strings compare correctly as plain text. */}
-            <span className={a.follow_up_date! < today ? 'text-red-700 font-medium' : 'text-amber-800'}>
-              {a.follow_up_date! < today ? 'Overdue · ' : ''}
-              {formatDate(a.follow_up_date!)}
+            <span className="figure">
+              <FollowUp text={formatDate(a.follow_up_date!)} overdue={a.follow_up_date! < today} />
             </span>
           </li>
         ))}
@@ -49,9 +49,6 @@ function UpcomingPanel({ reloadKey }: { reloadKey: number }) {
     </section>
   )
 }
-
-const inputClass =
-  'rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
 
 export default function Applications() {
   const [filters, setFilters] = useState<Filters>(NO_FILTERS)
@@ -131,28 +128,30 @@ export default function Applications() {
   const firstShown = total === 0 ? 0 : page * PAGE_SIZE + 1
   const lastShown = page * PAGE_SIZE + items.length
 
+  const today = localToday()
+  // Only open applications can be overdue: nobody follows up on a rejection.
+  const isOverdue = (a: Application) =>
+    a.follow_up_date !== null && a.follow_up_date < today && a.status !== 'rejected' && a.status !== 'withdrawn'
+
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Applications</h1>
-        <Link
-          to="/applications/new"
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-        >
-          + Add application
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <h1 className="text-3xl">Applications</h1>
+        <Link to="/applications/new" className="btn btn-primary">
+          Add application
         </Link>
       </div>
 
       <UpcomingPanel reloadKey={reloadKey} />
 
-      <div className="grid gap-3 mb-4 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <input
           type="search"
-          placeholder="Search company, role, location, notes…"
+          placeholder="Search company, role, location, notes"
           aria-label="Search"
           value={filters.q}
           onChange={(e) => setFilter({ q: e.target.value })}
-          className={`${inputClass} sm:col-span-2 lg:col-span-3`}
+          className="input sm:col-span-2 lg:col-span-3"
         />
         <input
           type="search"
@@ -160,13 +159,13 @@ export default function Applications() {
           aria-label="Company"
           value={filters.company}
           onChange={(e) => setFilter({ company: e.target.value })}
-          className={`${inputClass} lg:col-span-2`}
+          className="input lg:col-span-2"
         />
         <select
           value={filters.status}
           onChange={(e) => setFilter({ status: e.target.value as ApplicationStatus | '' })}
           aria-label="Filter by status"
-          className={inputClass}
+          className="input"
         >
           <option value="">All statuses</option>
           {STATUSES.map((s) => (
@@ -175,56 +174,52 @@ export default function Applications() {
             </option>
           ))}
         </select>
-        <label className="flex items-center gap-2 text-sm text-slate-600 sm:col-span-1 lg:col-span-2">
+        <label className="flex items-center gap-2 text-sm text-ink-soft lg:col-span-2">
           Applied from
           <input
             type="date"
             value={filters.dateFrom}
             onChange={(e) => setFilter({ dateFrom: e.target.value })}
-            className={`${inputClass} flex-1`}
+            className="input flex-1"
           />
         </label>
-        <label className="flex items-center gap-2 text-sm text-slate-600 sm:col-span-1 lg:col-span-2">
+        <label className="flex items-center gap-2 text-sm text-ink-soft lg:col-span-2">
           to
           <input
             type="date"
             value={filters.dateTo}
             onChange={(e) => setFilter({ dateTo: e.target.value })}
-            className={`${inputClass} flex-1`}
+            className="input flex-1"
           />
         </label>
         {filtered && (
-          <button
-            type="button"
-            onClick={() => setFilter(NO_FILTERS)}
-            className="text-sm text-indigo-600 hover:underline justify-self-start lg:col-span-2 self-center"
-          >
+          <button type="button" onClick={() => setFilter(NO_FILTERS)} className="link self-center justify-self-start text-sm lg:col-span-2">
             Clear filters
           </button>
         )}
       </div>
 
       {badRange && (
-        <p role="alert" className="text-sm text-amber-700 mb-3">
+        <p role="alert" className="mb-3 text-sm text-brick">
           The start date is after the end date, so nothing can match.
         </p>
       )}
       {error && (
-        <p role="alert" className="rounded-lg bg-red-50 text-red-700 text-sm px-3 py-2 mb-4">
+        <p role="alert" className="mb-4 border-l-2 border-brick bg-brick/5 px-3 py-2 text-sm text-brick-deep">
           {error}
         </p>
       )}
 
       {loading ? (
-        <p className="text-slate-500">Loading…</p>
+        <p className="text-ink-soft">Loading…</p>
       ) : items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-600">
+        <div className="sheet p-10 text-center text-ink-soft">
           {filtered ? (
             'No applications match your filters.'
           ) : (
             <>
               No applications yet.{' '}
-              <Link to="/applications/new" className="text-indigo-600 hover:underline">
+              <Link to="/applications/new" className="link">
                 Add your first one
               </Link>
               .
@@ -233,51 +228,53 @@ export default function Applications() {
         </div>
       ) : (
         <>
-          <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white">
+          <LedgerHeader />
+          <ul>
             {items.map((a) => (
-              <li key={a.id} className="flex items-center gap-4 px-4 py-3 hover:bg-slate-50">
-                <Link to={`/applications/${a.id}`} className="min-w-0 flex-1">
-                  <p className="font-medium text-slate-900 truncate">{a.company}</p>
-                  <p className="text-sm text-slate-600 truncate">
+              <li
+                key={a.id}
+                className={`grid gap-x-4 gap-y-1 border-b border-rule py-3 md:items-center ${LEDGER_COLUMNS}`}
+              >
+                <Link to={`/applications/${a.id}`} className="group min-w-0">
+                  <span className="block truncate font-semibold group-hover:underline">{a.company}</span>
+                  {/* Role and location are separated by a comma, as in a sentence. */}
+                  <span className="block truncate text-sm text-ink-soft">
                     {a.role}
-                    {a.location ? ` · ${a.location}` : ''}
-                  </p>
+                    {a.location ? `, ${a.location}` : ''}
+                  </span>
                 </Link>
-                {/* Sits beside the link (not inside it): a control nested in a link is invalid HTML. */}
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <StatusSelect
-                    value={a.status}
-                    label={`Status for ${a.company}`}
-                    disabled={busyId === a.id}
-                    onChange={(next) => changeStatus(a, next)}
-                  />
-                  <span className="text-xs text-slate-500">{formatDate(a.date_applied)}</span>
-                </div>
+                {/* The status control sits beside the link (not inside it): a control nested in a link is invalid HTML. */}
+                <StatusSelect
+                  value={a.status}
+                  label={`Status for ${a.company}`}
+                  disabled={busyId === a.id}
+                  onChange={(next) => changeStatus(a, next)}
+                />
+                <DateCell label="Applied">{formatDate(a.date_applied)}</DateCell>
+                <DateCell label="Follow up">
+                  {a.follow_up_date ? (
+                    <FollowUp text={formatDate(a.follow_up_date)} overdue={isOverdue(a)} />
+                  ) : (
+                    <span className="text-ink-soft">None</span>
+                  )}
+                </DateCell>
               </li>
             ))}
           </ul>
 
-          <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
+          <div className="mt-4 flex items-center justify-between text-sm text-ink-soft">
             <span>
               Showing {firstShown}–{lastShown} of {total}
             </span>
             {pageCount > 1 && (
               <nav aria-label="Pagination" className="flex items-center gap-3">
-                <button
-                  onClick={() => setPage((p) => p - 1)}
-                  disabled={page === 0}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-1 hover:bg-slate-100 disabled:opacity-50 disabled:hover:bg-white"
-                >
+                <button onClick={() => setPage((p) => p - 1)} disabled={page === 0} className="btn btn-secondary btn-sm">
                   Previous
                 </button>
                 <span>
                   Page {page + 1} of {pageCount}
                 </span>
-                <button
-                  onClick={() => setPage((p) => p + 1)}
-                  disabled={page + 1 >= pageCount}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-1 hover:bg-slate-100 disabled:opacity-50 disabled:hover:bg-white"
-                >
+                <button onClick={() => setPage((p) => p + 1)} disabled={page + 1 >= pageCount} className="btn btn-secondary btn-sm">
                   Next
                 </button>
               </nav>

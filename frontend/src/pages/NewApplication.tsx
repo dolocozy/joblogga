@@ -6,11 +6,11 @@ export default function NewApplication() {
   const navigate = useNavigate()
   return (
     <>
-      <Link to="/" className="text-sm text-indigo-600 hover:underline">
-        ← Back to applications
+      <Link to="/applications" className="link text-sm">
+        Back to applications
       </Link>
-      <h1 className="text-2xl font-semibold text-slate-900 mt-2 mb-6">Add application</h1>
-      <div className="rounded-xl border border-slate-200 bg-white p-6">
+      <h1 className="mb-6 mt-3 text-3xl">Add application</h1>
+      <div className="sheet p-6">
         <ApplicationForm
           submitLabel="Add application"
           onSubmit={async (input) => {

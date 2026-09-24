@@ -1,6 +1,7 @@
 import { STATUSES } from '../api'
 import type { ApplicationStatus } from '../api'
-import { statusLabel, statusStyles } from '../status'
+import { statusLabel, statusText } from '../status'
+import StageMeter from './StageMeter'
 
 interface Props {
   value: ApplicationStatus
@@ -9,21 +10,25 @@ interface Props {
   onChange: (status: ApplicationStatus) => void
 }
 
-// A dropdown styled like a status badge, for changing status in place.
+// Changes an application's status in place. Looks like the status word with an
+// underline, since it is a control and should read as one.
 export default function StatusSelect({ value, label, disabled, onChange }: Props) {
   return (
-    <select
-      aria-label={label}
-      value={value}
-      disabled={disabled}
-      onChange={(e) => onChange(e.target.value as ApplicationStatus)}
-      className={`rounded-full border-0 px-2.5 py-0.5 text-xs font-medium cursor-pointer disabled:opacity-60 ${statusStyles[value]}`}
-    >
-      {STATUSES.map((s) => (
-        <option key={s} value={s}>
-          {statusLabel(s)}
-        </option>
-      ))}
-    </select>
+    <span className="inline-flex items-center gap-2">
+      <StageMeter status={value} />
+      <select
+        aria-label={label}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value as ApplicationStatus)}
+        className={`cursor-pointer rounded-none border-b border-pencil bg-transparent py-0.5 text-sm ${statusText[value]} disabled:opacity-60`}
+      >
+        {STATUSES.map((s) => (
+          <option key={s} value={s} className="font-normal text-ink">
+            {statusLabel(s)}
+          </option>
+        ))}
+      </select>
+    </span>
   )
 }

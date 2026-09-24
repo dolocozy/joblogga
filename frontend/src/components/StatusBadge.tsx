@@ -1,10 +1,13 @@
 import type { ApplicationStatus } from '../api'
-import { statusLabel, statusStyles } from '../status'
+import { statusLabel, statusText } from '../status'
+import StageMeter from './StageMeter'
 
+// A status shown as its word, with the stage meter beside it.
 export default function StatusBadge({ status }: { status: ApplicationStatus }) {
   return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${statusStyles[status]}`}>
-      {statusLabel(status)}
+    <span className="inline-flex items-center gap-2 text-sm">
+      <StageMeter status={status} />
+      <span className={statusText[status]}>{statusLabel(status)}</span>
     </span>
   )
 }

@@ -10,7 +10,7 @@ This project is built with [Claude Code](https://claude.com/claude-code) as a de
 
 ## Tech stack
 
-- **Frontend:** React + TypeScript, Vite, Tailwind CSS, Recharts
+- **Frontend:** React + TypeScript, Vite, Tailwind CSS, Recharts, self-hosted fonts (Newsreader, Hanken Grotesk, IBM Plex Mono)
 - **Backend:** Python, FastAPI
 - **Database:** SQLAlchemy 2.0; SQLite for local dev, PostgreSQL in production (planned)
 - **Auth:** JWT (PyJWT) + bcrypt
@@ -46,6 +46,25 @@ Open the app, sign up, and you should land on a page showing your email and **AP
 cd backend && pytest      # API tests (in-memory SQLite)
 cd frontend && npm test  # UI tests (Vitest + Testing Library, API mocked with MSW)
 ```
+
+## Design
+
+The interface is styled as a logbook: warm paper, dark ink, pine green for actions, brick red for trouble, and a highlighter yellow behind overdue follow-ups. Titles are set in a serif, dates and numbers in a monospace so columns line up like a ledger. The applications list is a ruled ledger with a small stage meter per status, not a stack of cards.
+
+The rules that keep it from looking generic are enforced by a test (`frontend/src/design.test.ts`): no middle-dot separators, no arrows on links, no all-caps tracked labels, no default Tailwind palette colors, two border radii only, and no shadows except the chart tooltip. All text and background pairings were contrast-checked against WCAG.
+
+## Pages
+
+| Path | Who sees it |
+| --- | --- |
+| `/` | Landing page with the login form (logged in: redirects to `/applications`) |
+| `/login`, `/signup` | Stand-alone forms |
+| `/applications`, `/applications/new`, `/applications/:id` | Your applications |
+| `/dashboard` | Response rate and charts |
+
+Visiting a protected page while logged out sends you to `/`, and logging in returns you to the page you asked for.
+
+Forms validate inline: a message appears under the field as you type (after you've touched it), instead of the browser's native popup. The server re-checks everything.
 
 ## API overview
 

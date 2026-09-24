@@ -5,6 +5,7 @@ import type { ApplicationDetail as Detail, ApplicationInput } from '../api'
 import ApplicationForm from '../components/ApplicationForm'
 import StatusBadge from '../components/StatusBadge'
 import { formatDateTime } from '../dates'
+import { statusLabel } from '../status'
 
 function toInput(a: Detail): ApplicationInput {
   return {
@@ -47,19 +48,22 @@ export default function ApplicationDetail() {
 
   if (notFound) {
     return (
-      <p className="text-slate-600">
-        Application not found. <Link to="/" className="text-indigo-600 hover:underline">Back to list</Link>
+      <p className="text-ink-soft">
+        Application not found.{' '}
+        <Link to="/applications" className="link">
+          Back to your applications
+        </Link>
       </p>
     )
   }
-  if (error) return <p role="alert" className="text-red-700">{error}</p>
-  if (!app) return <p className="text-slate-500">Loading…</p>
+  if (error) return <p role="alert" className="text-brick">{error}</p>
+  if (!app) return <p className="text-ink-soft">Loading…</p>
 
   async function handleDelete() {
     if (!app || !window.confirm(`Delete your application to ${app.company}? This can't be undone.`)) return
     try {
       await deleteApplication(app.id)
-      navigate('/', { replace: true })
+      navigate('/applications', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not delete')
     }
@@ -71,25 +75,26 @@ export default function ApplicationDetail() {
 
   return (
     <>
-      <Link to="/" className="text-sm text-indigo-600 hover:underline">
-        ← Back to applications
+      <Link to="/applications" className="link text-sm">
+        Back to applications
       </Link>
-      <div className="mt-2 mb-6 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold text-slate-900">
-          {app.company} <span className="text-slate-500 font-normal">· {app.role}</span>
-        </h1>
-        <StatusBadge status={app.status} />
-        {safeUrl && (
-          <a href={safeUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-600 hover:underline">
-            View posting ↗
-          </a>
-        )}
+      <div className="mb-6 mt-3">
+        <h1 className="text-3xl">{app.company}</h1>
+        <p className="text-lg text-ink-soft">{app.role}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1">
+          <StatusBadge status={app.status} />
+          {safeUrl && (
+            <a href={safeUrl} target="_blank" rel="noopener noreferrer" className="link text-sm">
+              View posting
+            </a>
+          )}
+        </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-6">
+      <div className="grid gap-8 lg:grid-cols-3">
+        <div className="sheet p-6 lg:col-span-2">
           {saved && (
-            <p role="status" className="mb-4 rounded-lg bg-emerald-50 text-emerald-800 text-sm px-3 py-2">
+            <p role="status" className="mb-4 border-l-2 border-pine bg-pine/5 px-3 py-2 text-sm">
               Saved.
             </p>
           )}
@@ -106,34 +111,25 @@ export default function ApplicationDetail() {
           />
         </div>
 
-        <aside className="space-y-6">
-          <section className="rounded-xl border border-slate-200 bg-white p-6">
-            <h2 className="font-semibold text-slate-900 mb-3">Status history</h2>
-            <ol className="space-y-3 text-sm">
+        <aside className="space-y-8">
+          <section>
+            <h2 className="mb-2 border-b-2 border-ink pb-2 text-lg">Status history</h2>
+            <ol>
               {[...app.history].reverse().map((h) => (
-                <li key={h.id}>
-                  <div className="flex items-center gap-2">
-                    {h.from_status && (
-                      <>
-                        <StatusBadge status={h.from_status} />
-                        <span className="text-slate-400">→</span>
-                      </>
-                    )}
-                    <StatusBadge status={h.to_status} />
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {h.from_status ? '' : 'Started as · '}
-                    {formatDateTime(h.changed_at)}
+                <li key={h.id} className="border-b border-rule py-3 text-sm">
+                  <p className="font-semibold">
+                    {h.from_status
+                      ? `Moved from ${statusLabel(h.from_status)} to ${statusLabel(h.to_status)}`
+                      : `Started as ${statusLabel(h.to_status)}`}
                   </p>
+                  <p className="figure text-ink-soft">{formatDateTime(h.changed_at)}</p>
                 </li>
               ))}
             </ol>
           </section>
 
-          <button
-            onClick={handleDelete}
-            className="w-full rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-          >
+          {error && <p role="alert" className="text-brick">{error}</p>}
+          <button onClick={handleDelete} className="btn btn-danger">
             Delete application
           </button>
         </aside>

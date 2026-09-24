@@ -5,6 +5,7 @@ import Layout from './components/Layout'
 import { GuestRoute, ProtectedRoute } from './components/RouteGuards'
 import ApplicationDetail from './pages/ApplicationDetail'
 import Applications from './pages/Applications'
+import Home from './pages/Home'
 import Login from './pages/Login'
 import NewApplication from './pages/NewApplication'
 import Signup from './pages/Signup'
@@ -19,17 +20,18 @@ export default function App() {
   return (
     <AuthProvider>
       <Routes>
+        <Route path="/" element={<Home />} />
         <Route element={<GuestRoute />}>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
         </Route>
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
-            <Route path="/" element={<Applications />} />
+            <Route path="/applications" element={<Applications />} />
             <Route
               path="/dashboard"
               element={
-                <Suspense fallback={<p className="text-slate-500">Loading…</p>}>
+                <Suspense fallback={<p className="text-ink-soft">Loading…</p>}>
                   <Dashboard />
                 </Suspense>
               }
