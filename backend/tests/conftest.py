@@ -9,7 +9,7 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -44,11 +44,26 @@ def client():
     yield TestClient(app)
     app.dependency_overrides.clear()
     if not TEST_DATABASE_URL.startswith("sqlite"):
-        engine.dispose()  # release connections so drop_all is not blocked by open locks
+        engine.dispose()  # release pooled connections so they cannot block the drop
         cleanup = create_engine(normalize_database_url(TEST_DATABASE_URL))
-        Base.metadata.drop_all(cleanup)
+        with cleanup.begin() as conn:
+            # If a test leaks an open session, its table lock would make DROP wait
+            # forever. Fail after 10s with a clear error instead of hanging CI.
+            conn.execute(text("SET LOCAL lock_timeout = '10s'"))
+            Base.metadata.drop_all(conn)
         cleanup.dispose()
     engine.dispose()
+
+
+@pytest.fixture
+def db(client):
+    """A session on the test database, for tests that inspect or change rows
+    directly. It is closed afterwards: an open session keeps a lock on the tables
+    on Postgres, which would block the teardown."""
+    generator = app.dependency_overrides[get_db]()
+    session = next(generator)
+    yield session
+    generator.close()  # runs the generator's `finally`, which closes the session
 
 
 def make_user(client, email="me@example.com", password="correct-horse-battery") -> dict:

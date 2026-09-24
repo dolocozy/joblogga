@@ -3,8 +3,6 @@ from datetime import UTC, datetime, timedelta
 import jwt
 
 from app.config import settings
-from app.db import get_db
-from app.main import app
 from app.models import User
 from app.security import create_access_token, verify_password
 
@@ -35,9 +33,8 @@ def test_signup_creates_user_without_leaking_password(client):
     assert "password" not in body and "hashed_password" not in body
 
 
-def test_signup_stores_bcrypt_hash_not_plaintext(client):
+def test_signup_stores_bcrypt_hash_not_plaintext(client, db):
     signup(client)
-    db = next(app.dependency_overrides[get_db]())
     user = db.query(User).one()
     assert user.hashed_password != CREDS["password"]
     assert user.hashed_password.startswith("$2")  # bcrypt marker
@@ -132,10 +129,9 @@ def test_me_rejects_unsigned_alg_none_token(client):
     assert client.get("/auth/me", headers=auth_header(unsigned)).status_code == 401
 
 
-def test_valid_token_for_deleted_user_is_rejected(client):
+def test_valid_token_for_deleted_user_is_rejected(client, db):
     signup(client)
     token = login(client).json()["access_token"]
-    db = next(app.dependency_overrides[get_db]())
     db.delete(db.query(User).one())
     db.commit()
     assert client.get("/auth/me", headers=auth_header(token)).status_code == 401

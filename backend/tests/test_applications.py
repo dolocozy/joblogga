@@ -191,17 +191,14 @@ def test_patch_missing_is_404(client, auth):
 # --- delete -----------------------------------------------------------------
 
 
-def test_delete_removes_application_and_history(client, auth):
+def test_delete_removes_application_and_history(client, auth, db):
     app = create(client, auth)
     client.patch(f"/applications/{app['id']}", json={"status": "offer"}, headers=auth)
     assert client.delete(f"/applications/{app['id']}", headers=auth).status_code == 204
     assert client.get(f"/applications/{app['id']}", headers=auth).status_code == 404
 
-    from app.db import get_db
-    from app.main import app as fastapi_app
     from app.models import StatusChange
 
-    db = next(fastapi_app.dependency_overrides[get_db]())
     assert db.query(StatusChange).count() == 0
 
 
