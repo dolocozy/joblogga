@@ -1,6 +1,17 @@
-from datetime import datetime
+from datetime import date, datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
+
+from app.models import ApplicationStatus
 
 
 class SignupRequest(BaseModel):
@@ -48,3 +59,130 @@ class UserOut(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+# --- applications -------------------------------------------------------------
+
+
+def _blank_to_none(v: object) -> object:
+    """Trim strings; treat "" as "not provided". HTML forms send empty strings."""
+    if isinstance(v, str):
+        v = v.strip()
+        return v or None
+    return v
+
+
+# Required text: trimmed, and must not be empty.
+RequiredText = Annotated[str, Field(min_length=1, max_length=200), BeforeValidator(lambda v: v.strip() if isinstance(v, str) else v)]
+def optional_text(max_length: int):
+    """Optional text: trimmed, blank becomes None, and the length limit applies
+    only to real strings (the constraint sits on the `str` branch, not on None)."""
+    return Annotated[Annotated[str, Field(max_length=max_length)] | None, BeforeValidator(_blank_to_none)]
+
+
+def _check_http_url(v: str | None) -> str | None:
+    # Only http(s). The frontend renders this as a clickable link, and a stored
+    # "javascript:..." URL would run script when clicked (stored XSS).
+    if v is not None and not v.lower().startswith(("http://", "https://")):
+        raise ValueError("Job link must start with http:// or https://")
+    return v
+
+
+class ApplicationFields(BaseModel):
+    """Fields shared by create and update, with all the validation rules."""
+
+    company: RequiredText
+    role: RequiredText
+    job_url: optional_text(2048) = None
+    date_applied: date = Field(default_factory=date.today)
+    resume_version: optional_text(100) = None
+    salary_min: int | None = Field(default=None, ge=0)
+    salary_max: int | None = Field(default=None, ge=0)
+    location: optional_text(200) = None
+    notes: optional_text(10000) = None
+    status: ApplicationStatus = ApplicationStatus.APPLIED
+    follow_up_date: date | None = None
+
+    @field_validator("job_url")
+    @classmethod
+    def job_url_is_http(cls, v: str | None) -> str | None:
+        return _check_http_url(v)
+
+
+class ApplicationCreate(ApplicationFields):
+    @model_validator(mode="after")
+    def salary_range_is_ordered(self) -> "ApplicationCreate":
+        check_salary_range(self.salary_min, self.salary_max)
+        return self
+
+
+class ApplicationUpdate(BaseModel):
+    """PATCH body: every field optional; only the fields sent are changed."""
+
+    company: RequiredText | None = None
+    role: RequiredText | None = None
+    job_url: optional_text(2048) = None
+    date_applied: date | None = None
+    resume_version: optional_text(100) = None
+    salary_min: int | None = Field(default=None, ge=0)
+    salary_max: int | None = Field(default=None, ge=0)
+    location: optional_text(200) = None
+    notes: optional_text(10000) = None
+    status: ApplicationStatus | None = None
+    follow_up_date: date | None = None
+
+    @field_validator("job_url")
+    @classmethod
+    def job_url_is_http(cls, v: str | None) -> str | None:
+        return _check_http_url(v)
+
+    @model_validator(mode="after")
+    def required_fields_not_null(self) -> "ApplicationUpdate":
+        # For optional columns, sending null means "clear it". For columns that
+        # must always have a value, explicitly sending null is an error.
+        for name in ("company", "role", "date_applied", "status"):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError(f"{name} cannot be null")
+        return self
+
+
+def check_salary_range(low: int | None, high: int | None) -> None:
+    if low is not None and high is not None and low > high:
+        raise ValueError("salary_min cannot be greater than salary_max")
+
+
+class StatusChangeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    from_status: ApplicationStatus | None
+    to_status: ApplicationStatus
+    changed_at: datetime
+
+
+class ApplicationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    company: str
+    role: str
+    job_url: str | None
+    date_applied: date
+    resume_version: str | None
+    salary_min: int | None
+    salary_max: int | None
+    location: str | None
+    notes: str | None
+    status: ApplicationStatus
+    follow_up_date: date | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ApplicationDetail(ApplicationOut):
+    history: list[StatusChangeOut]
+
+
+class ApplicationList(BaseModel):
+    items: list[ApplicationOut]
+    total: int  # matches ignoring limit/offset, so the UI can paginate

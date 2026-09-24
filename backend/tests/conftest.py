@@ -36,3 +36,22 @@ def client():
     yield TestClient(app)
     app.dependency_overrides.clear()
     engine.dispose()
+
+
+def make_user(client, email="me@example.com", password="correct-horse-battery") -> dict:
+    """Sign up + log in; returns headers for authenticated requests."""
+    client.post("/auth/signup", json={"email": email, "password": password})
+    token = client.post("/auth/login", json={"email": email, "password": password}).json()[
+        "access_token"
+    ]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def auth(client):
+    return make_user(client)
+
+
+@pytest.fixture
+def other_auth(client):
+    return make_user(client, email="other@example.com")
