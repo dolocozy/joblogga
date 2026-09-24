@@ -103,6 +103,21 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 - Wrong email and wrong password return the identical error, and unknown emails still run a bcrypt check, so neither the message nor the response time reveals which emails are registered.
 - The frontend keeps the token in `localStorage` and re-validates it against `/auth/me` on load. `localStorage` is readable by page scripts (XSS); an httpOnly cookie would avoid that at the cost of CSRF handling.
 
+## Deployment
+
+| Piece | Where | Config |
+| --- | --- | --- |
+| Frontend | Vercel (root directory `frontend`) | `frontend/vercel.json`, env `VITE_API_URL` |
+| API | Render web service | `render.yaml` (Blueprint), envs `DATABASE_URL`, `CORS_ORIGINS`, generated `SECRET_KEY` |
+| Database | Neon Postgres | connection string goes in Render's `DATABASE_URL` |
+
+Notes:
+- The database is on Neon, not Render, because Render's free Postgres expires after 30 days.
+- Render deploys only when the GitHub CI checks pass (`autoDeployTrigger: checksPass`).
+- Render's free web service sleeps after 15 idle minutes and takes about a minute to wake. The landing page pings the API on load so it is usually awake by the time you log in, and a slow login explains itself.
+- CI runs the backend tests on both SQLite and a real Postgres service, since production uses Postgres.
+- Tables are created at startup. Changing an existing table later will need a migration tool (Alembic), which is not set up yet.
+
 ## License
 
 MIT

@@ -1,0 +1,28 @@
+# Render Blueprint: describes the backend so it can be created in one step
+# (Render dashboard > New > Blueprint). The database is NOT created here: it lives
+# on Neon, because Render's free Postgres expires after 30 days.
+services:
+  - type: web
+    name: joblogga-api
+    runtime: python
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass  # deploy only when the GitHub CI checks pass
+    envVars:
+      # Same major version as local development and CI.
+      - key: PYTHON_VERSION
+        value: 3.14.3
+      # Random, created once by Render and never shown in the repo. It signs login
+      # tokens: keep it stable, because changing it logs every user out.
+      - key: SECRET_KEY
+        generateValue: true
+      # Secrets you paste in the dashboard; deliberately not stored in this file.
+      - key: DATABASE_URL
+        sync: false
+      # The frontend's address, e.g. https://joblogga.vercel.app (no trailing slash).
+      - key: CORS_ORIGINS
+        sync: false

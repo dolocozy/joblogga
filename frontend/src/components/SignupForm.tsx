@@ -2,7 +2,7 @@ import { useId, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { useFieldErrors } from '../hooks'
+import { useFieldErrors, useSlowAfter } from '../hooks'
 import { emailRule, newPasswordRule } from '../validation'
 import Field from './Field'
 
@@ -15,6 +15,7 @@ export default function SignupForm() {
   const [password, setPassword] = useState('')
   const [serverError, setServerError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const slow = useSlowAfter(submitting)
 
   const fields = useFieldErrors({ email: emailRule(email), password: newPasswordRule(password) }, (n) => `${base}-${n}`)
 
@@ -77,6 +78,12 @@ export default function SignupForm() {
           />
         )}
       </Field>
+
+      {slow && (
+        <p role="status" className="text-sm text-ink-soft">
+          Waking the server. The first request after a quiet spell can take up to a minute.
+        </p>
+      )}
 
       <button type="submit" disabled={submitting} className="btn btn-primary w-full">
         {submitting ? 'Please wait…' : 'Sign up'}

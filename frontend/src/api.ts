@@ -83,6 +83,14 @@ export interface User {
 
 export const fetchHealth = () => request<HealthResponse>('/health')
 
+// The free hosting tier puts the API to sleep when idle and takes up to a minute
+// to wake it. Calling this as soon as the landing page opens starts that wake-up
+// while the visitor is still reading, so login is quick by the time they use it.
+// Failures are ignored: it is only a nudge.
+export function warmUpServer() {
+  fetchHealth().catch(() => {})
+}
+
 export const signup = (email: string, password: string) =>
   request<User>('/auth/signup', { method: 'POST', body: JSON.stringify({ email, password }) })
 

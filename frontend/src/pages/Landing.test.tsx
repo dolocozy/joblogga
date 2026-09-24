@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
@@ -71,6 +71,39 @@ describe('landing page at /', () => {
 
     expect(await screen.findByRole('heading', { name: 'Applications' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'A logbook for your job search' })).not.toBeInTheDocument()
+  })
+})
+
+describe('waking a sleeping server', () => {
+  const healthHits = () => {
+    const hits: number[] = []
+    server.use(
+      http.get(url('/health'), () => {
+        hits.push(Date.now())
+        return HttpResponse.json({ status: 'ok' })
+      }),
+    )
+    return hits
+  }
+
+  it('pings the API as soon as the landing page opens', async () => {
+    const hits = healthHits()
+    renderApp('/')
+    await waitFor(() => expect(hits).toHaveLength(1))
+  })
+
+  it('keeps working if the API does not answer the ping', async () => {
+    server.use(http.get(url('/health'), () => HttpResponse.error()))
+    renderApp('/')
+    expect(await screen.findByRole('heading', { level: 1, name: 'A logbook for your job search' })).toBeInTheDocument()
+  })
+
+  it('does not ping from other pages', async () => {
+    const hits = healthHits()
+    renderApp('/login')
+    await screen.findByRole('heading', { name: 'Log in' })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(hits).toHaveLength(0)
   })
 })
 

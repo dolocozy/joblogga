@@ -55,3 +55,17 @@ export function useReturnPath(): string {
   const from = (useLocation().state as { from?: unknown } | null)?.from
   return typeof from === 'string' && from.startsWith('/') && !from.startsWith('//') ? from : '/applications'
 }
+
+/** True once `active` has stayed true for `ms`, e.g. a request that is taking long enough to explain. */
+export function useSlowAfter(active: boolean, ms = 3000): boolean {
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    if (!active) return
+    const timer = setTimeout(() => setSlow(true), ms)
+    return () => {
+      clearTimeout(timer)
+      setSlow(false)
+    }
+  }, [active, ms])
+  return active && slow
+}

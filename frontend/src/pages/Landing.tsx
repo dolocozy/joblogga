@@ -1,9 +1,11 @@
+import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import LoginForm from '../components/LoginForm'
 import StatusBadge from '../components/StatusBadge'
 import Wordmark from '../components/Wordmark'
 import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader } from '../components/Ledger'
+import { warmUpServer } from '../api'
 import type { ApplicationStatus } from '../api'
 
 // Made-up companies, for showing what a page of the logbook looks like.
@@ -41,6 +43,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export default function Landing() {
+  useEffect(warmUpServer, [])
+
   return (
     <div className="min-h-screen">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 md:px-8">
