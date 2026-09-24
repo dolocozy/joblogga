@@ -52,6 +52,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const body = await res.json().catch(() => null)
     throw new ApiError(res.status, errorMessage(body?.detail, `Request failed (${res.status})`))
   }
+  // 204 No Content (e.g. after DELETE) has no body to parse.
+  if (res.status === 204) return undefined as T
   return res.json()
 }
 
@@ -77,3 +79,77 @@ export const login = (email: string, password: string) =>
   })
 
 export const fetchMe = () => request<User>('/auth/me')
+
+// --- applications -----------------------------------------------------------
+
+export const STATUSES = ['applied', 'screening', 'interview', 'offer', 'rejected', 'withdrawn'] as const
+export type ApplicationStatus = (typeof STATUSES)[number]
+
+export interface Application {
+  id: number
+  company: string
+  role: string
+  job_url: string | null
+  date_applied: string // YYYY-MM-DD
+  resume_version: string | null
+  salary_min: number | null
+  salary_max: number | null
+  location: string | null
+  notes: string | null
+  status: ApplicationStatus
+  follow_up_date: string | null // YYYY-MM-DD
+  created_at: string
+  updated_at: string
+}
+
+export interface StatusChange {
+  id: number
+  from_status: ApplicationStatus | null
+  to_status: ApplicationStatus
+  changed_at: string
+}
+
+export interface ApplicationDetail extends Application {
+  history: StatusChange[]
+}
+
+// What the form sends. Optional fields are null when left blank.
+export interface ApplicationInput {
+  company: string
+  role: string
+  job_url: string | null
+  date_applied: string
+  resume_version: string | null
+  salary_min: number | null
+  salary_max: number | null
+  location: string | null
+  notes: string | null
+  status: ApplicationStatus
+  follow_up_date: string | null
+}
+
+export interface ApplicationFilters {
+  q?: string
+  status?: ApplicationStatus
+}
+
+export function listApplications(filters: ApplicationFilters = {}) {
+  const params = new URLSearchParams()
+  if (filters.q) params.set('q', filters.q)
+  if (filters.status) params.set('status', filters.status)
+  const qs = params.toString()
+  return request<{ items: Application[]; total: number }>(`/applications${qs ? `?${qs}` : ''}`)
+}
+
+export const fetchUpcoming = () => request<Application[]>('/applications/upcoming')
+
+export const getApplication = (id: number) => request<ApplicationDetail>(`/applications/${id}`)
+
+export const createApplication = (input: ApplicationInput) =>
+  request<ApplicationDetail>('/applications', { method: 'POST', body: JSON.stringify(input) })
+
+export const updateApplication = (id: number, input: ApplicationInput) =>
+  request<ApplicationDetail>(`/applications/${id}`, { method: 'PATCH', body: JSON.stringify(input) })
+
+export const deleteApplication = (id: number) =>
+  request<void>(`/applications/${id}`, { method: 'DELETE' })

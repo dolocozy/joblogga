@@ -1,8 +1,11 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth'
+import Layout from './components/Layout'
 import { GuestRoute, ProtectedRoute } from './components/RouteGuards'
-import Home from './pages/Home'
+import ApplicationDetail from './pages/ApplicationDetail'
+import Applications from './pages/Applications'
 import Login from './pages/Login'
+import NewApplication from './pages/NewApplication'
 import Signup from './pages/Signup'
 
 export default function App() {
@@ -15,7 +18,11 @@ export default function App() {
             <Route path="/signup" element={<Signup />} />
           </Route>
           <Route element={<ProtectedRoute />}>
-            <Route path="/" element={<Home />} />
+            <Route element={<Layout />}>
+              <Route path="/" element={<Applications />} />
+              <Route path="/applications/new" element={<NewApplication />} />
+              <Route path="/applications/:id" element={<ApplicationDetail />} />
+            </Route>
           </Route>
         </Routes>
       </AuthProvider>

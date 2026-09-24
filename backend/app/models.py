@@ -1,10 +1,10 @@
 import enum
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import Date, Enum, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db import Base
+from app.db import Base, UtcDateTime
 
 
 def _now() -> datetime:
@@ -20,7 +20,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     # Only ever the bcrypt hash. The plaintext password is never stored or logged.
     hashed_password: Mapped[str] = mapped_column(String(255))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_now)
 
 
 class ApplicationStatus(enum.StrEnum):
@@ -66,8 +66,8 @@ class Application(Base):
     status: Mapped[ApplicationStatus] = mapped_column(_status_enum(), index=True)
     follow_up_date: Mapped[date | None] = mapped_column(Date, index=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_now, onupdate=_now)
 
     history: Mapped[list["StatusChange"]] = relationship(
         back_populates="application",
@@ -93,6 +93,6 @@ class StatusChange(Base):
     # NULL for the first row, which records the application's initial status.
     from_status: Mapped[ApplicationStatus | None] = mapped_column(_status_enum())
     to_status: Mapped[ApplicationStatus] = mapped_column(_status_enum())
-    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    changed_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_now)
 
     application: Mapped[Application] = relationship(back_populates="history")

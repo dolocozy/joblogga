@@ -298,3 +298,22 @@ def test_upcoming_excludes_closed_applications(client, auth):
     create(client, auth, company="Offer", status="offer", follow_up_date=days_from_now(1))
     res = client.get("/applications/upcoming", headers=auth).json()
     assert [a["company"] for a in res] == ["Offer"]
+
+
+# --- timestamps -------------------------------------------------------------
+
+
+def test_timestamps_are_utc_when_read_back_from_the_database(client, auth):
+    """Regression: SQLite returns naive datetimes; the API must still say UTC.
+
+    Without a "Z"/offset, browsers parse the value as *local* time and show the
+    wrong hour. A fresh GET goes through the database, so it exercises this.
+    """
+    created = create(client, auth)
+    client.patch(f"/applications/{created['id']}", json={"status": "offer"}, headers=auth)
+    body = client.get(f"/applications/{created['id']}", headers=auth).json()
+
+    stamps = [body["created_at"], body["updated_at"]] + [h["changed_at"] for h in body["history"]]
+    assert len(stamps) == 4
+    for stamp in stamps:
+        assert stamp.endswith("Z") or stamp.endswith("+00:00"), stamp

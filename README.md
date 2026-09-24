@@ -2,7 +2,7 @@
 
 A multi-user job application tracker: log applications, move them through a status pipeline, set follow-up reminders, and see how your search is going.
 
-> **Status:** early development. Auth (signup, login, protected routes) works; application CRUD is next.
+> **Status:** early development. Auth and application tracking (create, edit, delete, status history, search/filter, follow-up reminders) work. Dashboard charts, Kanban view and CSV export are next.
 
 ## Built with Claude Code
 
@@ -45,6 +45,27 @@ Open the app, sign up, and you should land on a page showing your email and **AP
 ```bash
 cd backend && pytest
 ```
+
+## API overview
+
+Interactive docs are at http://localhost:8000/docs when the backend is running.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/auth/signup`, `/auth/login` | Create account / get a token |
+| GET | `/auth/me` | Current user |
+| POST | `/applications` | Create (records the initial status) |
+| GET | `/applications` | List; filters `status`, `company`, `q`, `date_from`, `date_to`; `limit`/`offset` |
+| GET | `/applications/upcoming` | Open applications with a follow-up overdue or due within `days` (default 7) |
+| GET / PATCH / DELETE | `/applications/{id}` | Read (with status history) / partial update / delete |
+
+Every `/applications` query is scoped to the logged-in user; another user's application returns 404.
+
+## Data model
+
+- `users`: email (unique), bcrypt hash.
+- `applications`: belongs to a user; company, role, job link, date applied, resume version, salary min/max, location, notes, current status, follow-up date.
+- `status_changes`: append-only log (`from_status`, `to_status`, timestamp) written whenever an application's status changes, so the full timeline is kept.
 
 ## Auth design
 
