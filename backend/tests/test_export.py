@@ -1,10 +1,14 @@
 import csv
 import io
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 
 from app.export import COLUMNS, safe_text
+
+
+def utc_today() -> str:
+    return datetime.now(UTC).date().isoformat()
 
 
 def add(client, auth, **fields):
@@ -82,8 +86,9 @@ def test_every_field_is_exported(client, auth):
     assert row["Salary max"] == "120000"
     assert row["Resume version"] == "tech-focused"
     assert row["Notes"] == "Referred by Sam"
-    assert row["Created at"].startswith(date.today().isoformat())
-    assert row["Updated at"].startswith(date.today().isoformat())
+    # Timestamps in the file are UTC, so compare with today's UTC date (which can differ from the local date).
+    assert row["Created at"].startswith(utc_today())
+    assert row["Updated at"].startswith(utc_today())
 
 
 def test_missing_values_are_empty_cells(client, auth):
@@ -97,7 +102,7 @@ def test_status_history_is_one_readable_cell(client, auth):
     app = add(client, auth, date_applied="2026-03-01")
     client.patch(f"/applications/{app['id']}", json={"status": "interview"}, headers=auth)
     (row,) = rows(export(client, auth))
-    today = date.today().isoformat()
+    today = utc_today()  # history dates are UTC
     assert row["Status history"] == f"applied {today}; interview {today}"
 
 

@@ -1,11 +1,14 @@
 from typing import Annotated
 
+from collections.abc import Callable
+
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db import get_db
+from app.db import SessionLocal, get_db
+from app.mailer import EmailSender, get_email_sender as _get_email_sender
 from app.models import User
 from app.ratelimit import resolve_client_ip
 from app.security import decode_access_token
@@ -31,12 +34,13 @@ def get_current_user(
     )
     if credentials is None:
         raise unauthorized
-    user_id = decode_access_token(credentials.credentials)
-    if user_id is None:
+    claims = decode_access_token(credentials.credentials)
+    if claims is None:
         raise unauthorized
-    user = db.get(User, user_id)
-    # A valid token for a since-deleted user must not work.
-    if user is None:
+    user = db.get(User, claims.user_id)
+    # A valid token for a since-deleted user must not work, nor one issued before the
+    # user's last password reset (their session_version has moved on).
+    if user is None or user.session_version != claims.session_version:
         raise unauthorized
     return user
 
@@ -50,3 +54,15 @@ def client_ip(request: Request) -> str:
         settings.trusted_proxy_hops,
         (settings.trusted_client_ip_header or "").lower() or None,
     )
+
+
+def get_email_sender() -> EmailSender:
+    """The email sender for this request (a dependency, so tests can swap in a fake)."""
+    return _get_email_sender()
+
+
+def get_session_factory() -> Callable[[], Session]:
+    """How background work opens its own database session (it outlives the request's).
+
+    A dependency so tests can point it at the test database."""
+    return SessionLocal

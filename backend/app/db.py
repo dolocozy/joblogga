@@ -1,7 +1,8 @@
+import sqlite3
 from collections.abc import Iterator
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, TypeDecorator, create_engine
+from sqlalchemy import DateTime, Engine, TypeDecorator, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import settings
@@ -19,6 +20,17 @@ _pool_options = {} if _is_sqlite else {"pool_pre_ping": True, "pool_recycle": 30
 
 engine = create_engine(settings.sqlalchemy_url, connect_args=_connect_args, **_pool_options)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+
+@event.listens_for(Engine, "connect")
+def _enforce_foreign_keys_on_sqlite(dbapi_connection, _record) -> None:
+    """SQLite ignores foreign keys (and so ON DELETE CASCADE) unless told otherwise,
+    once per connection. Postgres always enforces them, so without this the local
+    database would quietly allow orphaned rows that production would never hold."""
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 class UtcDateTime(TypeDecorator):

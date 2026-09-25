@@ -42,3 +42,9 @@ export const wholeNumberRule: Rule = (v) => {
   if (!t) return null
   return /^\d+$/.test(t) ? null : 'Enter a whole number, 0 or more'
 }
+
+// The second "type it again" box on a new-password form.
+export const matches =
+  (other: string, message = 'The passwords do not match'): Rule =>
+  (v) =>
+    v === other ? null : message

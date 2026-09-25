@@ -110,6 +110,14 @@ export const login = (email: string, password: string) =>
 
 export const fetchMe = () => request<User>('/auth/me')
 
+// Password reset. The server answers a reset request the same way whether or not the
+// address has an account, and so does this app: it never says which.
+export const requestPasswordReset = (email: string) =>
+  request<{ detail: string }>('/auth/password-reset/request', { method: 'POST', body: JSON.stringify({ email }) })
+
+export const confirmPasswordReset = (token: string, password: string) =>
+  request<{ detail: string }>('/auth/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token, password }) })
+
 // --- applications -----------------------------------------------------------
 
 export const STATUSES = ['applied', 'screening', 'interview', 'offer', 'rejected', 'withdrawn'] as const

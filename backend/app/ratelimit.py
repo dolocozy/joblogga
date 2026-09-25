@@ -88,6 +88,13 @@ class RateLimits:
         self.login_email = SlidingWindowLimiter(20, 60 * 60, clock)
         self.login_ip = SlidingWindowLimiter(50, 15 * 60, clock)
         self.signup_ip = SlidingWindowLimiter(10, 60 * 60, clock)
+        # Reset emails cost money and land in someone's inbox. Per address, so one person
+        # can't flood a victim's inbox; per account, so many addresses can't either.
+        # Counted whether or not the account exists, so the limit reveals nothing about it.
+        self.reset_ip = SlidingWindowLimiter(10, 60 * 60, clock)
+        self.reset_email = SlidingWindowLimiter(3, 60 * 60, clock)
+        # Only bad tokens count. Guessing one is hopeless (256 bits), but there is no reason to allow it.
+        self.reset_confirm_ip = SlidingWindowLimiter(20, 15 * 60, clock)
 
     def check_login(self, ip: str, email: str) -> tuple[str, int] | None:
         """(which limit, seconds to wait) if this attempt must be refused, else None."""
@@ -118,8 +125,24 @@ class RateLimits:
     def record_signup(self, ip: str) -> None:
         self.signup_ip.record(ip)
 
+    def check_reset(self, ip: str, email: str) -> tuple[str, int] | None:
+        waits = [("reset_ip", self.reset_ip.retry_after(ip)), ("reset_email", self.reset_email.retry_after(email))]
+        blocked = [w for w in waits if w[1] > 0]
+        return max(blocked, key=lambda w: w[1]) if blocked else None
+
+    def record_reset(self, ip: str, email: str) -> None:
+        self.reset_ip.record(ip)
+        self.reset_email.record(email)
+
+    def check_reset_confirm(self, ip: str) -> tuple[str, int] | None:
+        wait = self.reset_confirm_ip.retry_after(ip)
+        return ("reset_confirm_ip", wait) if wait > 0 else None
+
+    def record_reset_confirm_failure(self, ip: str) -> None:
+        self.reset_confirm_ip.record(ip)
+
     def reset_all(self) -> None:
-        for limiter in (self.login_ip_email, self.login_email, self.login_ip, self.signup_ip):
+        for limiter in (self.login_ip_email, self.login_email, self.login_ip, self.signup_ip, self.reset_ip, self.reset_email, self.reset_confirm_ip):
             limiter.clear()
 
 

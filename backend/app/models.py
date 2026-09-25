@@ -21,6 +21,11 @@ class User(Base):
     # Only ever the bcrypt hash. The plaintext password is never stored or logged.
     hashed_password: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_now)
+    # Baked into every login token. Bumping it (a password reset does) makes all
+    # tokens issued before that stop working, so a stolen session cannot outlive a
+    # password change. The server default lets code from before this column existed
+    # keep inserting users during a deploy.
+    session_version: Mapped[int] = mapped_column(default=0, server_default="0")
 
 
 class ApplicationStatus(enum.StrEnum):
@@ -96,3 +101,22 @@ class StatusChange(Base):
     changed_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_now)
 
     application: Mapped[Application] = relationship(back_populates="history")
+
+
+class PasswordResetToken(Base):
+    """A one-time link that lets someone choose a new password.
+
+    Only a hash of the token is stored, like a password: the raw token exists only
+    in the email, so a copy of this table cannot be used to take over accounts.
+    """
+
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # SHA-256 of the token, in hex. Unique and indexed: redeeming looks it up.
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_now)
+    expires_at: Mapped[datetime] = mapped_column(UtcDateTime)
+    # Set the moment the token is redeemed; a token with a value here is spent.
+    used_at: Mapped[datetime | None] = mapped_column(UtcDateTime)

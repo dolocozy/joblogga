@@ -5,9 +5,11 @@ import Layout from './components/Layout'
 import { GuestRoute, ProtectedRoute } from './components/RouteGuards'
 import ApplicationDetail from './pages/ApplicationDetail'
 import Applications from './pages/Applications'
+import ForgotPassword from './pages/ForgotPassword'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import NewApplication from './pages/NewApplication'
+import ResetPassword from './pages/ResetPassword'
 import Signup from './pages/Signup'
 
 // Loaded on demand: the dashboard pulls in the charting library, which is most of
@@ -21,6 +23,9 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/" element={<Home />} />
+        {/* Open to everyone, logged in or not: a reset link must work whichever browser session it lands in. */}
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route element={<GuestRoute />}>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />

@@ -33,9 +33,21 @@ services:
         value: cf-connecting-ip
       - key: TRUSTED_PROXY_HOPS
         value: "3"
+      # Password reset emails (Resend). The link in the email points here, so it must be
+      # the real address of the frontend: with the default (localhost) every reset email
+      # would carry a link that only works on the developer's own machine.
+      - key: FRONTEND_URL
+        value: https://joblogga.vercel.app
+      - key: EMAIL_FROM
+        value: Joblogga <noreply@dolocozy.com>
       # Secrets you paste in the dashboard; deliberately not stored in this file.
       - key: DATABASE_URL
         sync: false
       # The frontend's address, e.g. https://joblogga.vercel.app (no trailing slash).
       - key: CORS_ORIGINS
+        sync: false
+      # Resend API key (starts "re_"). Without it the API still runs, but reset emails are
+      # not sent. Blueprint prompts for these only when first created, so for an existing
+      # service add it under Environment in the dashboard.
+      - key: RESEND_API_KEY
         sync: false

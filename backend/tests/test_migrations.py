@@ -7,12 +7,13 @@ from alembic import command
 from sqlalchemy import create_engine, inspect, text
 
 from app.config import normalize_database_url
-from app.db import Base
-from app.migrations import BACKEND_DIR, BASELINE, SchemaDriftError, alembic_config, schema_differences, upgrade_database
+from app.migrations import BACKEND_DIR, alembic_config, schema_differences, upgrade_database
 from tests.conftest import TEST_DATABASE_URL, reset_database
 
 ON_POSTGRES = not TEST_DATABASE_URL.startswith("sqlite")
-TABLES = {"users", "applications", "status_changes"}
+BASELINE = "0001"
+HEAD = "0002"
+TABLES = {"users", "applications", "status_changes", "password_reset_tokens"}
 
 
 @pytest.fixture
@@ -35,14 +36,20 @@ def tables(engine) -> set[str]:
 
 
 def version(engine) -> str | None:
+    if "alembic_version" not in tables(engine):
+        return None
     with engine.connect() as conn:
-        if "alembic_version" not in tables(engine):
-            return None
         return conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
 
 
+def migrate_to(engine, revision: str, scripts: Path | None = None) -> None:
+    with engine.begin() as conn:
+        command.upgrade(alembic_config(conn, scripts), revision)
+
+
 def seed_rows(engine) -> None:
-    """A user with an application and its history: the kind of data production holds."""
+    """A user with an application and its history, written the way the code that
+    existed at the baseline wrote them (no `session_version`)."""
     with engine.begin() as conn:
         conn.execute(text("INSERT INTO users (id, email, hashed_password, created_at) VALUES (1, 'me@example.com', 'x', '2026-01-01 00:00:00')"))
         conn.execute(
@@ -65,7 +72,7 @@ def counts(engine) -> tuple[int, int, int]:
 def test_a_new_database_is_built_from_the_migrations(engine):
     upgrade_database(engine)
     assert TABLES <= tables(engine)
-    assert version(engine) == BASELINE
+    assert version(engine) == HEAD
 
 
 def test_migrated_schema_matches_the_models_exactly(engine):
@@ -81,7 +88,7 @@ def test_running_it_again_changes_nothing(engine):
     seed_rows(engine)
     upgrade_database(engine)
     upgrade_database(engine)
-    assert version(engine) == BASELINE
+    assert version(engine) == HEAD
     assert counts(engine) == (1, 1, 1)
 
 
@@ -92,142 +99,93 @@ def test_downgrading_to_nothing_removes_the_tables(engine):
     assert not (TABLES & tables(engine))
 
 
-# --- adopting the database production already has ---------------------------
+# --- upgrading the production database: at the baseline, holding real rows --
 
 
-def test_a_database_made_by_the_old_startup_code_is_adopted_with_its_data_untouched(engine):
-    Base.metadata.create_all(engine)  # exactly what the app did before migrations existed
+def test_upgrading_a_database_that_holds_rows_keeps_them_and_gives_users_a_default_session_version(engine):
+    migrate_to(engine, BASELINE)  # production as it was before this change
     seed_rows(engine)
-    assert version(engine) is None  # no migration history
-
-    upgrade_database(engine)
-
     assert version(engine) == BASELINE
-    assert counts(engine) == (1, 1, 1)  # nothing dropped, nothing recreated
+    assert "password_reset_tokens" not in tables(engine)
+
+    upgrade_database(engine)  # what the next start does
+
+    assert version(engine) == HEAD
+    assert counts(engine) == (1, 1, 1)
     with engine.connect() as conn:
         assert conn.execute(text("SELECT company FROM applications")).scalar() == "Acme"
+        assert conn.execute(text("SELECT session_version FROM users")).scalar() == 0  # existing sessions stay valid
+        assert conn.execute(text("SELECT COUNT(*) FROM password_reset_tokens")).scalar() == 0
         assert schema_differences(conn) == []
 
 
-def test_adopting_only_records_a_version_and_creates_nothing_else(engine):
-    Base.metadata.create_all(engine)
-    before = tables(engine)
+def test_old_code_can_still_add_users_while_the_new_schema_is_live(engine):
+    """During a deploy the previous version keeps serving against the new schema. Its
+    INSERT knows nothing about session_version, so the column must fill itself."""
     upgrade_database(engine)
-    assert tables(engine) == before | {"alembic_version"}
-
-
-def test_an_existing_database_that_does_not_match_is_refused_and_left_alone(engine):
-    Base.metadata.create_all(engine)
-    seed_rows(engine)
     with engine.begin() as conn:
-        conn.execute(text("DROP INDEX ix_applications_status"))  # drift: someone changed the schema by hand
-
-    with pytest.raises(SchemaDriftError, match="ix_applications_status"):
-        upgrade_database(engine)
-
-    assert version(engine) is None  # not stamped: we will not vouch for a schema we did not check
-    assert counts(engine) == (1, 1, 1)
-
-
-def test_an_extra_column_is_also_drift(engine):
-    Base.metadata.create_all(engine)
-    with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE users ADD COLUMN surprise TEXT"))
-    with pytest.raises(SchemaDriftError, match="surprise"):
-        upgrade_database(engine)
-
-
-def test_a_column_of_the_wrong_size_is_drift_too(engine):
-    if not ON_POSTGRES:
-        pytest.skip("SQLite does not enforce or report column lengths")
-    Base.metadata.create_all(engine)
-    with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE applications ALTER COLUMN company TYPE VARCHAR(50)"))
-    with pytest.raises(SchemaDriftError):
-        upgrade_database(engine)
-
-
-def test_adopting_an_existing_database_is_logged_so_deploys_are_traceable(engine, caplog):
-    Base.metadata.create_all(engine)
-    with caplog.at_level("INFO", logger="joblogga.migrations"):
-        upgrade_database(engine)
-    assert any("Existing database recognised" in r.getMessage() and BASELINE in r.getMessage() for r in caplog.records)
-
-
-# --- the next schema change, applied to a database that has real rows -------
-
-
-def add_priority_migration(tmp_path: Path) -> Path:
-    """A copy of the real migrations plus a made-up 0002, to rehearse what the first real change will do."""
-    scripts = tmp_path / "alembic"
-    shutil.copytree(BACKEND_DIR / "alembic", scripts, ignore=shutil.ignore_patterns("__pycache__"))
-    (scripts / "versions" / "2026_10_01_0900-0002_add_priority.py").write_text(
-        '''"""add priority"""
-import sqlalchemy as sa
-from alembic import op
-
-revision = "0002"
-down_revision = "0001"
-branch_labels = None
-depends_on = None
-
-
-def upgrade() -> None:
-    with op.batch_alter_table("applications") as batch:
-        batch.add_column(sa.Column("priority", sa.Integer(), nullable=False, server_default="3"))
-
-
-def downgrade() -> None:
-    with op.batch_alter_table("applications") as batch:
-        batch.drop_column("priority")
-'''
-    )
-    return scripts
-
-
-def test_a_later_migration_keeps_existing_rows_and_fills_new_columns(engine, tmp_path):
-    Base.metadata.create_all(engine)  # production as it is today
-    seed_rows(engine)
-    scripts = add_priority_migration(tmp_path)
-
-    upgrade_database(engine, scripts)  # adopt, then apply 0002 in the same start
-
-    assert version(engine) == "0002"
-    assert counts(engine) == (1, 1, 1)
+        conn.execute(text("INSERT INTO users (email, hashed_password, created_at) VALUES ('old@example.com', 'x', '2026-01-01 00:00:00')"))
     with engine.connect() as conn:
-        row = conn.execute(text("SELECT company, priority FROM applications")).one()
-    assert tuple(row) == ("Acme", 3)  # the old row got the default; nothing was lost
+        assert conn.execute(text("SELECT session_version FROM users")).scalar() == 0
 
 
-def test_that_migration_can_be_rolled_back_without_losing_rows(engine, tmp_path):
-    Base.metadata.create_all(engine)
+def test_the_upgrade_can_be_rolled_back_without_losing_rows(engine):
+    migrate_to(engine, BASELINE)
     seed_rows(engine)
-    scripts = add_priority_migration(tmp_path)
-    upgrade_database(engine, scripts)
+    upgrade_database(engine)
 
     with engine.begin() as conn:
-        command.downgrade(alembic_config(conn, scripts), "0001")
+        command.downgrade(alembic_config(conn), BASELINE)
 
     assert version(engine) == BASELINE
     assert counts(engine) == (1, 1, 1)
-    assert "priority" not in {c["name"] for c in inspect(engine).get_columns("applications")}
+    assert "password_reset_tokens" not in tables(engine)
+    assert "session_version" not in {c["name"] for c in inspect(engine).get_columns("users")}
 
 
 # --- a failure must not leave a half-migrated database (Postgres only) ------
 
 
+def add_broken_migration(tmp_path: Path) -> Path:
+    """A copy of the real migrations plus a 0003 that fails part-way through."""
+    scripts = tmp_path / "alembic"
+    shutil.copytree(BACKEND_DIR / "alembic", scripts, ignore=shutil.ignore_patterns("__pycache__"))
+    (scripts / "versions" / "2026_10_01_0900-0003_broken.py").write_text(
+        '''"""broken"""
+import sqlalchemy as sa
+from alembic import op
+
+revision = "0003"
+down_revision = "0002"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.add_column("applications", sa.Column("priority", sa.Integer(), nullable=True))
+    op.execute("SELECT 1/0")  # fails after the column was added
+
+
+def downgrade() -> None:
+    op.drop_column("applications", "priority")
+'''
+    )
+    return scripts
+
+
 @pytest.mark.skipif(not ON_POSTGRES, reason="SQLite does not roll back schema changes")
 def test_a_failing_migration_rolls_everything_back(engine, tmp_path):
-    scripts = add_priority_migration(tmp_path)
-    broken = next((scripts / "versions").glob("*0002*.py"))
-    broken.write_text(broken.read_text().replace("    with op.batch_alter_table(\"applications\") as batch:\n        batch.add_column", "    op.execute('SELECT 1/0')\n    with op.batch_alter_table(\"applications\") as batch:\n        batch.add_column", 1))
+    migrate_to(engine, HEAD)
+    seed_rows(engine)
+    scripts = add_broken_migration(tmp_path)
 
     with pytest.raises(Exception, match="division by zero"):
         upgrade_database(engine, scripts)
 
-    # Not even the baseline: the whole start-up upgrade is one transaction.
-    assert not (TABLES & tables(engine))
-    assert version(engine) is None
+    # The half-done step is undone: still at 0002, no stray column, rows intact.
+    assert version(engine) == HEAD
+    assert "priority" not in {c["name"] for c in inspect(engine).get_columns("applications")}
+    assert counts(engine) == (1, 1, 1)
 
 
 @pytest.mark.skipif(not ON_POSTGRES, reason="needs Postgres advisory locks")
@@ -251,4 +209,4 @@ def test_two_instances_starting_at_once_do_not_collide(engine):
 
     assert errors == []
     assert TABLES <= tables(engine)
-    assert version(engine) == BASELINE
+    assert version(engine) == HEAD

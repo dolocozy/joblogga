@@ -109,9 +109,23 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 - One time-range filter scopes every number and chart, so they always agree. Each chart has a "View as table" twin so no value depends on hovering.
 - The charts are loaded on demand, so the login and list pages don't download the charting library.
 
+## Password reset
+
+`/forgot-password` emails a reset link (sent through [Resend](https://resend.com) from `noreply@dolocozy.com`); `/reset-password` lets the person choose a new password.
+
+- **Tokens** are 256 random bits, valid for 30 minutes, and single use. Only a SHA-256 hash is stored, so a copy of the database can't be used to reset anyone's account. Requesting a new link retires the old one. Redeeming is one atomic `UPDATE ... WHERE used_at IS NULL AND expires_at > now`, so two simultaneous uses can't both succeed.
+- **No account enumeration:** the request endpoint replies identically, with identical work, whether or not the address has an account. It does no database access before replying; the lookup, the token and the email happen in a background task afterwards, so the response time can't reveal anything either. Rate limits (3 per address and 10 per client address per hour) count every request the same way. Every kind of bad link (unknown, expired, used) gets the same error.
+- **The link uses the URL fragment** (`/reset-password#token=...`), which browsers never send to servers or in `Referer` headers, and the page removes it from the address bar and history as soon as it has read it.
+- **A reset signs out every existing session.** Login tokens carry a per-user `session_version`; a reset bumps it, so a stolen token stops working. (Tokens issued before the feature existed carry no version and count as 0, so deploying it logged nobody out.)
+- **Failures are invisible to the caller:** if sending fails the reply is the same, and the error is logged without the address or the link. Sending retries once, with an idempotency key so a retry can't send two emails.
+
+Setup on Render: add `RESEND_API_KEY` under the service's Environment tab (the domain must be verified in Resend). `FRONTEND_URL` and `EMAIL_FROM` are in `render.yaml`. For local development, leave the key empty and set `LOG_RESET_LINKS=true` to see the link in the server log.
+
+Known limitation: `POST /auth/signup` still answers "Email already registered" for an existing address, which reveals that an account exists. Closing that properly means email verification at signup.
+
 ## Rate limiting
 
-Failed logins are limited three ways, and signups per address:
+Failed logins are limited three ways, and signups and reset requests per address:
 
 | Limit | Allowance | Why |
 | --- | --- | --- |
@@ -119,6 +133,8 @@ Failed logins are limited three ways, and signups per address:
 | Per account, any address | 20 failures / hour | Stops guessing spread over many addresses |
 | Per address, any account | 50 failures / 15 min | Stops one address trying many accounts |
 | Signups per address | 10 / hour | Slows account spam |
+| Reset requests per account / per address | 3 / hour, 10 / hour | Stops inbox flooding; counted whether or not the account exists |
+| Bad reset links per address | 20 / 15 min | There is nothing to guess, but no reason to allow it |
 
 Only failures count, unknown emails count the same as real ones (so the limit reveals nothing), and a locked caller is refused before the password is even checked. Refusals return `429` with a `Retry-After` header and a plain-language message.
 

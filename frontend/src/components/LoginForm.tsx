@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { useFieldErrors, useSlowAfter } from '../hooks'
 import { emailRule, loginPasswordRule } from '../validation'
@@ -9,6 +9,8 @@ import Field from './Field'
 // Used on the landing page and on /login.
 export default function LoginForm() {
   const { login, sessionExpired } = useAuth()
+  // A message handed over by the page that sent us here, e.g. "Your password has been updated".
+  const notice = (useLocation().state as { notice?: unknown } | null)?.notice
   const base = useId()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -39,7 +41,12 @@ export default function LoginForm() {
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <h2 className="text-2xl">Log in</h2>
 
-      {sessionExpired && !serverError && (
+      {typeof notice === 'string' && !serverError && (
+        <p role="status" className="border-l-2 border-pine bg-pine/5 px-3 py-2 text-sm">
+          {notice}
+        </p>
+      )}
+      {sessionExpired && !serverError && typeof notice !== 'string' && (
         <p role="status" className="border-l-2 border-marker bg-marker/20 px-3 py-2 text-sm">
           Your session has expired. Please log in again.
         </p>
@@ -89,6 +96,12 @@ export default function LoginForm() {
           Waking the server. The first request after a quiet spell can take up to a minute.
         </p>
       )}
+
+      <p className="-mt-2 text-sm">
+        <Link to="/forgot-password" className="link">
+          Forgot your password?
+        </Link>
+      </p>
 
       <button type="submit" disabled={submitting} className="btn btn-primary w-full">
         {submitting ? 'Please wait…' : 'Log in'}

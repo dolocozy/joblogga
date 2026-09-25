@@ -1,16 +1,18 @@
+from collections.abc import Callable
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app import ratelimit
+from app import password_reset, ratelimit
 from app.config import settings
-from app.deps import client_ip, get_current_user
-from app.models import User
-from app.schemas import LoginRequest, SignupRequest, TokenResponse, UserOut
+from app.deps import client_ip, get_current_user, get_email_sender, get_session_factory
+from app.mailer import EmailSender
+from app.models import PasswordResetToken, User
+from app.schemas import LoginRequest, MessageResponse, PasswordResetConfirm, PasswordResetRequest, SignupRequest, TokenResponse, UserOut
 from app.security import DUMMY_HASH, create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -73,9 +75,70 @@ def login(body: LoginRequest, db: DbSession, request: Request, ip: ClientIp) -> 
             headers={"WWW-Authenticate": "Bearer"},
         )
     ratelimit.limits.record_login_success(ip, body.email)
-    return TokenResponse(access_token=create_access_token(user.id))
+    return TokenResponse(access_token=create_access_token(user.id, user.session_version))
 
 
 @router.get("/me", response_model=UserOut)
 def me(user: Annotated[User, Depends(get_current_user)]) -> User:
     return user
+
+
+# One reply for every request, whether or not the address has an account.
+def _reset_request_reply() -> str:
+    return (
+        "If an account exists for that email, a reset link is on its way. "
+        f"It works for {settings.password_reset_expire_minutes} minutes."
+    )
+
+
+INVALID_RESET_LINK = "This reset link is invalid or has expired. Please request a new one."
+
+
+@router.post("/password-reset/request", response_model=MessageResponse, status_code=status.HTTP_202_ACCEPTED)
+def request_password_reset(
+    body: PasswordResetRequest,
+    background: BackgroundTasks,
+    request: Request,
+    ip: ClientIp,
+    sender: Annotated[EmailSender, Depends(get_email_sender)],
+    session_factory: Annotated[Callable[[], Session], Depends(get_session_factory)],
+) -> MessageResponse:
+    """Email a password reset link, if the address has an account.
+
+    Deliberately identical for every address: same status, same body, same work
+    before the reply. This function does no database access at all; the lookup,
+    the token and the email happen in a background task once the reply is on its
+    way, so neither the answer nor how long it takes can reveal whether an account
+    exists. The rate limit counts every request the same way for the same reason.
+    """
+    blocked = ratelimit.limits.check_reset(ip, body.email)
+    if blocked:
+        raise too_many_attempts(request, blocked[0], ip, blocked[1])
+    ratelimit.limits.record_reset(ip, body.email)
+    background.add_task(password_reset.send_reset_email_if_account_exists, session_factory, sender, body.email)
+    return MessageResponse(detail=_reset_request_reply())
+
+
+@router.post("/password-reset/confirm", response_model=MessageResponse)
+def confirm_password_reset(body: PasswordResetConfirm, db: DbSession, request: Request, ip: ClientIp) -> MessageResponse:
+    """Choose a new password using a reset link's token."""
+    blocked = ratelimit.limits.check_reset_confirm(ip)
+    if blocked:
+        raise too_many_attempts(request, blocked[0], ip, blocked[1])
+
+    user_id = password_reset.redeem_token(db, body.token)
+    user = db.get(User, user_id) if user_id is not None else None
+    if user is None:
+        db.rollback()
+        ratelimit.limits.record_reset_confirm_failure(ip)
+        # One message for a token that never existed, expired, or was already used.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=INVALID_RESET_LINK)
+
+    user.hashed_password = hash_password(body.password)
+    # Ends every login session issued before now: someone holding a stolen token
+    # is signed out the moment the owner changes the password.
+    user.session_version += 1
+    # Any other unused links for this account (there should be none) die with this one.
+    db.execute(delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None)))
+    db.commit()  # the token is spent and the password changed together, or neither
+    return MessageResponse(detail="Your password has been updated. You can log in with it now.")

@@ -14,6 +14,17 @@ from pydantic import (
 from app.models import ApplicationStatus
 
 
+def validate_new_password(v: str) -> str:
+    """The rules for choosing a password (signup and password reset share them)."""
+    if len(v) < 8:
+        raise ValueError("Password must be at least 8 characters")
+    # bcrypt only uses the first 72 bytes and newer versions reject longer
+    # input, so we refuse it up front rather than silently truncating.
+    if len(v.encode()) > 72:
+        raise ValueError("Password must be at most 72 bytes")
+    return v
+
+
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str
@@ -28,13 +39,27 @@ class SignupRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def check_password(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
-        # bcrypt only uses the first 72 bytes and newer versions reject longer
-        # input, so we refuse it up front rather than silently truncating.
-        if len(v.encode()) > 72:
-            raise ValueError("Password must be at most 72 bytes")
-        return v
+        return validate_new_password(v)
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.lower()
+
+
+class PasswordResetConfirm(BaseModel):
+    # Bounded so an absurd value can't be used to make the server hash megabytes.
+    token: str = Field(min_length=20, max_length=200)
+    password: str
+
+    @field_validator("password")
+    @classmethod
+    def check_password(cls, v: str) -> str:
+        return validate_new_password(v)
 
 
 class LoginRequest(BaseModel):
@@ -54,6 +79,11 @@ class UserOut(BaseModel):
     id: int
     email: EmailStr
     created_at: datetime
+
+
+
+class MessageResponse(BaseModel):
+    detail: str
 
 
 class TokenResponse(BaseModel):

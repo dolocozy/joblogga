@@ -16,6 +16,8 @@ from sqlalchemy.pool import StaticPool
 from app import ratelimit
 from app.config import normalize_database_url
 from app.db import Base, get_db
+from app.deps import get_email_sender, get_session_factory
+from app.mailer import EmailMessage
 from app.main import app
 
 
@@ -59,6 +61,8 @@ def client():
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    # Background work (the reset email) opens its own sessions: point them at the test database too.
+    app.dependency_overrides[get_session_factory] = lambda: TestingSession
     yield TestClient(app)
     app.dependency_overrides.clear()
     if not TEST_DATABASE_URL.startswith("sqlite"):
@@ -83,6 +87,27 @@ def db(client):
     session = next(generator)
     yield session
     generator.close()  # runs the generator's `finally`, which closes the session
+
+
+class FakeSender:
+    """Collects emails instead of sending them."""
+
+    def __init__(self):
+        self.sent: list[EmailMessage] = []
+        self.fail_with: Exception | None = None
+
+    def send(self, message: EmailMessage) -> None:
+        if self.fail_with:
+            raise self.fail_with
+        self.sent.append(message)
+
+
+@pytest.fixture
+def outbox(client):
+    """The emails the app tried to send during a test."""
+    sender = FakeSender()
+    app.dependency_overrides[get_email_sender] = lambda: sender
+    return sender
 
 
 def make_user(client, email="me@example.com", password="correct-horse-battery") -> dict:

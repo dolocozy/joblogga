@@ -31,6 +31,36 @@ def compare_options() -> dict:
     }
 
 
+def sqlite_migrations(connection):
+    """Wrap a migration run so SQLite's foreign keys don't destroy data mid-way.
+
+    SQLite cannot alter most tables in place, so a migration rebuilds the table:
+    create a new one, copy the rows, drop the old one. With foreign keys enforced,
+    dropping a parent table (e.g. `users`) cascades and deletes every child row
+    (their applications). So keys are switched off while migrating, then switched
+    back on, and PRAGMA foreign_key_check confirms the result is still consistent.
+    Postgres alters tables in place and needs none of this.
+    """
+    from contextlib import contextmanager
+
+    @contextmanager
+    def wrapper():
+        is_sqlite = connection.dialect.name == "sqlite"
+        if is_sqlite:
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        try:
+            yield
+        finally:
+            if is_sqlite:
+                connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        if is_sqlite:
+            broken = connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+            if broken:
+                raise RuntimeError(f"Migration left rows pointing at missing parents: {broken}")
+
+    return wrapper()
+
+
 def run_migrations_offline() -> None:
     """Emit the SQL instead of running it (`alembic upgrade head --sql`)."""
     context.configure(url=settings.sqlalchemy_url, literal_binds=True, dialect_opts={"paramstyle": "named"}, **compare_options())
@@ -44,14 +74,14 @@ def run_migrations_online() -> None:
     connection = config.attributes.get("connection")
     if connection is not None:
         context.configure(connection=connection, **compare_options())
-        with context.begin_transaction():
+        with sqlite_migrations(connection), context.begin_transaction():
             context.run_migrations()
         return
 
     engine = create_engine(settings.sqlalchemy_url)
     with engine.connect() as connection:
         context.configure(connection=connection, **compare_options())
-        with context.begin_transaction():
+        with sqlite_migrations(connection), context.begin_transaction():
             context.run_migrations()
     engine.dispose()
 
