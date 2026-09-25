@@ -5,7 +5,7 @@ import { requestPasswordReset } from '../api'
 import AuthPage from '../components/AuthPage'
 import Field from '../components/Field'
 import { useFieldErrors } from '../hooks'
-import { emailRule } from '../validation'
+import { emailRequiredRule } from '../validation'
 
 export default function ForgotPassword() {
   const base = useId()
@@ -14,7 +14,7 @@ export default function ForgotPassword() {
   const [submitting, setSubmitting] = useState(false)
   const [reply, setReply] = useState<string | null>(null) // the server's answer, once sent
 
-  const fields = useFieldErrors({ email: emailRule(email) }, (n) => `${base}-${n}`)
+  const fields = useFieldErrors({ email: emailRequiredRule(email) }, (n) => `${base}-${n}`)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()

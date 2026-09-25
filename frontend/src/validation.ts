@@ -10,21 +10,12 @@ export const required =
   (v) =>
     v.trim() ? null : message
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-// Login and signup only ask for an address to be typed. Whether it is a *valid* address
+// Every form that takes an email address only asks for one to be typed. Whether it is a *valid* address
 // is deliberately left to the server, which checks properly on submit and answers with
 // its own message: a client-side format rule on this field only ever second-guessed
 // people mid-typing, and any pattern short of the full specification rejects some real
 // addresses.
 export const emailRequiredRule: Rule = required('Enter your email address')
-
-// Full format check, for a form where a typo means a message goes nowhere (password reset).
-export const emailRule: Rule = (v) => {
-  const t = v.trim()
-  if (!t) return 'Enter your email address'
-  return EMAIL.test(t) ? null : 'Enter an email address like name@example.com'
-}
 
 // Logging in only needs *a* password. Length rules apply when choosing one, and
 // the server is the judge of whether it's right.

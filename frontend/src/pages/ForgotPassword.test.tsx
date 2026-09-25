@@ -82,32 +82,64 @@ describe('asking for a reset link', () => {
     expect(await screen.findByRole('link', { name: 'Back to log in' })).toHaveAttribute('href', '/login')
   })
 
-  it('will not send an empty or invalid address, and says why', async () => {
+  it('will not send an empty address, and says so', async () => {
     const user = userEvent.setup()
     const bodies = watchRequests()
     renderApp('/forgot-password')
     await screen.findByLabelText('Email')
 
     await user.click(send())
+
     expect(screen.getByText('Enter your email address')).toBeInTheDocument()
     expect(email()).toHaveFocus()
-
-    await user.type(email(), 'not-an-email')
-    await user.click(send())
-    expect(screen.getByText('Enter an email address like name@example.com')).toBeInTheDocument()
     expect(bodies).toEqual([])
   })
 
-  it('does not nag while the address is still being typed', async () => {
+  const SERVER_SAYS = 'value is not a valid email address: An email address must have an @-sign.'
+
+  it('does not judge the format in the browser: a malformed address goes to the server, whose answer is shown', async () => {
+    const user = userEvent.setup()
+    const bodies = watchRequests(() =>
+      HttpResponse.json({ detail: [{ type: 'value_error', loc: ['body', 'email'], msg: SERVER_SAYS }] }, { status: 422 }),
+    )
+    renderApp('/forgot-password')
+    await screen.findByLabelText('Email')
+
+    await user.type(email(), 'not-an-email')
+    await user.click(send())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(SERVER_SAYS)
+    expect(bodies).toEqual([{ email: 'not-an-email' }]) // not blocked on the client
+    expect(screen.queryByText(/enter an email address like/i)).not.toBeInTheDocument()
+    expect(send()).toBeEnabled()
+    expect(email()).toHaveValue('not-an-email')
+  })
+
+  it('never shows a format message while typing, after a pause, or on leaving the field', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderApp('/forgot-password')
     await screen.findByLabelText('Email')
 
     await user.type(email(), 'me@exam')
-    expect(screen.queryByText(/enter an email address/i)).not.toBeInTheDocument()
+    await act(async () => void vi.advanceTimersByTime(5000))
+    await user.tab()
+
+    expect(screen.queryByText(/enter an email address|name@example/i)).not.toBeInTheDocument()
+    expect(email()).not.toHaveAttribute('aria-invalid')
+  })
+
+  it('asks for an emptied address only after a pause (settled timing kept)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderApp('/forgot-password')
+    await screen.findByLabelText('Email')
+
+    await user.type(email(), 'a')
+    await user.clear(email())
+    expect(screen.queryByText('Enter your email address')).not.toBeInTheDocument()
     await act(async () => void vi.advanceTimersByTime(SETTLE_MS + 50))
-    expect(screen.getByText(/enter an email address/i)).toBeInTheDocument()
+    expect(screen.getByText('Enter your email address')).toBeInTheDocument()
   })
 
   it('shows the too-many-requests message and lets them try again later', async () => {
