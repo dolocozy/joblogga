@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app import __version__
 from app.config import settings
 from app.db import engine
 from app.migrations import upgrade_database
@@ -25,7 +26,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="Joblogga API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Joblogga API", version=__version__, lifespan=lifespan)
 
 # The browser blocks cross-origin requests by default. The frontend (Vite dev
 # server on :5173) and the API (:8000) are different origins, so we explicitly

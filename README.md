@@ -2,7 +2,11 @@
 
 A multi-user job application tracker: log applications, move them through a status pipeline, set follow-up reminders, and see how your search is going.
 
-> **Status:** early development. Auth and application tracking (create, edit, delete, status history, search/filter, follow-up reminders) work. The dashboard, CSV export, Kanban board and login rate limiting are built.
+![The Joblogga applications list: a ruled ledger with a stage meter per status and an overdue follow-up highlighted](docs/screenshots/applications-list.png)
+
+> **Status: v0.1.0, feature-complete for personal use.** Accounts with password reset, application tracking with status history, follow-up reminders, search and filters, a dashboard, a Kanban board, CSV export and login rate limiting are all built, tested and deployed. See [Known limitations](#known-limitations).
+
+*Screenshots use fictional demo data.*
 
 ## Built with Claude Code
 
@@ -10,11 +14,12 @@ This project is built with [Claude Code](https://claude.com/claude-code) as a de
 
 ## Tech stack
 
-- **Frontend:** React + TypeScript, Vite, Tailwind CSS, Recharts, self-hosted fonts (Newsreader, Hanken Grotesk, IBM Plex Mono)
+- **Frontend:** React + TypeScript, Vite, Tailwind CSS, Recharts, `@dnd-kit`, self-hosted fonts (Newsreader, Hanken Grotesk, IBM Plex Mono)
 - **Backend:** Python, FastAPI
-- **Database:** SQLAlchemy 2.0; SQLite for local dev, PostgreSQL in production (planned)
-- **Auth:** JWT (PyJWT) + bcrypt
-- **Testing / CI:** pytest; Vitest, Testing Library and MSW; GitHub Actions runs both on every push
+- **Database:** SQLAlchemy 2.0 with Alembic migrations; PostgreSQL (Neon) in production, SQLite for local development
+- **Auth:** JWT (PyJWT) + bcrypt, with password reset by email ([Resend](https://resend.com))
+- **Testing / CI:** pytest (run on both SQLite and a real Postgres service); Vitest, Testing Library and MSW; GitHub Actions runs everything on every push
+- **Hosting:** Vercel (frontend), Render (API), Neon (database)
 
 ## Running locally
 
@@ -38,12 +43,12 @@ npm install
 npm run dev
 ```
 
-Open the app, sign up, and you should land on a page showing your email and **API: online**. See `.env.example` for all settings.
+Open the app, create an account, and you land on your (empty) applications list. The database schema is created and upgraded automatically when the backend starts. See `.env.example` for all settings; to try the password-reset flow without sending email, leave `RESEND_API_KEY` empty and set `LOG_RESET_LINKS=true` so the link is printed in the server log.
 
 **Tests:**
 
 ```bash
-cd backend && pytest      # API tests (in-memory SQLite)
+cd backend && pytest      # API tests (in-memory SQLite; set TEST_DATABASE_URL to run them on Postgres)
 cd frontend && npm test  # UI tests (Vitest + Testing Library, API mocked with MSW)
 ```
 
@@ -58,6 +63,15 @@ The Applications page has a List/Board toggle. On the board each status is a col
 
 A drop moves the card immediately and puts it back with an error if the server refuses. The board loads up to 200 applications at once and notes when there are more; it shares the list's search, company and date filters. Drag-and-drop is built on `@dnd-kit` and loaded only when the board is opened.
 
+## Screenshots
+
+| | |
+| --- | --- |
+| ![Landing page with the login form beside a sample logbook page](docs/screenshots/landing.png) | ![Kanban board with a column per status](docs/screenshots/kanban-board.png) |
+| **Landing page.** What it is, who it is for, and the login, on one page. | **Kanban board.** Drag a card to change its status (mouse, touch or keyboard). |
+| ![Dashboard with response rate, applications per week, and status breakdown](docs/screenshots/dashboard.png) | |
+| **Dashboard.** Response rate and charts, each with a table view. | |
+
 ## Design
 
 The interface is styled as a logbook: warm paper, dark ink, pine green for actions, brick red for trouble, and a highlighter yellow behind overdue follow-ups. Titles are set in a serif, dates and numbers in a monospace so columns line up like a ledger. The applications list is a ruled ledger with a small stage meter per status, not a stack of cards.
@@ -70,12 +84,13 @@ The rules that keep it from looking generic are enforced by a test (`frontend/sr
 | --- | --- |
 | `/` | Landing page with the login form (logged in: redirects to `/applications`) |
 | `/login`, `/signup` | Stand-alone forms |
+| `/forgot-password`, `/reset-password` | Request a reset link by email / choose a new password (open to everyone, logged in or not) |
 | `/applications`, `/applications/new`, `/applications/:id` | Your applications, as a ledger list or (`?view=board`) a Kanban board |
 | `/dashboard` | Response rate and charts |
 
 Visiting a protected page while logged out sends you to `/`, and logging in returns you to the page you asked for.
 
-Forms validate inline: a message appears under the field as you type (after you've touched it), instead of the browser's native popup. The server re-checks everything.
+Forms validate inline instead of with the browser's native popups. A message appears under a field once you've touched it; for values that are wrong until they are finished (a link, a salary range, a repeated password) it waits until you pause, leave the field, or submit. Email addresses are not format-checked in the browser at all: the server judges them on submit and its message is shown. The server re-checks everything.
 
 ## API overview
 
@@ -85,6 +100,9 @@ Interactive docs are at http://localhost:8000/docs when the backend is running.
 | --- | --- | --- |
 | POST | `/auth/signup`, `/auth/login` | Create account / get a token |
 | GET | `/auth/me` | Current user |
+| POST | `/auth/password-reset/request` | Email a reset link (same `202` reply for every address) |
+| POST | `/auth/password-reset/confirm` | Set a new password with a reset token |
+| GET | `/health` | Liveness check |
 | POST | `/applications` | Create (records the initial status) |
 | GET | `/applications` | List; filters `status`, `company`, `q`, `date_from`, `date_to`; `limit`/`offset` |
 | GET | `/applications/export.csv` | Every application as a CSV file (your backup); includes status history; ignores list filters |
@@ -98,7 +116,8 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 
 ## Data model
 
-- `users`: email (unique), bcrypt hash.
+- `users`: email (unique), bcrypt hash, `session_version` (bumped by a password reset to end earlier sessions).
+- `password_reset_tokens`: hash of each reset token, its expiry, and when it was used.
 - `applications`: belongs to a user; company, role, job link, date applied, resume version, salary min/max, location, notes, current status, follow-up date.
 - `status_changes`: append-only log (`from_status`, `to_status`, timestamp) written whenever an application's status changes, so the full timeline is kept.
 
@@ -143,8 +162,8 @@ Limits are held in the API process's memory: fine for one server, reset on resta
 ## Auth design
 
 - **Passwords** are hashed with bcrypt (per-password random salt); plaintext is never stored, and responses never include the hash.
-- **Login** returns a short-lived JWT (default 60 min) signed with `SECRET_KEY`. The client sends it as `Authorization: Bearer <token>`.
-- **Protected routes** use the `get_current_user` dependency, which verifies the signature and expiry (pinned algorithm) and loads the user. Data routes will filter by that user's id, which is how per-user isolation is enforced.
+- **Login** returns a short-lived JWT (default 60 min) signed with `SECRET_KEY`, carrying the user's `session_version`. The client sends it as `Authorization: Bearer <token>`.
+- **Protected routes** use the `get_current_user` dependency, which verifies the signature and expiry (pinned algorithm) and loads the user. Data routes filter by that user's id, which is how per-user isolation is enforced.
 - Wrong email and wrong password return the identical error, and unknown emails still run a bcrypt check, so neither the message nor the response time reveals which emails are registered.
 - The frontend keeps the token in `localStorage` and re-validates it against `/auth/me` on load. `localStorage` is readable by page scripts (XSS); an httpOnly cookie would avoid that at the cost of CSRF handling.
 
@@ -170,22 +189,31 @@ Rules that keep production data safe:
 - **Make changes backward compatible.** During a deploy the old version keeps serving while the new one migrates, so new columns must be nullable or have defaults, and removing or renaming something takes two releases: add the new thing and deploy, then remove the old thing later.
 - **Export your data first** (Export CSV) before a risky change: Neon's free plan only keeps about 6 hours of history.
 
-**How startup behaves:** a new database is built from the migrations. A database made by the older startup code (tables, no migration history) is checked against the expected schema and, if it matches, simply marked as being at the baseline, so no data is touched; if it does not match, startup stops instead of guessing. The whole upgrade is one transaction with a lock, so a failure on Postgres leaves the database exactly as it was, and the host keeps serving the previous version.
+**How startup behaves:** every start brings the database up to the latest schema: a new database is built from the migrations, and an existing one gets whatever it has not yet applied. The whole upgrade is one transaction with a lock, so a failure on Postgres leaves the database exactly as it was, the app does not start, and the host keeps serving the previous version. On SQLite, migrations switch foreign keys off while a table is rebuilt (so a rebuild can't cascade deletes into child rows) and verify consistency afterwards.
 
 ## Deployment
 
 | Piece | Where | Config |
 | --- | --- | --- |
 | Frontend | Vercel (root directory `frontend`) | `frontend/vercel.json`, env `VITE_API_URL` |
-| API | Render web service | `render.yaml` (Blueprint), envs `DATABASE_URL`, `CORS_ORIGINS`, generated `SECRET_KEY` |
+| API | Render web service | `render.yaml` (Blueprint). Secrets set in the dashboard: `DATABASE_URL`, `CORS_ORIGINS`, `RESEND_API_KEY`. `SECRET_KEY` is generated; `FRONTEND_URL`, `EMAIL_FROM` and the proxy settings are in the file |
 | Database | Neon Postgres | connection string goes in Render's `DATABASE_URL` |
+| Email | Resend | verified sending domain; key in Render's `RESEND_API_KEY` |
 
 Notes:
 - The database is on Neon, not Render, because Render's free Postgres expires after 30 days.
 - Render deploys only when the GitHub CI checks pass (`autoDeployTrigger: checksPass`).
 - Render's free web service sleeps after 15 idle minutes and takes about a minute to wake. The landing page pings the API on load so it is usually awake by the time you log in, and a slow login explains itself.
 - CI runs the backend tests on both SQLite and a real Postgres service, since production uses Postgres.
-- The database schema is managed with Alembic migrations, applied automatically when the API starts (see below).
+- The database schema is managed with Alembic migrations, applied automatically when the API starts (see [Database migrations](#database-migrations)).
+
+## Known limitations
+
+- **Signup reveals which emails have accounts.** `POST /auth/signup` answers "Email already registered" for an existing address. Password reset does not leak this; closing it for signup would need email verification.
+- **Rate limits live in the API process's memory.** Fine for one server (they reset on restart); running several instances would need a shared store.
+- **The free hosting tiers sleep.** The first request after a quiet spell can take up to a minute; the landing page pings the API to wake it early.
+- **Touch dragging is untested.** The board is configured for touch (a brief press starts a drag, so swiping still scrolls) but has not been tried on a real touch device. Mouse and keyboard dragging were tested in a browser.
+- **Login tokens live in `localStorage`** (see Auth design for the trade-off).
 
 ## License
 
