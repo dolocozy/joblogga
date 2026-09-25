@@ -2,6 +2,8 @@
 
 A multi-user job application tracker: log applications, move them through a status pipeline, set follow-up reminders, and see how your search is going.
 
+**Live at [joblogga.dolocozy.com](https://joblogga.dolocozy.com)**
+
 ![The Joblogga applications list: a ruled ledger with a stage meter per status and an overdue follow-up highlighted](docs/screenshots/applications-list.png)
 
 > **Status: v0.1.0, feature-complete for personal use.** Accounts with password reset, application tracking with status history, follow-up reminders, search and filters, a dashboard, a Kanban board, CSV export and login rate limiting are all built, tested and deployed. See [Known limitations](#known-limitations).
