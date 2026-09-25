@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { useFieldErrors, useSlowAfter } from '../hooks'
-import { emailRule, loginPasswordRule } from '../validation'
+import { emailRequiredRule, loginPasswordRule } from '../validation'
 import Field from './Field'
 
 // Used on the landing page and on /login.
@@ -18,7 +18,7 @@ export default function LoginForm() {
   const [submitting, setSubmitting] = useState(false)
   const slow = useSlowAfter(submitting)
 
-  const fields = useFieldErrors({ email: emailRule(email), password: loginPasswordRule(password) }, (n) => `${base}-${n}`)
+  const fields = useFieldErrors({ email: emailRequiredRule(email), password: loginPasswordRule(password) }, (n) => `${base}-${n}`)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()

@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { useFieldErrors, useSlowAfter } from '../hooks'
-import { emailRule, newPasswordRule } from '../validation'
+import { emailRequiredRule, newPasswordRule } from '../validation'
 import Field from './Field'
 
 export default function SignupForm() {
@@ -17,7 +17,7 @@ export default function SignupForm() {
   const [submitting, setSubmitting] = useState(false)
   const slow = useSlowAfter(submitting)
 
-  const fields = useFieldErrors({ email: emailRule(email), password: newPasswordRule(password) }, (n) => `${base}-${n}`)
+  const fields = useFieldErrors({ email: emailRequiredRule(email), password: newPasswordRule(password) }, (n) => `${base}-${n}`)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()

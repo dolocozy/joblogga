@@ -40,133 +40,66 @@ describe('inline validation replaces the browser popups', () => {
     expect(password()).not.toHaveAttribute('minlength')
   })
 
-  it('shows an email error as you type, once you pause', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderApp('/signup')
-    await screen.findByLabelText('Email')
+  // --- the email field no longer judges the format ---------------------------
 
-    await user.type(email(), 'not-an-email')
-    expect(screen.queryByText(/enter an email address/i)).not.toBeInTheDocument() // still typing: nothing yet
-
-    await pause()
-    expect(screen.getByText('Enter an email address like name@example.com')).toBeInTheDocument()
-    expect(email()).toBeInvalid()
-
-    // Once shown it follows the value, and goes the moment it is valid, with no wait.
-    await user.clear(email())
-    await user.type(email(), 'me@example.com')
-    expect(screen.queryByText(/enter an email address/i)).not.toBeInTheDocument()
-    expect(email()).not.toBeInvalid()
-  })
-
-  it.each(['/login', '/signup'])('%s does not nag while an address is still being typed', async (route) => {
+  it.each(['/login', '/signup'])('%s never shows a format message, however long you wait or wherever focus goes', async (route) => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderApp(route)
     await screen.findByLabelText('Email')
 
-    // Every prefix of an address is an unfinished, so invalid, address.
+    await user.type(email(), 'not-an-email')
+    await act(async () => void vi.advanceTimersByTime(5000)) // a long pause
+    await user.tab() // leaving the field
+
+    expect(screen.queryByText(/enter an email address/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/name@example\.com/i)).not.toBeInTheDocument()
+    // Not marked invalid by the app. (The browser's own check would call it a type mismatch, but noValidate
+    // means the browser shows nothing for it.)
+    expect(email()).not.toHaveAttribute('aria-invalid')
+    expect(document.querySelector('form')).toHaveAttribute('novalidate')
+  })
+
+  it.each(['/login', '/signup'])('%s does not judge any half-typed address either', async (route) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderApp(route)
+    await screen.findByLabelText('Email')
+
     for (const char of 'me@example.') {
       await user.type(email(), char)
-      expect(screen.queryByText(/enter an email address/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/enter an email address|name@example/i)).not.toBeInTheDocument()
     }
-    // ...and finishing it never shows an error at all.
     await user.type(email(), 'com')
     await pause()
-    expect(screen.queryByText(/enter an email address/i)).not.toBeInTheDocument()
-    expect(email()).toHaveValue('me@example.com')
+    expect(screen.queryByText(/enter an email address|name@example/i)).not.toBeInTheDocument()
   })
 
-  it('is quick enough to notice, and slow enough not to nag: shown between 0.4 and 1.5 seconds after you stop', async () => {
-    // Literal times, not SETTLE_MS: this pins what a person experiences.
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderApp('/login')
-    await screen.findByLabelText('Email')
+  const SERVER_SAYS = 'value is not a valid email address: An email address must have an @-sign.'
+  const invalidEmailReply = () =>
+    HttpResponse.json({ detail: [{ type: 'value_error', loc: ['body', 'email'], msg: SERVER_SAYS }] }, { status: 422 })
 
-    await user.type(email(), 'me@ex')
-    await act(async () => void vi.advanceTimersByTime(400))
-    expect(screen.queryByText(/enter an email address/i)).not.toBeInTheDocument()
-    await act(async () => void vi.advanceTimersByTime(1100)) // 1.5s in total
-    expect(screen.getByText(/enter an email address/i)).toBeInTheDocument()
-  })
-
-  it('needs a real pause: every keystroke restarts the wait', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderApp('/login')
-    await screen.findByLabelText('Email')
-
-    await user.type(email(), 'me@')
-    await act(async () => void vi.advanceTimersByTime(SETTLE_MS - 200))
-    await user.type(email(), 'ex') // typing again, 600ms in
-    await act(async () => void vi.advanceTimersByTime(SETTLE_MS - 200))
-    expect(screen.queryByText(/enter an email address/i)).not.toBeInTheDocument() // 1200ms since the first key, but only 600 since the last
-
-    await act(async () => void vi.advanceTimersByTime(300))
-    expect(screen.getByText(/enter an email address/i)).toBeInTheDocument()
-  })
-
-  it('hides an error you were shown while you type again, and brings it back after the next pause', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderApp('/login')
-    await screen.findByLabelText('Email')
-
-    await user.type(email(), 'me@')
-    await pause()
-    expect(screen.getByText(/enter an email address/i)).toBeInTheDocument() // told once
-
-    await user.type(email(), 'ex') // typing again: no flicker through every keystroke
-    expect(screen.queryByText(/enter an email address/i)).not.toBeInTheDocument()
-    await user.type(email(), 'ample') // still unfinished
-    expect(screen.queryByText(/enter an email address/i)).not.toBeInTheDocument()
-
-    await pause()
-    expect(screen.getByText(/enter an email address/i)).toBeInTheDocument() // back, since it is still not an address
-    await user.type(email(), '.com')
-    expect(screen.queryByText(/enter an email address/i)).not.toBeInTheDocument()
-  })
-
-  it('an error shown by a failed submit also steps aside while you fix it', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderApp('/login')
-    await screen.findByLabelText('Email')
-    await user.type(email(), 'nope')
-    await user.click(screen.getByRole('button', { name: 'Log in' }))
-    expect(screen.getByText(/enter an email address/i)).toBeInTheDocument()
-
-    await user.type(email(), '@')
-
-    expect(screen.queryByText(/enter an email address/i)).not.toBeInTheDocument()
-  })
-
-  it('shows the error at once when you leave a half-typed address', async () => {
+  it.each([
+    ['/login', '/auth/login', 'Log in'],
+    ['/signup', '/auth/signup', 'Sign up'],
+  ])('%s sends a malformed address to the server on submit, and shows the server\'s answer', async (route, endpoint, button) => {
     const user = userEvent.setup()
-    renderApp('/login')
+    const bodies = watch(endpoint, invalidEmailReply)
+    renderApp(route)
     await screen.findByLabelText('Email')
 
-    await user.type(email(), 'me@exa')
-    expect(screen.queryByText(/enter an email address/i)).not.toBeInTheDocument()
-    await user.tab()
+    await user.type(email(), 'not-an-email')
+    await user.type(password(), 'correct-horse-battery')
+    await user.click(screen.getByRole('button', { name: button }))
 
-    expect(screen.getByText('Enter an email address like name@example.com')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent(SERVER_SAYS)
+    expect(bodies).toHaveLength(1) // it was not blocked on the client
+    expect(bodies[0]).toMatchObject({ email: 'not-an-email' })
+    expect(screen.getByRole('button', { name: button })).toBeEnabled() // and they can correct it and go again
+    expect(email()).toHaveValue('not-an-email')
   })
 
-  it('a pending wait is dropped if the address became valid in the meantime', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderApp('/login')
-    await screen.findByLabelText('Email')
-
-    await user.type(email(), 'me@example.co') // not finished
-    await user.type(email(), 'm') // finished, before the pause ended
-    await pause()
-
-    expect(screen.queryByText(/enter an email address/i)).not.toBeInTheDocument()
-  })
+  // --- an EMPTY email is still asked for, with the same settled timing --------
 
   it('reports an emptied field once you pause', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
@@ -182,17 +115,60 @@ describe('inline validation replaces the browser popups', () => {
     expect(screen.getByText('Enter your email address')).toBeInTheDocument()
   })
 
-  it('shows an error when a field is left empty (on blur)', async () => {
-    const user = userEvent.setup()
+  it('shows that, not sooner than 0.4s and not later than 1.5s after you stop', async () => {
+    // Literal times, not SETTLE_MS: this pins what a person experiences.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     renderApp('/login')
     await screen.findByLabelText('Email')
 
+    await user.type(email(), 'a')
+    await user.clear(email())
+    await act(async () => void vi.advanceTimersByTime(400))
+    expect(screen.queryByText('Enter your email address')).not.toBeInTheDocument()
+    await act(async () => void vi.advanceTimersByTime(1100)) // 1.5s in total
+    expect(screen.getByText('Enter your email address')).toBeInTheDocument()
+  })
+
+  it('a pending wait is dropped if something was typed in the meantime', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderApp('/login')
+    await screen.findByLabelText('Email')
+
+    await user.type(email(), 'a')
+    await user.clear(email()) // empty: a wait begins
+    await user.type(email(), 'b') // filled again before it ended
+    await pause()
+
+    expect(screen.queryByText('Enter your email address')).not.toBeInTheDocument()
+  })
+
+  it('goes the moment you type something', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderApp('/signup')
+    await screen.findByLabelText('Email')
     await user.click(email())
-    await user.tab() // leave it empty
+    await user.tab() // left it empty: shown at once
+    expect(screen.getByText('Enter your email address')).toBeInTheDocument()
+
+    await user.type(email(), 'm')
+
+    expect(screen.queryByText('Enter your email address')).not.toBeInTheDocument()
+  })
+
+  it('an empty field is reported at once on submit, and nothing is sent', async () => {
+    const user = userEvent.setup()
+    const bodies = watch('/auth/login', invalidEmailReply)
+    renderApp('/login')
+    await screen.findByLabelText('Email')
+
+    await user.click(screen.getByRole('button', { name: 'Log in' }))
 
     expect(screen.getByText('Enter your email address')).toBeInTheDocument()
-    // The password wasn't touched, so it says nothing yet.
-    expect(screen.queryByText('Enter your password')).not.toBeInTheDocument()
+    expect(email()).toHaveFocus()
+    expect(bodies).toEqual([])
   })
 
   it('ties each message to its field for screen readers', async () => {

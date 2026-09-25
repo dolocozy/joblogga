@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emailRule, httpUrlRule, loginPasswordRule, newPasswordRule, required, wholeNumberRule } from './validation'
+import { emailRequiredRule, emailRule, httpUrlRule, loginPasswordRule, newPasswordRule, required, wholeNumberRule } from './validation'
 
 describe('emailRule', () => {
   it.each(['me@example.com', 'first.last+tag@sub.example.co.uk', '  me@example.com  '])('accepts %j', (v) => {
@@ -11,6 +11,17 @@ describe('emailRule', () => {
   it('asks for an email when empty or only spaces', () => {
     expect(emailRule('')).toBe('Enter your email address')
     expect(emailRule('   ')).toBe('Enter your email address')
+  })
+})
+
+describe('emailRequiredRule (login and signup)', () => {
+  it('only asks for something to be typed', () => {
+    expect(emailRequiredRule('')).toBe('Enter your email address')
+    expect(emailRequiredRule('   ')).toBe('Enter your email address')
+  })
+
+  it.each(['me@example.com', 'not-an-email', 'me@', '@example.com', 'a b c', 'x'])('leaves judging %j to the server', (v) => {
+    expect(emailRequiredRule(v)).toBeNull() // the format is deliberately not checked in the browser
   })
 })
 
