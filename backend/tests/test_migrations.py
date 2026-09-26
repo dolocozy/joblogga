@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from alembic import command
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 
 from app.config import normalize_database_url
@@ -12,8 +13,8 @@ from tests.conftest import TEST_DATABASE_URL, reset_database
 
 ON_POSTGRES = not TEST_DATABASE_URL.startswith("sqlite")
 BASELINE = "0001"
-HEAD = "0002"
-TABLES = {"users", "applications", "status_changes", "password_reset_tokens"}
+HEAD = ScriptDirectory(str(BACKEND_DIR / "alembic")).get_current_head()  # moves with every new migration
+TABLES = {"users", "applications", "status_changes", "password_reset_tokens", "email_verification_tokens"}
 
 
 @pytest.fixture
@@ -116,6 +117,9 @@ def test_upgrading_a_database_that_holds_rows_keeps_them_and_gives_users_a_defau
         assert conn.execute(text("SELECT company FROM applications")).scalar() == "Acme"
         assert conn.execute(text("SELECT session_version FROM users")).scalar() == 0  # existing sessions stay valid
         assert conn.execute(text("SELECT COUNT(*) FROM password_reset_tokens")).scalar() == 0
+        # Accounts that predate verification are trusted, not nagged: verified as of their creation.
+        assert conn.execute(text("SELECT email_verified_at IS NOT NULL FROM users")).scalar()
+        assert conn.execute(text("SELECT COUNT(*) FROM email_verification_tokens")).scalar() == 0
         assert schema_differences(conn) == []
 
 
@@ -147,16 +151,16 @@ def test_the_upgrade_can_be_rolled_back_without_losing_rows(engine):
 
 
 def add_broken_migration(tmp_path: Path) -> Path:
-    """A copy of the real migrations plus a 0003 that fails part-way through."""
+    """A copy of the real migrations plus one more that fails part-way through."""
     scripts = tmp_path / "alembic"
     shutil.copytree(BACKEND_DIR / "alembic", scripts, ignore=shutil.ignore_patterns("__pycache__"))
-    (scripts / "versions" / "2026_10_01_0900-0003_broken.py").write_text(
-        '''"""broken"""
+    (scripts / "versions" / "2099_01_01_0900-9999_broken.py").write_text(
+        f'''"""broken"""
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0003"
-down_revision = "0002"
+revision = "9999"
+down_revision = "{HEAD}"
 branch_labels = None
 depends_on = None
 
@@ -182,7 +186,7 @@ def test_a_failing_migration_rolls_everything_back(engine, tmp_path):
     with pytest.raises(Exception, match="division by zero"):
         upgrade_database(engine, scripts)
 
-    # The half-done step is undone: still at 0002, no stray column, rows intact.
+    # The half-done step is undone: still at the previous head, no stray column, rows intact.
     assert version(engine) == HEAD
     assert "priority" not in {c["name"] for c in inspect(engine).get_columns("applications")}
     assert counts(engine) == (1, 1, 1)

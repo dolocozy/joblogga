@@ -8,6 +8,7 @@ from sqlalchemy import select, text
 from app import mailer, password_reset, ratelimit
 from app.config import settings
 from app.db import get_db
+from app.deps import get_email_sender
 from app.main import app
 from app.models import PasswordResetToken, User
 from app.password_reset import hash_token, issue_token, new_token, redeem_token
@@ -40,7 +41,12 @@ def clock(monkeypatch):
 
 
 def signup(client, **over):
-    return client.post("/auth/signup", json={**CREDS, **over})
+    """Sign up, then forget the verification email it sent: these tests are about reset emails."""
+    res = client.post("/auth/signup", json={**CREDS, **over})
+    fake = app.dependency_overrides.get(get_email_sender)
+    if fake:
+        fake().sent.clear()
+    return res
 
 
 def login(client, password=CREDS["password"], email=CREDS["email"]):
@@ -513,7 +519,7 @@ def test_sessions_that_predate_session_versions_stay_valid_until_a_reset(client,
 
 
 def test_other_accounts_sessions_are_untouched(client, outbox, user):
-    client.post("/auth/signup", json={"email": "other@example.com", "password": "correct-horse-battery"})
+    signup(client, email="other@example.com")
     other = login(client, email="other@example.com").json()["access_token"]
     request_reset(client)
     confirm(client, token_in(outbox.sent[0]))

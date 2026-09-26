@@ -24,13 +24,18 @@ def auth_header(token):
 # --- signup -----------------------------------------------------------------
 
 
-def test_signup_creates_user_without_leaking_password(client):
+def test_signup_answers_202_and_hands_out_no_account_details(client):
     res = signup(client)
-    assert res.status_code == 201
-    body = res.json()
-    assert body["email"] == CREDS["email"]
-    assert "id" in body and "created_at" in body
-    assert "password" not in body and "hashed_password" not in body
+    assert res.status_code == 202
+    assert set(res.json()) == {"detail"}  # no user id, no token, nothing about the account
+
+
+def test_signup_creates_an_unverified_account_that_can_log_in(client, db):
+    signup(client)
+    user = db.query(User).one()
+    assert user.email == CREDS["email"]
+    assert user.email_verified_at is None
+    assert login(client).status_code == 200
 
 
 def test_signup_stores_bcrypt_hash_not_plaintext(client, db):
@@ -41,14 +46,26 @@ def test_signup_stores_bcrypt_hash_not_plaintext(client, db):
     assert verify_password(CREDS["password"], user.hashed_password)
 
 
-def test_signup_duplicate_email_conflicts(client):
-    signup(client)
-    assert signup(client).status_code == 409
+def test_signing_up_twice_makes_one_account_and_answers_identically(client, db):
+    first = signup(client)
+    second = signup(client)
+    assert (first.status_code, first.json()) == (second.status_code, second.json())
+    assert db.query(User).count() == 1
 
 
-def test_signup_email_is_case_insensitive(client):
+def test_signup_email_is_case_insensitive(client, db):
     signup(client, email="Me@Example.com")
-    assert signup(client, email="me@example.COM").status_code == 409
+    assert signup(client, email="me@example.COM").status_code == 202
+    assert db.query(User).count() == 1
+    assert db.query(User).one().email == "me@example.com"
+
+
+def test_signing_up_again_does_not_change_the_password(client):
+    """Otherwise anyone could take over an account by signing up with its address."""
+    signup(client)
+    assert signup(client, password="attacker-chosen-password").status_code == 202
+    assert login(client).status_code == 200
+    assert login(client, password="attacker-chosen-password").status_code == 401
 
 
 def test_signup_rejects_short_password(client):

@@ -3,16 +3,24 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import delete, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app import password_reset, ratelimit
+from app import email_verification, password_reset, ratelimit
 from app.config import settings
 from app.deps import client_ip, get_current_user, get_email_sender, get_session_factory
 from app.mailer import EmailSender
 from app.models import PasswordResetToken, User
-from app.schemas import LoginRequest, MessageResponse, PasswordResetConfirm, PasswordResetRequest, SignupRequest, TokenResponse, UserOut
+from app.schemas import (
+    EmailVerificationConfirm,
+    LoginRequest,
+    MessageResponse,
+    PasswordResetConfirm,
+    PasswordResetRequest,
+    SignupRequest,
+    TokenResponse,
+    UserOut,
+)
 from app.security import DUMMY_HASH, create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -36,22 +44,35 @@ def too_many_attempts(request: Request, scope: str, ip: str, retry_after: int) -
     )
 
 
-@router.post("/signup", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def signup(body: SignupRequest, db: DbSession, request: Request, ip: ClientIp) -> User:
+def _signup_reply() -> str:
+    return "Almost there. Check your email for a link to verify your address."
+
+
+@router.post("/signup", response_model=MessageResponse, status_code=status.HTTP_202_ACCEPTED)
+def signup(
+    body: SignupRequest,
+    background: BackgroundTasks,
+    request: Request,
+    ip: ClientIp,
+    sender: Annotated[EmailSender, Depends(get_email_sender)],
+    session_factory: Annotated[Callable[[], Session], Depends(get_session_factory)],
+) -> MessageResponse:
+    """Start an account: the person gets an email either way, and this reply never varies.
+
+    The same status and body come back whether the address is new, unverified or already
+    registered, and this function touches neither the database nor bcrypt: creating the
+    account, or noticing it exists, happens in a background task once the reply is on
+    its way. So neither the answer nor its timing can be used to find out who has an
+    account (the old "409 Email already registered" could). Nobody is logged in here:
+    the person logs in after, and can do so before verifying (see the /auth/me banner).
+    """
     blocked = ratelimit.limits.check_signup(ip)
     if blocked:
         raise too_many_attempts(request, blocked[0], ip, blocked[1])
-    ratelimit.limits.record_signup(ip)  # every attempt counts, including duplicates
-    user = User(email=body.email, hashed_password=hash_password(body.password))
-    db.add(user)
-    try:
-        db.commit()
-    except IntegrityError:
-        # The unique constraint fired. Relying on it (instead of "SELECT then
-        # INSERT") stays correct even if two signups race.
-        db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Email already registered")
-    return user
+    ratelimit.limits.record_signup(ip)  # every attempt counts, whatever the address
+    if ratelimit.limits.signup_mail_allowed(body.email):
+        background.add_task(email_verification.register_or_notify, session_factory, sender, body.email, body.password)
+    return MessageResponse(detail=_signup_reply())
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -135,6 +156,9 @@ def confirm_password_reset(body: PasswordResetConfirm, db: DbSession, request: R
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=INVALID_RESET_LINK)
 
     user.hashed_password = hash_password(body.password)
+    # A working reset link proves the person reads this inbox, which is all verification proves.
+    if user.email_verified_at is None:
+        user.email_verified_at = password_reset.utcnow()
     # Ends every login session issued before now: someone holding a stolen token
     # is signed out the moment the owner changes the password.
     user.session_version += 1
@@ -142,3 +166,47 @@ def confirm_password_reset(body: PasswordResetConfirm, db: DbSession, request: R
     db.execute(delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None)))
     db.commit()  # the token is spent and the password changed together, or neither
     return MessageResponse(detail="Your password has been updated. You can log in with it now.")
+
+
+INVALID_VERIFICATION_LINK = "This verification link is invalid or has expired. Log in to request a new one."
+
+
+@router.post("/verify-email/confirm", response_model=MessageResponse)
+def confirm_email_verification(body: EmailVerificationConfirm, db: DbSession, request: Request, ip: ClientIp) -> MessageResponse:
+    """Redeem a verification link. The token is the credential, so no login is needed
+    (people often open the email on a different device)."""
+    blocked = ratelimit.limits.check_verify_confirm(ip)
+    if blocked:
+        raise too_many_attempts(request, blocked[0], ip, blocked[1])
+    if email_verification.redeem_token(db, body.token) is None:
+        db.rollback()
+        ratelimit.limits.record_verify_confirm_failure(ip)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=INVALID_VERIFICATION_LINK)
+    db.commit()
+    return MessageResponse(detail="Your email address is verified.")
+
+
+@router.post("/verify-email/resend", response_model=MessageResponse, status_code=status.HTTP_202_ACCEPTED)
+def resend_verification(
+    user: Annotated[User, Depends(get_current_user)],
+    background: BackgroundTasks,
+    request: Request,
+    ip: ClientIp,
+    db: DbSession,
+    sender: Annotated[EmailSender, Depends(get_email_sender)],
+) -> MessageResponse:
+    """Send a fresh verification link to the logged-in user's own address.
+
+    Needs a login, so it can only ever mail the caller's own inbox and can say plainly
+    whether the address is already verified without revealing anything about anyone else.
+    """
+    if user.email_verified:
+        return MessageResponse(detail="Your email address is already verified.")
+    blocked = ratelimit.limits.check_verify_resend(user.id)
+    if blocked:
+        raise too_many_attempts(request, blocked[0], ip, blocked[1])
+    ratelimit.limits.record_verify_resend(user.id)
+    raw = email_verification.issue_token(db, user)
+    db.commit()
+    background.add_task(email_verification.send_verification_email, sender, user.email, raw)
+    return MessageResponse(detail="We've sent a new verification link to your email address.")

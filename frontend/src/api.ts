@@ -87,6 +87,8 @@ export interface User {
   id: number
   email: string
   created_at: string
+  // False until the owner opens the link we emailed. Only a banner depends on it.
+  email_verified: boolean
 }
 
 export const fetchHealth = () => request<HealthResponse>('/health')
@@ -99,8 +101,15 @@ export function warmUpServer() {
   fetchHealth().catch(() => {})
 }
 
+// Signup answers the same way for every address and does not log anyone in: the account
+// is created behind the scenes and a verification link is emailed. The person logs in after.
 export const signup = (email: string, password: string) =>
-  request<User>('/auth/signup', { method: 'POST', body: JSON.stringify({ email, password }) })
+  request<{ detail: string }>('/auth/signup', { method: 'POST', body: JSON.stringify({ email, password }) })
+
+export const verifyEmail = (token: string) =>
+  request<{ detail: string }>('/auth/verify-email/confirm', { method: 'POST', body: JSON.stringify({ token }) })
+
+export const resendVerification = () => request<{ detail: string }>('/auth/verify-email/resend', { method: 'POST' })
 
 export const login = (email: string, password: string) =>
   request<{ access_token: string }>('/auth/login', {

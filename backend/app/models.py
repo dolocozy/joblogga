@@ -26,6 +26,15 @@ class User(Base):
     # password change. The server default lets code from before this column existed
     # keep inserting users during a deploy.
     session_version: Mapped[int] = mapped_column(default=0, server_default="0")
+    # When the owner proved they can read mail sent to this address (by opening a
+    # verification link, or by completing a password reset, which is the same proof).
+    # NULL means not yet. Accounts that existed before verification was added were
+    # marked verified by the migration.
+    email_verified_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+
+    @property
+    def email_verified(self) -> bool:
+        return self.email_verified_at is not None
 
 
 class ApplicationStatus(enum.StrEnum):
@@ -119,4 +128,21 @@ class PasswordResetToken(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_now)
     expires_at: Mapped[datetime] = mapped_column(UtcDateTime)
     # Set the moment the token is redeemed; a token with a value here is spent.
+    used_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+
+
+class EmailVerificationToken(Base):
+    """A one-time link that proves an address belongs to the person who signed up.
+
+    Stored exactly like a password reset token: only the hash, so a copy of this
+    table cannot be used to verify (or take over) anything.
+    """
+
+    __tablename__ = "email_verification_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_now)
+    expires_at: Mapped[datetime] = mapped_column(UtcDateTime)
     used_at: Mapped[datetime | None] = mapped_column(UtcDateTime)

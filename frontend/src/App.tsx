@@ -11,6 +11,7 @@ import Login from './pages/Login'
 import NewApplication from './pages/NewApplication'
 import ResetPassword from './pages/ResetPassword'
 import Signup from './pages/Signup'
+import VerifyEmail from './pages/VerifyEmail'
 
 // Loaded on demand: the dashboard pulls in the charting library, which is most of
 // the app's weight, so people who never open it never download it.
@@ -26,6 +27,7 @@ export default function App() {
         {/* Open to everyone, logged in or not: a reset link must work whichever browser session it lands in. */}
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
         <Route element={<GuestRoute />}>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />

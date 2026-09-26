@@ -12,7 +12,10 @@ interface AuthContextValue {
   // so the login page can explain why the user is back there.
   sessionExpired: boolean
   login: (email: string, password: string) => Promise<void>
+  // Creates the account and emails a verification link. Does not log in (see api.signup).
   signup: (email: string, password: string) => Promise<void>
+  // Re-reads the logged-in user, e.g. after their address was just verified.
+  refreshUser: () => Promise<void>
   logout: () => void
 }
 
@@ -56,13 +59,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessionExpired(false)
   }, [])
 
-  const signup = useCallback(
-    async (email: string, password: string) => {
-      await api.signup(email, password)
-      await login(email, password)
-    },
-    [login],
-  )
+  const signup = useCallback(async (email: string, password: string) => {
+    await api.signup(email, password)
+  }, [])
+
+  const refreshUser = useCallback(async () => {
+    if (api.tokenStore.get()) setUser(await api.fetchMe())
+  }, [])
 
   const logout = useCallback(() => {
     api.tokenStore.clear()
@@ -71,8 +74,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, loading, sessionExpired, login, signup, logout }),
-    [user, loading, sessionExpired, login, signup, logout],
+    () => ({ user, loading, sessionExpired, login, signup, refreshUser, logout }),
+    [user, loading, sessionExpired, login, signup, refreshUser, logout],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

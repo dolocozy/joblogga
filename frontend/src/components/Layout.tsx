@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth'
+import VerifyBanner from './VerifyBanner'
 import Wordmark from './Wordmark'
 
 // The current page is marked with an underline, not just a color change.
@@ -32,6 +33,7 @@ export default function Layout() {
           </div>
         </div>
       </header>
+      <VerifyBanner />
       <main className="mx-auto max-w-5xl px-4 py-8 md:px-6">
         <Outlet />
       </main>

@@ -62,6 +62,10 @@ class PasswordResetConfirm(BaseModel):
         return validate_new_password(v)
 
 
+class EmailVerificationConfirm(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
@@ -79,6 +83,8 @@ class UserOut(BaseModel):
     id: int
     email: EmailStr
     created_at: datetime
+    # Lets the UI show "please verify your email" without a second request.
+    email_verified: bool
 
 
 

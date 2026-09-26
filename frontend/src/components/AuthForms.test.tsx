@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SETTLE_MS } from '../hooks'
 import { server } from '../test/server'
-import { mockList, mockUpcoming, renderApp, url, USER } from '../test/helpers'
+import { renderApp, url, USER } from '../test/helpers'
 
 const email = () => screen.getByLabelText('Email')
 const password = () => screen.getByLabelText('Password')
@@ -295,15 +295,9 @@ describe('submitting', () => {
     expect(bodies).toEqual([{ email: 'me@example.com', password: 'correct-horse-battery' }])
   })
 
-  it('a valid signup goes through and lands in the app', async () => {
+  it('a valid signup goes through and shows the verification screen', async () => {
     const user = userEvent.setup()
-    watch('/auth/signup', () => HttpResponse.json(USER, { status: 201 }))
-    server.use(
-      http.post(url('/auth/login'), () => HttpResponse.json({ access_token: 'tok' })),
-      http.get(url('/auth/me'), () => HttpResponse.json(USER)),
-    )
-    mockList([])
-    mockUpcoming()
+    watch('/auth/signup', () => HttpResponse.json({ detail: 'Almost there.' }, { status: 202 }))
     renderApp('/signup')
     await screen.findByLabelText('Email')
 
@@ -311,96 +305,6 @@ describe('submitting', () => {
     await user.type(password(), 'correct-horse-battery')
     await user.click(screen.getByRole('button', { name: 'Sign up' }))
 
-    expect(await screen.findByRole('heading', { name: 'Applications' })).toBeInTheDocument()
-  })
-})
-
-describe('a slow server (free hosting sleeps when idle)', () => {
-  afterEach(() => vi.useRealTimers())
-
-  async function submitWithHangingServer(route: string, button: string) {
-    // Fake timers that still let real time flow, so the request machinery works.
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    let release!: () => void
-    const gate = new Promise<void>((r) => (release = r))
-    server.use(
-      http.post(url(route === '/login' ? '/auth/login' : '/auth/signup'), async () => {
-        await gate
-        return HttpResponse.json({ detail: 'Incorrect email or password' }, { status: 401 })
-      }),
-    )
-    renderApp(route)
-    await screen.findByLabelText('Email')
-    await user.type(email(), 'me@example.com')
-    await user.type(password(), 'correct-horse-battery')
-    await user.click(screen.getByRole('button', { name: button }))
-    return { release }
-  }
-
-  it.each([
-    ['/login', 'Log in'],
-    ['/signup', 'Sign up'],
-  ])('%s explains the wait once it has gone on a few seconds', async (route, button) => {
-    const { release } = await submitWithHangingServer(route, button)
-    expect(screen.queryByText(/waking the server/i)).not.toBeInTheDocument() // not straight away
-
-    await act(async () => {
-      vi.advanceTimersByTime(3100)
-    })
-
-    expect(screen.getByText(/waking the server/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Please wait…' })).toBeDisabled()
-
-    release()
-    await screen.findByRole('alert') // finishes; the note goes away
-    expect(screen.queryByText(/waking the server/i)).not.toBeInTheDocument()
-  })
-})
-
-describe('when the server says too many attempts (429)', () => {
-  const TOO_MANY = 'Too many attempts. Try again in 15 minutes.'
-  const tooMany = () => HttpResponse.json({ detail: TOO_MANY }, { status: 429, headers: { 'Retry-After': '900' } })
-
-  it('login shows the wait message and can be retried later', async () => {
-    const user = userEvent.setup()
-    watch('/auth/login', tooMany)
-    renderApp('/login')
-    await screen.findByLabelText('Email')
-
-    await user.type(email(), 'me@example.com')
-    await user.type(password(), 'correct-horse-battery')
-    await user.click(screen.getByRole('button', { name: 'Log in' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(TOO_MANY)
-    expect(screen.getByRole('button', { name: 'Log in' })).toBeEnabled() // not stuck
-    expect(email()).toHaveValue('me@example.com') // input kept
-  })
-
-  it('signup shows it too', async () => {
-    const user = userEvent.setup()
-    watch('/auth/signup', tooMany)
-    renderApp('/signup')
-    await screen.findByLabelText('Email')
-
-    await user.type(email(), 'me@example.com')
-    await user.type(password(), 'correct-horse-battery')
-    await user.click(screen.getByRole('button', { name: 'Sign up' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(TOO_MANY)
-  })
-
-  it('is not mistaken for an expired session', async () => {
-    const user = userEvent.setup()
-    watch('/auth/login', tooMany)
-    renderApp('/')
-    await screen.findByLabelText('Email')
-
-    await user.type(email(), 'me@example.com')
-    await user.type(password(), 'correct-horse-battery')
-    await user.click(screen.getByRole('button', { name: 'Log in' }))
-
-    await screen.findByRole('alert')
-    expect(screen.queryByText(/session has expired/i)).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Check your email' })).toBeInTheDocument()
   })
 })

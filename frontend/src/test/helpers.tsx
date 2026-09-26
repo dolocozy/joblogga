@@ -8,7 +8,7 @@ import { server } from './server'
 
 export const url = (path: string) => `${API_URL}${path}`
 
-export const USER = { id: 1, email: 'me@example.com', created_at: '2026-01-01T00:00:00Z' }
+export const USER = { id: 1, email: 'me@example.com', created_at: '2026-01-01T00:00:00Z', email_verified: true }
 
 export function makeApplication(overrides: Partial<Application> = {}): Application {
   return {

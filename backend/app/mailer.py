@@ -70,7 +70,7 @@ class UnconfiguredSender:
     def send(self, message: EmailMessage) -> None:
         logger.warning("Email not sent: RESEND_API_KEY is not set.")
         if settings.log_reset_links:
-            # Development convenience, off by default: the link in the body is a live password reset.
+            # Development convenience, off by default: the links in the body are live.
             logger.warning("DEV ONLY (LOG_RESET_LINKS): email to %s\n%s", message.to, message.text)
 
 
@@ -103,3 +103,64 @@ def password_reset_message(to: str, link: str, minutes: int) -> EmailMessage:
   </body>
 </html>"""
     return EmailMessage(to=to, subject="Reset your Joblogga password", text=text, html=body)
+
+
+def _card(heading: str, paragraph: str, button: tuple[str, str], notes: list[str], footer: str) -> str:
+    """The look shared by the account emails: one sheet on the paper background."""
+    label, href = button
+    safe_href = html.escape(href, quote=True)
+    note_html = "".join(f'<p style="margin:0 0 8px;word-break:break-all;font-size:13px;color:#565c57;">{n}</p>' for n in notes)
+    return f"""<!doctype html>
+<html>
+  <body style="margin:0;padding:24px;background:#f4efe5;color:#1f2622;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;">
+    <div style="max-width:480px;margin:0 auto;background:#fffcf6;border:1px solid #d6ccb8;border-radius:2px;padding:28px;">
+      <h1 style="margin:0 0 16px;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:600;">{html.escape(heading)}</h1>
+      <p style="margin:0 0 20px;line-height:1.5;">{html.escape(paragraph)}</p>
+      <p style="margin:0 0 24px;"><a href="{safe_href}" style="display:inline-block;background:#2d5b4c;color:#fffcf6;padding:10px 18px;border-radius:4px;text-decoration:none;font-weight:600;">{html.escape(label)}</a></p>
+      {note_html}
+      <p style="margin:12px 0 0;line-height:1.5;color:#565c57;font-size:14px;">{html.escape(footer)}</p>
+    </div>
+  </body>
+</html>"""
+
+
+def verification_message(to: str, link: str, hours: int) -> EmailMessage:
+    text = (
+        "Verify your Joblogga email address\n\n"
+        "Thanks for signing up. To confirm this address belongs to you, open this link:\n\n"
+        f"{link}\n\n"
+        f"The link works once and expires in {hours} hours. Verifying matters most for password resets: "
+        "it is how we know a reset link would reach you.\n\n"
+        "If you didn't sign up for Joblogga, you can ignore this email.\n"
+    )
+    body = _card(
+        "Verify your email address",
+        "Thanks for signing up. Use the button below to confirm this address belongs to you.",
+        ("Verify my email", link),
+        [f"If the button doesn't work, paste this address into your browser: {html.escape(link, quote=True)}"],
+        f"The link works once and expires in {hours} hours. If you didn't sign up for Joblogga, you can ignore this email.",
+    )
+    return EmailMessage(to=to, subject="Verify your Joblogga email address", text=text, html=body)
+
+
+def already_registered_message(to: str, login_link: str, reset_link: str) -> EmailMessage:
+    """Sent when someone signs up with an address that already has an account.
+
+    The signup screen answers the same way for every address, so this email is where
+    the real owner learns what happened, without a stranger being told.
+    """
+    text = (
+        "You already have a Joblogga account\n\n"
+        "Someone (probably you) tried to sign up with this address, but it already has an account.\n\n"
+        f"Log in: {login_link}\n"
+        f"Forgot your password? {reset_link}\n\n"
+        "If it wasn't you, you can ignore this email. Nothing has changed.\n"
+    )
+    body = _card(
+        "You already have an account",
+        "Someone (probably you) tried to sign up to Joblogga with this address, but it already has an account.",
+        ("Log in", login_link),
+        [f"Forgot your password? Reset it here: {html.escape(reset_link, quote=True)}"],
+        "If it wasn't you, you can ignore this email. Nothing has changed.",
+    )
+    return EmailMessage(to=to, subject="You already have a Joblogga account", text=text, html=body)

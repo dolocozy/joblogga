@@ -95,6 +95,14 @@ class RateLimits:
         self.reset_email = SlidingWindowLimiter(3, 60 * 60, clock)
         # Only bad tokens count. Guessing one is hopeless (256 bits), but there is no reason to allow it.
         self.reset_confirm_ip = SlidingWindowLimiter(20, 15 * 60, clock)
+        # Signup mail lands in the inbox of whoever's address was typed, so it is limited per
+        # address. Unlike the limits above this one never produces an error: the reply must
+        # be identical for every address, so past the limit the mail is silently not sent.
+        self.signup_email = SlidingWindowLimiter(3, 60 * 60, clock)
+        # "Resend verification" is for a logged-in user, so it is limited per account.
+        self.verify_resend_user = SlidingWindowLimiter(3, 60 * 60, clock)
+        # Only bad verification tokens count, as with reset tokens.
+        self.verify_confirm_ip = SlidingWindowLimiter(20, 15 * 60, clock)
 
     def check_login(self, ip: str, email: str) -> tuple[str, int] | None:
         """(which limit, seconds to wait) if this attempt must be refused, else None."""
@@ -141,8 +149,39 @@ class RateLimits:
     def record_reset_confirm_failure(self, ip: str) -> None:
         self.reset_confirm_ip.record(ip)
 
+    def signup_mail_allowed(self, email: str) -> bool:
+        """Records the signup and says whether a mail may go to `email` (see signup_email)."""
+        allowed = self.signup_email.retry_after(email) == 0
+        self.signup_email.record(email)
+        return allowed
+
+    def check_verify_resend(self, user_id: int) -> tuple[str, int] | None:
+        wait = self.verify_resend_user.retry_after(str(user_id))
+        return ("verify_resend_user", wait) if wait > 0 else None
+
+    def record_verify_resend(self, user_id: int) -> None:
+        self.verify_resend_user.record(str(user_id))
+
+    def check_verify_confirm(self, ip: str) -> tuple[str, int] | None:
+        wait = self.verify_confirm_ip.retry_after(ip)
+        return ("verify_confirm_ip", wait) if wait > 0 else None
+
+    def record_verify_confirm_failure(self, ip: str) -> None:
+        self.verify_confirm_ip.record(ip)
+
     def reset_all(self) -> None:
-        for limiter in (self.login_ip_email, self.login_email, self.login_ip, self.signup_ip, self.reset_ip, self.reset_email, self.reset_confirm_ip):
+        for limiter in (
+            self.login_ip_email,
+            self.login_email,
+            self.login_ip,
+            self.signup_ip,
+            self.reset_ip,
+            self.reset_email,
+            self.reset_confirm_ip,
+            self.signup_email,
+            self.verify_resend_user,
+            self.verify_confirm_ip,
+        ):
             limiter.clear()
 
 

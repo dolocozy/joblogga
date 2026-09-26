@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { useFieldErrors, useSlowAfter } from '../hooks'
 import { emailRequiredRule, newPasswordRule } from '../validation'
@@ -8,13 +8,13 @@ import Field from './Field'
 
 export default function SignupForm() {
   const { signup } = useAuth()
-  const navigate = useNavigate()
 
   const base = useId()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [serverError, setServerError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [sentTo, setSentTo] = useState<string | null>(null) // the address, once the account is on its way
   const slow = useSlowAfter(submitting)
 
   const fields = useFieldErrors({ email: emailRequiredRule(email), password: newPasswordRule(password) }, (n) => `${base}-${n}`)
@@ -26,11 +26,30 @@ export default function SignupForm() {
     setSubmitting(true)
     try {
       await signup(email.trim(), password)
-      navigate('/applications', { replace: true })
+      setSentTo(email.trim())
     } catch (err) {
       setServerError(err instanceof Error ? err.message : 'Something went wrong')
       setSubmitting(false)
     }
+  }
+
+  // The same screen whatever happened behind the scenes: the server answers every address alike.
+  if (sentTo !== null) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-2xl">Check your email</h2>
+        <p role="status">
+          A verification email has been sent to <strong className="break-all">{sentTo}</strong>.
+        </p>
+        <p className="text-sm text-ink-soft">
+          Open the link in it to verify your address. It can take a minute to arrive; if it doesn&apos;t, check your spam folder. You can log in
+          now without waiting, and ask for another email from the banner at the top of the app.
+        </p>
+        <Link to="/login" className="btn btn-primary w-full">
+          Log in
+        </Link>
+      </div>
+    )
   }
 
   return (

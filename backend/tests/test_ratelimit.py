@@ -320,18 +320,18 @@ def test_other_accounts_and_other_addresses_are_unaffected(client, ip, clock):
 
 def test_signup_is_limited_per_address(client, ip, clock):
     for i in range(10):
-        assert client.post("/auth/signup", json={"email": f"user{i}@example.com", "password": "correct-horse-battery"}).status_code == 201
+        assert client.post("/auth/signup", json={"email": f"user{i}@example.com", "password": "correct-horse-battery"}).status_code == 202
     res = client.post("/auth/signup", json={"email": "user10@example.com", "password": "correct-horse-battery"})
     assert res.status_code == 429
     assert res.headers["retry-after"] == "3600"
     ip["value"] = "198.51.100.9"
-    assert client.post("/auth/signup", json={"email": "user10@example.com", "password": "correct-horse-battery"}).status_code == 201
+    assert client.post("/auth/signup", json={"email": "user10@example.com", "password": "correct-horse-battery"}).status_code == 202
 
 
 def test_invalid_signups_that_fail_validation_do_not_use_up_the_allowance(client, ip, clock):
     for _ in range(20):
         assert client.post("/auth/signup", json={"email": "nope", "password": "x"}).status_code == 422
-    assert client.post("/auth/signup", json=GOOD).status_code == 201
+    assert client.post("/auth/signup", json=GOOD).status_code == 202
 
 
 def test_normal_use_is_never_slowed(client, ip, clock):

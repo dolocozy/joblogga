@@ -150,40 +150,55 @@ describe('login', () => {
 })
 
 describe('signup', () => {
-  it('creates the account, logs in automatically, and lands on the app', async () => {
+  it('asks the server to make the account, then says where the verification email went, without logging in', async () => {
     const user = userEvent.setup()
     const calls: string[] = []
     server.use(
       http.post(url('/auth/signup'), () => {
         calls.push('signup')
-        return HttpResponse.json(USER, { status: 201 })
+        return HttpResponse.json({ detail: 'Almost there.' }, { status: 202 })
       }),
       http.post(url('/auth/login'), () => {
         calls.push('login')
         return HttpResponse.json({ access_token: 'fresh' })
       }),
-      http.get(url('/auth/me'), () => HttpResponse.json(USER)),
     )
-    mockList([])
-    mockUpcoming()
     renderApp('/signup')
 
     await screen.findByRole('heading', { name: 'Create your account' })
     await fillAndSubmit(user, 'Sign up')
 
-    expect(await screen.findByRole('heading', { name: 'Applications' })).toBeInTheDocument()
-    expect(calls).toEqual(['signup', 'login'])
+    expect(await screen.findByRole('heading', { name: 'Check your email' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('A verification email has been sent to me@example.com')
+    expect(screen.getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login')
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument()
+    expect(calls).toEqual(['signup'])
+    expect(tokenStore.get()).toBeNull()
   })
 
-  it('shows a duplicate-email error', async () => {
+  it('shows the address as typed (trimmed), not something the server said', async () => {
     const user = userEvent.setup()
-    server.use(http.post(url('/auth/signup'), () => HttpResponse.json({ detail: 'Email already registered' }, { status: 409 })))
+    server.use(http.post(url('/auth/signup'), () => HttpResponse.json({ detail: 'x' }, { status: 202 })))
+    renderApp('/signup')
+    await screen.findByRole('heading', { name: 'Create your account' })
+
+    await user.type(screen.getByLabelText('Email'), '  someone@example.org ')
+    await user.type(screen.getByLabelText('Password'), 'correct-horse-battery')
+    await user.click(screen.getByRole('button', { name: 'Sign up' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('someone@example.org')
+  })
+
+  it('shows a server error (such as a rate limit) and stays on the form', async () => {
+    const user = userEvent.setup()
+    server.use(http.post(url('/auth/signup'), () => HttpResponse.json({ detail: 'Too many attempts. Try again in 60 minutes.' }, { status: 429 })))
     renderApp('/signup')
 
     await screen.findByRole('heading', { name: 'Create your account' })
     await fillAndSubmit(user, 'Sign up')
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Email already registered')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Too many attempts')
+    expect(screen.getByLabelText('Email')).toBeInTheDocument()
   })
 })
 

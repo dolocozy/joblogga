@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     # counting hops when set.
     trusted_client_ip_header: str | None = None
 
-    # --- password reset email (Resend, https://resend.com) ---
+    # --- account emails: password reset and verification (Resend, https://resend.com) ---
     # Without a key no email is sent (development). It is a secret: set it in the
     # host's dashboard, never in the repo.
     resend_api_key: str | None = None
@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     # Where the frontend lives, for the link in the email. No trailing slash.
     frontend_url: str = "http://localhost:5173"
     password_reset_expire_minutes: int = Field(default=30, ge=1, le=1440)
+    # Verification mail may sit unread for a while, and a verification link cannot
+    # take over an account, so it lives much longer than a reset link.
+    email_verification_expire_hours: int = Field(default=24, ge=1, le=168)
     # Development only: print the reset link in the log when no email key is set,
     # so the flow can be tried without sending real mail. Leave off in production:
     # a link in a log is a working password reset.
