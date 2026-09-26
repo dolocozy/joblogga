@@ -387,7 +387,7 @@ def test_downgrading_removes_saved_jobs_and_their_history_but_keeps_everything_e
                 "VALUES (50, 1, 'Wish', 'Eng', NULL, 'saved', '2026-03-02 00:00:00', '2026-03-02 00:00:00')"
             )
         )
-        conn.execute(text("INSERT INTO status_changes (application_id, from_status, to_status, changed_at) VALUES (50, NULL, 'saved', '2026-03-02 00:00:00')"))
+        conn.execute(text("INSERT INTO status_changes (id, application_id, from_status, to_status, changed_at) VALUES (50, 50, NULL, 'saved', '2026-03-02 00:00:00')"))
 
     with engine.begin() as conn:
         command.downgrade(alembic_config(conn), "0005")
@@ -395,3 +395,45 @@ def test_downgrading_removes_saved_jobs_and_their_history_but_keeps_everything_e
     assert version(engine) == "0005"
     assert not date_column_is_nullable(engine)
     assert counts(engine) == (1, 1, 1)  # the dated application and its history are untouched; no orphaned history row
+
+
+# --- 0007: interview rounds ---------------------------------------------------
+
+
+def test_existing_applications_have_no_rounds_recorded_after_the_upgrade(engine):
+    migrate_to(engine, "0006")
+    seed_rows(engine)
+
+    upgrade_database(engine)
+
+    assert version(engine) == HEAD
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT interview_round, interview_rounds_total FROM applications")).one() == (None, None)
+        assert schema_differences(conn) == []
+    assert counts(engine) == (1, 1, 1)
+
+
+def test_old_code_can_still_add_applications_while_the_round_columns_are_live(engine):
+    migrate_to(engine, "0006")
+    seed_rows(engine)
+    upgrade_database(engine)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO applications (id, user_id, company, role, date_applied, status, created_at, updated_at) "
+                "VALUES (98, 1, 'Old code', 'Eng', '2026-03-02', 'applied', '2026-03-02 00:00:00', '2026-03-02 00:00:00')"
+            )
+        )
+        assert conn.execute(text("SELECT interview_round FROM applications WHERE id = 98")).scalar() is None
+
+
+def test_downgrading_drops_only_the_round_columns(engine):
+    upgrade_database(engine)
+    seed_rows(engine)
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE applications SET interview_round = 2, interview_rounds_total = 3"))
+    with engine.begin() as conn:
+        command.downgrade(alembic_config(conn), "0006")
+    columns = {c["name"] for c in inspect(engine).get_columns("applications")}
+    assert not {"interview_round", "interview_rounds_total"} & columns
+    assert counts(engine) == (1, 1, 1)
