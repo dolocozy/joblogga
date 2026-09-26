@@ -6,6 +6,9 @@ os.environ["SECRET_KEY"] = "test-secret-key-not-for-production-use-0123456789"
 # (the production database) by setting TEST_DATABASE_URL.
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "sqlite://")
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+# Migration 0008 loads the place data from this folder. The suite uses a tiny stand-in (a few countries, and
+# duplicate city names on purpose); the real dataset is checked once, by tests/test_geo_data.py.
+os.environ["JOBLOGGA_GEO_DIR"] = os.path.join(os.path.dirname(__file__), "fixtures", "geo")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -127,3 +130,11 @@ def auth(client):
 @pytest.fixture
 def other_auth(client):
     return make_user(client, email="other@example.com")
+
+
+@pytest.fixture
+def geo(db):
+    """The stand-in place data loaded into the test database, plus a lookup of ids by (city, state)."""
+    from tests.geo_fixture import load_fixture_places
+
+    return load_fixture_places(db)

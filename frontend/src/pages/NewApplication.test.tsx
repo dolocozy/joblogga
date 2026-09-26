@@ -1,11 +1,11 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { localToday } from '../dates'
 import { SETTLE_MS } from '../hooks'
 import { server } from '../test/server'
-import { makeDetail, renderApp, signIn, url } from '../test/helpers'
+import { makeDetail, mockCities, renderApp, signIn, url } from '../test/helpers'
 
 beforeEach(() => signIn())
 afterEach(() => vi.useRealTimers())
@@ -47,6 +47,8 @@ describe('add application form', () => {
       salary_min: 90000, // a number, not "90000"
       salary_max: 120000,
       location: null,
+      country_id: null,
+      city_id: null,
       work_mode: null, // left unset unless chosen: nothing is guessed
       notes: null,
       interview_round: null, // nothing recorded until entered
@@ -488,5 +490,250 @@ describe('interview rounds on the form', () => {
     expect(screen.queryByText('The total cannot be lower than the round')).not.toBeInTheDocument() // not while typing
     await pause()
     expect(screen.getByText('The total cannot be lower than the round')).toBeInTheDocument()
+  })
+})
+
+describe('picking a place', () => {
+  const capture = () => {
+    const bodies: Record<string, unknown>[] = []
+    server.use(
+      http.post(url('/applications'), async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>)
+        return HttpResponse.json(makeDetail({ id: 20 }), { status: 201 })
+      }),
+      http.get(url('/applications/20'), () => HttpResponse.json(makeDetail({ id: 20 }))),
+    )
+    return bodies
+  }
+  const fillBasics = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.type(await screen.findByLabelText('Company'), 'Acme')
+    await user.type(screen.getByLabelText('Role'), 'Engineer')
+  }
+  // The choices in the open list (the page also holds the native status and work mode selects, which have options too).
+  const listed = async () => (await within(await screen.findByRole('listbox')).findAllByRole('option')).map((o) => o.textContent)
+  const country = () => screen.getByRole('combobox', { name: 'Country' })
+  const city = () => screen.getByRole('combobox', { name: 'City' })
+  const chooseCountry = async (user: ReturnType<typeof userEvent.setup>, typed: string, name: string) => {
+    await user.type(country(), typed)
+    await user.click(within(screen.getByRole('listbox')).getByRole('option', { name }))
+  }
+
+  it('offers a country list first, and a city box that waits for one', async () => {
+    renderApp('/applications/new')
+    await screen.findByLabelText('Company')
+    expect(country()).toBeEnabled()
+    expect(city()).toBeDisabled()
+    expect(screen.getByText('Choose a country first.')).toBeInTheDocument()
+  })
+
+  it('narrows the country list as you type, ignoring accents and case', async () => {
+    const user = userEvent.setup()
+    renderApp('/applications/new')
+    await screen.findByLabelText('Company')
+    await user.type(country(), 'SWITZ')
+    expect(await listed()).toEqual(['Switzerland'])
+  })
+
+  it('shows every country when you open the box before typing anything', async () => {
+    const user = userEvent.setup()
+    renderApp('/applications/new')
+    await screen.findByLabelText('Company')
+    await user.click(country())
+    expect(await listed()).toEqual(['Canada', 'Switzerland', 'United States'])
+  })
+
+  it('lists each Springfield with its state, so they are three different lines', async () => {
+    const user = userEvent.setup()
+    const seen = mockCities()
+    renderApp('/applications/new')
+    await screen.findByLabelText('Company')
+    await chooseCountry(user, 'united', 'United States')
+
+    await user.type(city(), 'spring')
+
+    expect(await listed()).toEqual(['Springfield, Illinois', 'Springfield, Missouri', 'Springfield, Ohio'])
+    expect(seen.at(-1)!.searchParams.get('country_id')).toBe('6') // searched inside the chosen country only
+    expect(seen.at(-1)!.searchParams.get('q')).toBe('spring')
+  })
+
+  it('does not search until two letters are typed, and waits for a pause in typing', async () => {
+    const user = userEvent.setup()
+    const seen = mockCities()
+    renderApp('/applications/new')
+    await screen.findByLabelText('Company')
+    await chooseCountry(user, 'united', 'United States')
+
+    await user.type(city(), 's')
+    await new Promise((r) => setTimeout(r, 400))
+    expect(seen).toHaveLength(0)
+
+    await user.type(city(), 'pring')
+    await listed()
+    expect(seen).toHaveLength(1) // one search for the finished word, not one per keystroke
+  })
+
+  it('stores the exact city that was chosen (its id), not the text', async () => {
+    const user = userEvent.setup()
+    const bodies = capture()
+    mockCities()
+    renderApp('/applications/new')
+    await fillBasics(user)
+    await chooseCountry(user, 'united', 'United States')
+    await user.type(city(), 'spring')
+    await user.click(await within(await screen.findByRole('listbox')).findByRole('option', { name: 'Springfield, Missouri' }))
+    await user.click(screen.getByRole('button', { name: 'Add application' }))
+
+    await screen.findByRole('heading', { name: /Acme/ })
+    expect(bodies[0]).toMatchObject({ country_id: 6, city_id: 109, location: null }) // the server writes the readable place
+  })
+
+  it('two Springfields are two different ids', async () => {
+    const user = userEvent.setup()
+    const bodies = capture()
+    mockCities()
+    for (const [state, id] of [['Illinois', 108], ['Ohio', 110]] as const) {
+      renderApp('/applications/new')
+      await fillBasics(user)
+      await chooseCountry(user, 'united', 'United States')
+      await user.type(city(), 'spring')
+      await user.click(await within(await screen.findByRole('listbox')).findByRole('option', { name: `Springfield, ${state}` }))
+      await user.click(screen.getByRole('button', { name: 'Add application' }))
+      await screen.findByRole('heading', { name: /Acme/ })
+      expect(bodies.at(-1)).toMatchObject({ city_id: id })
+      document.body.innerHTML = ''
+    }
+  })
+
+  it('changing the country clears the city, which belongs to it', async () => {
+    const user = userEvent.setup()
+    mockCities()
+    renderApp('/applications/new')
+    await screen.findByLabelText('Company')
+    await chooseCountry(user, 'united', 'United States')
+    await user.type(city(), 'spring')
+    await user.click(await within(await screen.findByRole('listbox')).findByRole('option', { name: 'Springfield, Ohio' }))
+    expect(city()).toHaveValue('Springfield, Ohio')
+
+    await user.clear(country())
+    await user.type(country(), 'canada')
+    await user.click(within(screen.getByRole('listbox')).getByRole('option', { name: 'Canada' }))
+
+    expect(city()).toHaveValue('')
+  })
+
+  it('a country alone is a valid place: sends the country and no city', async () => {
+    const user = userEvent.setup()
+    const bodies = capture()
+    renderApp('/applications/new')
+    await fillBasics(user)
+    await chooseCountry(user, 'switz', 'Switzerland')
+    await user.click(screen.getByRole('button', { name: 'Add application' }))
+
+    await screen.findByRole('heading', { name: /Acme/ })
+    expect(bodies[0]).toMatchObject({ country_id: 4, city_id: null, location: null })
+  })
+
+  it('says when a country has no city by that name', async () => {
+    const user = userEvent.setup()
+    mockCities()
+    renderApp('/applications/new')
+    await screen.findByLabelText('Company')
+    await chooseCountry(user, 'switz', 'Switzerland')
+    await user.type(city(), 'springfield')
+    expect(await screen.findByText('No city by that name in this country.')).toBeInTheDocument()
+  })
+
+  it('finds a city by its unaccented spelling', async () => {
+    const user = userEvent.setup()
+    mockCities()
+    renderApp('/applications/new')
+    await screen.findByLabelText('Company')
+    await chooseCountry(user, 'switz', 'Switzerland')
+    await user.type(city(), 'zurich')
+    expect(await listed()).toEqual(['Zürich, Zürich'])
+  })
+
+  describe('typing the place instead', () => {
+    it('is always available, and says what a typed place costs', async () => {
+      const user = userEvent.setup()
+      renderApp('/applications/new')
+      await screen.findByLabelText('Company')
+
+      await user.click(screen.getByRole('button', { name: "Can't find it? Type the place yourself" }))
+
+      expect(screen.getByLabelText('Place, typed')).toBeInTheDocument()
+      expect(screen.getByText(/no state or other structure, so two places with the same name can look identical/i)).toBeInTheDocument()
+      expect(screen.queryByRole('combobox', { name: 'City' })).not.toBeInTheDocument()
+    })
+
+    it('sends the text (with any chosen country) and no city', async () => {
+      const user = userEvent.setup()
+      const bodies = capture()
+      renderApp('/applications/new')
+      await fillBasics(user)
+      await chooseCountry(user, 'canada', 'Canada')
+      await user.click(screen.getByRole('button', { name: "Can't find it? Type the place yourself" }))
+      await user.type(screen.getByLabelText('Place, typed'), '  Nowheresville  ')
+      await user.click(screen.getByRole('button', { name: 'Add application' }))
+
+      await screen.findByRole('heading', { name: /Acme/ })
+      expect(bodies[0]).toMatchObject({ country_id: 1, city_id: null, location: 'Nowheresville' })
+    })
+
+    it('works with no country at all, so nobody is ever blocked', async () => {
+      const user = userEvent.setup()
+      const bodies = capture()
+      renderApp('/applications/new')
+      await fillBasics(user)
+      await user.click(screen.getByRole('button', { name: "Can't find it? Type the place yourself" }))
+      await user.type(screen.getByLabelText('Place, typed'), 'Somewhere remote')
+      await user.click(screen.getByRole('button', { name: 'Add application' }))
+
+      await screen.findByRole('heading', { name: /Acme/ })
+      expect(bodies[0]).toMatchObject({ country_id: null, city_id: null, location: 'Somewhere remote' })
+    })
+
+    it('goes back to the list, and a typed place is not sent while picking', async () => {
+      const user = userEvent.setup()
+      const bodies = capture()
+      renderApp('/applications/new')
+      await fillBasics(user)
+      await user.click(screen.getByRole('button', { name: "Can't find it? Type the place yourself" }))
+      await user.type(screen.getByLabelText('Place, typed'), 'Somewhere')
+      await user.click(screen.getByRole('button', { name: 'Pick a city from the list instead' }))
+      expect(screen.getByRole('combobox', { name: 'City' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Add application' }))
+
+      await screen.findByRole('heading', { name: /Acme/ })
+      expect(bodies[0]).toMatchObject({ location: null, city_id: null })
+    })
+  })
+
+  describe('when the place data cannot be loaded', () => {
+    it('says so, and typing the place still works', async () => {
+      const user = userEvent.setup()
+      const bodies = capture()
+      server.use(http.get(url('/geo/countries'), () => HttpResponse.json({ detail: 'down' }, { status: 500 })))
+      renderApp('/applications/new')
+      await fillBasics(user)
+      expect(await screen.findByPlaceholderText('Could not load countries')).toBeDisabled()
+
+      await user.click(screen.getByRole('button', { name: "Can't find it? Type the place yourself" }))
+      await user.type(screen.getByLabelText('Place, typed'), 'Lisbon')
+      await user.click(screen.getByRole('button', { name: 'Add application' }))
+
+      await screen.findByRole('heading', { name: /Acme/ })
+      expect(bodies[0]).toMatchObject({ location: 'Lisbon', city_id: null })
+    })
+
+    it('a failing city search says so and points at typing', async () => {
+      const user = userEvent.setup()
+      server.use(http.get(url('/geo/cities'), () => HttpResponse.json({ detail: 'down' }, { status: 500 })))
+      renderApp('/applications/new')
+      await screen.findByLabelText('Company')
+      await chooseCountry(user, 'canada', 'Canada')
+      await user.type(city(), 'toronto')
+      expect(await screen.findByText('Could not search cities right now. You can type the place instead.')).toBeInTheDocument()
+    })
   })
 })

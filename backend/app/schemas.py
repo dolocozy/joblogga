@@ -124,6 +124,8 @@ def optional_text(max_length: int):
 
 # Far more rounds than any real process; the cap only stops nonsense.
 MAX_ROUNDS = 50
+# A dataset id: a whole number, strictly (JSON true would otherwise pass for 1).
+PlaceId = Annotated[int, Field(strict=True, ge=1)] | None
 # A whole number, and strictly so: JSON true would otherwise pass for 1.
 Round = Annotated[int, Field(strict=True, ge=1, le=MAX_ROUNDS)] | None
 
@@ -147,7 +149,9 @@ class ApplicationFields(BaseModel):
     resume_version: optional_text(100) = None
     salary_min: int | None = Field(default=None, ge=0)
     salary_max: int | None = Field(default=None, ge=0)
-    location: optional_text(200) = None
+    location: optional_text(200) = None  # typed text; replaced by the generated place when a city is picked
+    country_id: PlaceId = None  # a row of the countries table
+    city_id: PlaceId = None  # a row of the cities table; fixes the state and country too
     work_mode: WorkMode | None = None  # None = not specified
     notes: optional_text(10000) = None
     interview_round: Round = None  # which round you are in
@@ -186,6 +190,8 @@ class ApplicationUpdate(BaseModel):
     salary_min: int | None = Field(default=None, ge=0)
     salary_max: int | None = Field(default=None, ge=0)
     location: optional_text(200) = None
+    country_id: PlaceId = None  # null clears it
+    city_id: PlaceId = None
     work_mode: WorkMode | None = None  # sending null clears it back to "not specified"
     notes: optional_text(10000) = None
     interview_round: Round = None  # null clears it
@@ -220,6 +226,42 @@ def check_rounds(current: int | None, total: int | None) -> None:
         raise ValueError("interview_round cannot be greater than interview_rounds_total")
 
 
+class CountryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    iso2: str | None
+
+
+class StateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class CityMatch(BaseModel):
+    """One line in the city autocomplete. `id` is the exact dataset row that will be stored."""
+
+    id: int
+    name: str
+    state_id: int
+    state: str
+    label: str  # "Springfield, Illinois, United States"
+
+
+class PlaceRef(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class CityRef(PlaceRef):
+    state: PlaceRef
+
+
 class StatusChangeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -240,7 +282,10 @@ class ApplicationOut(BaseModel):
     resume_version: str | None
     salary_min: int | None
     salary_max: int | None
-    location: str | None
+    location: str | None  # the typed text, or the generated place for a picked city
+    location_display: str | None  # the place as it reads everywhere it is shown
+    country: PlaceRef | None
+    city: CityRef | None  # with its state
     work_mode: WorkMode | None
     notes: str | None
     interview_round: int | None

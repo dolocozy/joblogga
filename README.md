@@ -112,7 +112,8 @@ Interactive docs are at http://localhost:8000/docs when the backend is running.
 | POST | `/auth/password-reset/confirm` | Set a new password with a reset token |
 | GET | `/health` | Liveness check |
 | POST | `/applications` | Create (records the initial status) |
-| GET | `/applications` | List; filters `status`, `work_mode` (either can repeat), `company`, `q`, `date_from`, `date_to`; `limit`/`offset` |
+| GET | `/applications` | List; filters `status`, `work_mode` (either can repeat), `country_id`, `state_id`, `company`, `q`, `date_from`, `date_to`; `limit`/`offset` |
+| GET | `/geo/countries`, `/geo/states?country_id=`, `/geo/cities?country_id=&q=` | The place picker's lookups, read from our own database (login required) |
 | GET | `/applications/export.csv` | Every application as a CSV file (your backup); includes status history; ignores list filters |
 | GET | `/applications/upcoming` | Open applications with a follow-up overdue or due within `days` (default 7) |
 | GET / PATCH / DELETE | `/applications/{id}` | Read (with status history) / partial update / delete |
@@ -125,9 +126,25 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 ## Data model
 
 - `users`: email (unique), bcrypt hash, `email_verified_at` (empty until verified), `session_version` (random at signup; bumped by a password reset to end earlier sessions).
+- `countries`, `states`, `cities`: the place data (see Places), loaded once by a migration. Their ids are the dataset's own.
 - `password_reset_tokens`, `email_verification_tokens`: hash of each token, its expiry, and when it was used.
-- `applications`: belongs to a user; company, role, job link, date applied (empty while Saved), resume version, salary min/max, location, work mode (remote, hybrid or in person; empty means not specified), interview round and total rounds (optional, e.g. round 2 of 3; kept as a record after the application moves on, and with no effect on status or any statistic), notes, current status, follow-up date.
+- `applications`: belongs to a user; company, role, job link, date applied (empty while Saved), resume version, salary min/max, location (readable text) with `country_id` and `city_id` pointing at the place tables, work mode (remote, hybrid or in person; empty means not specified), interview round and total rounds (optional, e.g. round 2 of 3; kept as a record after the application moves on, and with no effect on status or any statistic), notes, current status, follow-up date.
 - `status_changes`: append-only log (`from_status`, `to_status`, timestamp) written whenever an application's status changes, so the full timeline is kept.
+
+## Places
+
+The location field is a country and a city picked from real data, with a way to type a place that is missing.
+
+- **Data:** the [countries-states-cities database](https://github.com/dr5hn/countries-states-cities-database) (ODbL 1.0): 250 countries and territories, 5,308 states and provinces and 152,970 cities. It is vendored, unmodified and pinned to one upstream version with checksums, in `backend/data/geo` (about 5.4 MB, with its license and a NOTICE). Migration `0008` loads it once; every lookup afterwards reads our own tables, so there is no API key, rate limit, network dependency or ongoing cost. Adding the database took about 15 MB.
+- **A picked city is a specific row, not text.** Many names repeat (twenty Springfields in the US alone), so the list shows each match with its state ("Springfield, Illinois"), and choosing one stores that city's id. Its state and country come with it, so there is no state box; the readable place ("Springfield, Illinois, United States") is generated on the server, never trusted from the client, and shown wherever a location appears, including the CSV.
+- **Typed places** are still allowed, alongside a country if you like. The form says a typed place has no structure, so two places with the same name can look identical.
+- **Existing locations were not touched.** `location` keeps its column and every value; the migration adds nullable `country_id` and `city_id` and does not try to parse old text into places, which would risk silently corrupting real data. Re-pick a place on an application if you want the structure.
+- **Search** matches from the start of a name, ignoring case and accents (`zurich` finds Zürich), biggest places first, using a normalised `search_name` column and a plain index that works the same on Postgres and SQLite. Keyword search on the applications list also matches cities, states and country names.
+- **Filters:** by country, and by state or province once a country is chosen. Applications with a typed place have no country or state to filter by.
+- **Export:** the `Location` column stays (now with the state and country for a picked place), and `Country`, `State` and `City` columns are added.
+- **Tests** run against a tiny stand-in dataset (with duplicate names on purpose) so the suite stays fast; one file checks the real files' checksums and row counts and loads them through the migration on both databases.
+
+Place data: countries-states-cities-database, ODbL v1.0, credited on the landing page. The data files stay under the ODbL; the rest of the repository is MIT.
 
 ## Dashboard
 
@@ -235,6 +252,7 @@ Notes:
 - **Rate limits live in the API process's memory.** Fine for one server (they reset on restart); running several instances would need a shared store.
 - **The free hosting tiers sleep.** The first request after a quiet spell can take up to a minute; the landing page pings the API to wake it early.
 - **Touch dragging is untested.** The board is configured for touch (a brief press starts a drag, so swiping still scrolls) but has not been tried on a real touch device. Mouse and keyboard dragging were tested in a browser.
+- **The place data is community-maintained and uneven.** It lists administrative divisions as well as cities (the same place can appear as both a district and a city), some countries have no cities and a few have no states, and "state" means whatever the first division of a country is (counties in the UK, municipalities in Slovenia). Where the same name appears twice in one state, the autocomplete offers the biggest and both rows stay in the table. A place missing from the data can be typed.
 - **Login tokens live in `localStorage`** (see Auth design for the trade-off).
 
 ## License

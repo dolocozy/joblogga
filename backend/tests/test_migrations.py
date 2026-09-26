@@ -14,7 +14,7 @@ from tests.conftest import TEST_DATABASE_URL, reset_database
 ON_POSTGRES = not TEST_DATABASE_URL.startswith("sqlite")
 BASELINE = "0001"
 HEAD = ScriptDirectory(str(BACKEND_DIR / "alembic")).get_current_head()  # moves with every new migration
-TABLES = {"users", "applications", "status_changes", "password_reset_tokens", "email_verification_tokens"}
+TABLES = {"users", "applications", "status_changes", "password_reset_tokens", "email_verification_tokens", "countries", "states", "cities"}
 
 
 @pytest.fixture
@@ -437,3 +437,100 @@ def test_downgrading_drops_only_the_round_columns(engine):
     columns = {c["name"] for c in inspect(engine).get_columns("applications")}
     assert not {"interview_round", "interview_rounds_total"} & columns
     assert counts(engine) == (1, 1, 1)
+
+
+# --- 0008: real places, and a structured location ------------------------------
+
+LOCATIONS = ["Springfield", "Remote", "Zürich, Switzerland", "  spaced  ", "東京", "New York, NY / Hybrid", ""]
+
+
+def seed_locations(engine) -> None:
+    """Applications as they were before places existed: whatever people typed."""
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO users (id, email, hashed_password, created_at) VALUES (1, 'me@example.com', 'x', '2026-01-01 00:00:00')"))
+        for i, value in enumerate(LOCATIONS, start=1):
+            conn.execute(
+                text(
+                    "INSERT INTO applications (id, user_id, company, role, date_applied, status, location, created_at, updated_at) "
+                    "VALUES (:id, 1, :company, 'Eng', '2026-03-01', 'applied', :location, '2026-03-01 00:00:00', '2026-03-01 00:00:00')"
+                ),
+                {"id": i, "company": f"Co {i}", "location": value},
+            )
+        conn.execute(
+            text(
+                "INSERT INTO applications (id, user_id, company, role, date_applied, status, location, created_at, updated_at) "
+                "VALUES (50, 1, 'No location', 'Eng', '2026-03-01', 'applied', NULL, '2026-03-01 00:00:00', '2026-03-01 00:00:00')"
+            )
+        )
+
+
+def stored_locations(engine) -> dict[int, str | None]:
+    with engine.connect() as conn:
+        return {row[0]: row[1] for row in conn.execute(text("SELECT id, location FROM applications ORDER BY id"))}
+
+
+def test_every_existing_location_survives_untouched_and_unparsed(engine):
+    migrate_to(engine, "0007")
+    seed_locations(engine)
+    before = stored_locations(engine)
+
+    upgrade_database(engine)
+
+    assert stored_locations(engine) == before  # not one character changed, nothing renamed, nothing "cleverly" parsed
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT COUNT(*) FROM applications WHERE country_id IS NOT NULL OR city_id IS NOT NULL")).scalar() == 0
+        assert schema_differences(conn) == []
+
+
+def test_the_upgrade_loads_the_place_tables_from_the_configured_folder(engine):
+    upgrade_database(engine)
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT COUNT(*) FROM countries")).scalar() == 7
+        assert conn.execute(text("SELECT COUNT(*) FROM states")).scalar() == 9
+        assert conn.execute(text("SELECT COUNT(*) FROM cities")).scalar() == 15
+        # trimmed on the way in, accents folded into the search column, an unknown size kept unknown
+        assert conn.execute(text("SELECT name, search_name FROM cities WHERE id = 113")).one() == ("Springfield", "springfield")
+        assert conn.execute(text("SELECT search_name FROM cities WHERE id = 105")).scalar() == "zurich"
+        assert conn.execute(text("SELECT population FROM cities WHERE id = 106")).scalar() is None
+
+
+def test_the_loaded_places_are_consistent(engine):
+    upgrade_database(engine)
+    with engine.connect() as conn:
+        orphans = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM cities c JOIN states s ON s.id = c.state_id WHERE s.country_id <> c.country_id"
+            )
+        ).scalar()
+        assert orphans == 0  # every city's state belongs to the city's country
+
+
+def test_old_code_can_still_add_applications_while_the_new_columns_are_live(engine):
+    migrate_to(engine, "0007")
+    seed_locations(engine)
+    upgrade_database(engine)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO applications (id, user_id, company, role, date_applied, status, location, created_at, updated_at) "
+                "VALUES (97, 1, 'Old code', 'Eng', '2026-03-02', 'applied', 'Paris', '2026-03-02 00:00:00', '2026-03-02 00:00:00')"
+            )
+        )
+        assert conn.execute(text("SELECT country_id, city_id FROM applications WHERE id = 97")).one() == (None, None)
+
+
+def test_downgrading_keeps_every_location_and_drops_only_the_places(engine):
+    upgrade_database(engine)
+    seed_locations(engine)
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE applications SET country_id = 6, city_id = 108, location = 'Springfield, Illinois, United States' WHERE id = 1"))
+    before = stored_locations(engine)
+
+    with engine.begin() as conn:
+        command.downgrade(alembic_config(conn), "0007")
+
+    assert version(engine) == "0007"
+    assert stored_locations(engine) == before  # the readable place is still there, structure or not
+    assert not {"countries", "states", "cities"} & tables(engine)
+    columns = {c["name"] for c in inspect(engine).get_columns("applications")}
+    assert not {"country_id", "city_id"} & columns

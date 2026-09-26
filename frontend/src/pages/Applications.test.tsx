@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { formatIsoDate, localToday } from '../dates'
 import { saveFile } from '../download'
 import { server } from '../test/server'
-import { makeApplication, manyApplications, mockList, mockUpcoming, renderApp, signIn, url } from '../test/helpers'
+import { makeApplication, manyApplications, mockList, mockStates, mockUpcoming, renderApp, signIn, url, withPlace } from '../test/helpers'
 
 // The real saveFile clicks a hidden link; here we only need to know it was asked to.
 vi.mock('../download', () => ({ saveFile: vi.fn() }))
@@ -24,7 +24,8 @@ describe('list', () => {
     renderApp('/applications')
 
     expect(await screen.findByText('Globex')).toBeInTheDocument()
-    expect(screen.getByText('Analyst, Remote')).toBeInTheDocument()
+    expect(screen.getByText('Analyst')).toBeInTheDocument()
+    expect(screen.getByText('Remote', { selector: 'span' })).toBeInTheDocument() // the typed place, on its own line (not the filter's option)
     expect(screen.getByRole('combobox', { name: 'Status for Globex' })).toHaveValue('interview')
     expect(screen.getByText(/showing 1–1 of 1/i)).toBeInTheDocument()
   })
@@ -420,16 +421,17 @@ describe('follow-up reminders panel', () => {
 })
 
 describe('work mode on the list', () => {
-  it('shows it after the location, as part of the same phrase', async () => {
+  it('shows it after the role, with the place on its own line', async () => {
     mockList([makeApplication({ id: 1, company: 'Globex', role: 'Analyst', location: 'Portland', work_mode: 'hybrid' })])
     renderApp('/applications')
-    expect(await screen.findByText('Analyst, Portland, Hybrid')).toBeInTheDocument()
+    expect(await screen.findByText('Analyst, Hybrid')).toBeInTheDocument()
+    expect(screen.getByText('Portland')).toBeInTheDocument()
   })
 
   it.each([
     ['remote', 'Analyst, Remote'],
     ['in_person', 'Analyst, In person'],
-  ] as const)('shows %s even with no location', async (mode, text) => {
+  ] as const)('shows %s even with no place', async (mode, text) => {
     mockList([makeApplication({ role: 'Analyst', location: null, work_mode: mode })])
     renderApp('/applications')
     expect(await screen.findByText(text)).toBeInTheDocument()
@@ -438,7 +440,7 @@ describe('work mode on the list', () => {
   it('shows nothing for an application with no work mode, not a placeholder', async () => {
     mockList([makeApplication({ role: 'Analyst', location: 'Portland', work_mode: null })])
     renderApp('/applications')
-    expect(await screen.findByText('Analyst, Portland')).toBeInTheDocument()
+    expect(await screen.findByText('Analyst')).toBeInTheDocument()
     expect(screen.queryByText(/not specified/i, { selector: 'span' })).not.toBeInTheDocument()
   })
 })
@@ -684,5 +686,127 @@ describe('interview rounds on the list', () => {
     mockList([makeApplication({ id: 1, company: 'Acme', status: 'offer', interview_round: 3, interview_rounds_total: 3 })])
     renderApp('/applications')
     expect((await screen.findByText('Acme')).closest('li')).toHaveTextContent('Round 3 of 3')
+  })
+})
+
+describe('places on the list and board', () => {
+  const TWO_SPRINGFIELDS = () => [
+    makeApplication({ id: 1, company: 'Acme', ...withPlace(108) }),
+    makeApplication({ id: 2, company: 'Globex', ...withPlace(110) }),
+    makeApplication({ id: 3, company: 'Initech', location: 'Springfield' }), // typed: no structure
+  ]
+
+  it('shows each place with its state and country, so two Springfields never read the same', async () => {
+    mockList(TWO_SPRINGFIELDS())
+    renderApp('/applications')
+    await screen.findByText('Acme')
+
+    const place = (company: string) => within(screen.getByText(company).closest('li')!).getByText(/Springfield/, { selector: 'span' }).textContent
+    expect(place('Acme')).toBe('Springfield, Illinois, United States')
+    expect(place('Globex')).toBe('Springfield, Ohio, United States')
+    expect(place('Initech')).toBe('Springfield') // a typed place is shown as typed
+    expect(place('Acme')).not.toBe(place('Globex'))
+  })
+
+  it('shows them the same way on board cards', async () => {
+    mockList(TWO_SPRINGFIELDS())
+    renderApp('/applications?view=board')
+    await screen.findByRole('region', { name: /^Applied,/ })
+
+    const cards = within(screen.getByRole('region', { name: /^Applied,/ }))
+    expect(cards.getByText('Springfield, Illinois, United States')).toBeInTheDocument()
+    expect(cards.getByText('Springfield, Ohio, United States')).toBeInTheDocument()
+  })
+
+  it('leaves the line out when there is no place at all', async () => {
+    mockList([makeApplication({ id: 1, company: 'Acme', role: 'Analyst' })])
+    renderApp('/applications')
+    const row = (await screen.findByText('Acme')).closest('li')!
+    expect(within(row).getAllByText(/./, { selector: 'span.block' })).toHaveLength(2) // the company and the role, nothing else
+  })
+})
+
+describe('the country and state filters', () => {
+  it('offers every country, sends the chosen one, and asks for its states', async () => {
+    const user = userEvent.setup()
+    const seen = mockList([])
+    const stateSeen = mockStates({ 6: [{ id: 15, name: 'Illinois' }, { id: 16, name: 'Missouri' }] })
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+    const select = await screen.findByRole('combobox', { name: 'Filter by country' })
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['All countries', 'Canada', 'Switzerland', 'United States'])
+    expect(screen.queryByRole('combobox', { name: 'Filter by state or province' })).not.toBeInTheDocument() // nothing to choose yet
+
+    await user.selectOptions(select, 'United States')
+
+    await waitFor(() => expect(lastParams(seen).country_id).toBe('6'))
+    const state = await screen.findByRole('combobox', { name: 'Filter by state or province' })
+    expect(within(state).getAllByRole('option').map((o) => o.textContent)).toEqual(['All states and provinces', 'Illinois', 'Missouri'])
+    expect(stateSeen.at(-1)!.searchParams.get('country_id')).toBe('6')
+  })
+
+  it('sends the state as well, and picking another country clears it', async () => {
+    const user = userEvent.setup()
+    const seen = mockList([])
+    mockStates({ 6: [{ id: 15, name: 'Illinois' }], 1: [{ id: 10, name: 'Ontario' }] })
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+
+    await user.selectOptions(await screen.findByRole('combobox', { name: 'Filter by country' }), 'United States')
+    await user.selectOptions(await screen.findByRole('combobox', { name: 'Filter by state or province' }), 'Illinois')
+    await waitFor(() => expect(lastParams(seen)).toMatchObject({ country_id: '6', state_id: '15' }))
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by country' }), 'Canada')
+
+    await waitFor(() => expect(lastParams(seen)).toMatchObject({ country_id: '1' }))
+    expect(lastParams(seen)).not.toHaveProperty('state_id') // an Illinois filter makes no sense inside Canada
+    expect(await screen.findByRole('combobox', { name: 'Filter by state or province' })).toHaveValue('')
+  })
+
+  it('goes back to the first page when either changes, like the other filters', async () => {
+    const user = userEvent.setup()
+    const seen = mockList(manyApplications(45))
+    mockStates({})
+    renderApp('/applications')
+    await screen.findByText('Company 1')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() => expect(lastParams(seen).offset).toBe('20'))
+
+    await user.selectOptions(await screen.findByRole('combobox', { name: 'Filter by country' }), 'Canada')
+
+    await waitFor(() => expect(lastParams(seen)).toMatchObject({ country_id: '1', offset: '0' }))
+  })
+
+  it('counts as an active filter, and Clear filters resets both', async () => {
+    const user = userEvent.setup()
+    const seen = mockList([])
+    mockStates({ 6: [{ id: 15, name: 'Illinois' }] })
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+
+    await user.selectOptions(await screen.findByRole('combobox', { name: 'Filter by country' }), 'United States')
+    expect(await screen.findByText('No applications match your filters.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+
+    expect(screen.getByRole('combobox', { name: 'Filter by country' })).toHaveValue('')
+    await waitFor(() => expect(lastParams(seen)).not.toHaveProperty('country_id'))
+    expect(screen.queryByRole('combobox', { name: 'Filter by state or province' })).not.toBeInTheDocument()
+  })
+
+  it('also applies on the board and in the saved view', async () => {
+    const user = userEvent.setup()
+    const seen = mockList([])
+    renderApp('/applications?view=saved')
+    await screen.findByText(/no saved jobs yet/i)
+    await user.selectOptions(await screen.findByRole('combobox', { name: 'Filter by country' }), 'Canada')
+    await waitFor(() => expect(lastParams(seen)).toMatchObject({ country_id: '1', status: 'saved' }))
+  })
+
+  it('is simply not offered if the countries cannot be loaded, and the list still works', async () => {
+    server.use(http.get(url('/geo/countries'), () => HttpResponse.json({ detail: 'down' }, { status: 500 })))
+    mockList([makeApplication({ company: 'Acme' })])
+    renderApp('/applications')
+    expect(await screen.findByText('Acme')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Filter by country' })).not.toBeInTheDocument()
   })
 })

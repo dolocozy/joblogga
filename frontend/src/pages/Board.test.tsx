@@ -196,7 +196,8 @@ describe('the board', () => {
     await screen.findByRole('region', { name: /^Applied,/ })
 
     const card = cardIn(column('Interview'), 'Globex')
-    expect(card).toHaveTextContent('Analyst, Remote')
+    expect(card).toHaveTextContent('Analyst')
+    expect(card).toHaveTextContent('Remote') // the typed place
     expect(within(card).getByRole('link')).toHaveAttribute('href', '/applications/2')
   })
 
@@ -408,7 +409,7 @@ describe('Board on its own', () => {
 })
 
 describe('work mode on a card', () => {
-  it('shows it in the role line, beside the location', async () => {
+  it('shows it in the role line, and the place on a line of its own', async () => {
     mockBackend([
       makeApplication({ id: 1, company: 'Acme', role: 'Engineer', location: 'Portland', work_mode: 'hybrid', status: 'applied' }),
       makeApplication({ id: 2, company: 'Globex', role: 'Analyst', location: null, work_mode: 'remote', status: 'applied' }),
@@ -417,8 +418,9 @@ describe('work mode on a card', () => {
     renderApp('/applications?view=board')
     await screen.findByRole('region', { name: /^Applied,/ })
 
-    expect(cardIn(column('Applied'), 'Acme')).toHaveTextContent('Engineer, Portland, Hybrid')
-    expect(cardIn(column('Applied'), 'Globex')).toHaveTextContent('Analyst, Remote')
+    expect(cardIn(column('Applied'), 'Acme')).toHaveTextContent('Engineer, Hybrid')
+    expect(cardIn(column('Applied'), 'Acme')).toHaveTextContent('Portland')
+    expect(cardIn(column('Applied'), 'Globex')).toHaveTextContent('Analyst, Remote') // the work mode
     expect(cardIn(column('Applied'), 'Initech')).not.toHaveTextContent(/Manager,/) // nothing to add: no trailing comma or placeholder
   })
 })

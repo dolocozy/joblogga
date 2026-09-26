@@ -9,7 +9,7 @@ import RoundsNote from '../components/RoundsNote'
 import StatusBadge from '../components/StatusBadge'
 import { formatDateTime } from '../dates'
 import { statusLabel } from '../status'
-import { roleLine } from '../workMode'
+import { placeLine, roleLine } from '../workMode'
 
 function toInput(a: Detail): ApplicationInput {
   return {
@@ -21,6 +21,8 @@ function toInput(a: Detail): ApplicationInput {
     salary_min: a.salary_min,
     salary_max: a.salary_max,
     location: a.location,
+    country_id: a.country?.id ?? null,
+    city_id: a.city?.id ?? null,
     work_mode: a.work_mode,
     notes: a.notes,
     interview_round: a.interview_round,
@@ -84,6 +86,7 @@ export default function ApplicationDetail() {
       <div className="mb-6 mt-3">
         <h1 className="text-3xl">{app.company}</h1>
         <p className="text-lg text-ink-soft">{roleLine(app)}</p>
+        {placeLine(app) && <p className="text-ink-soft">{placeLine(app)}</p>}
         <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1">
           <StatusBadge status={app.status} />
           <RoundsNote app={app} className="text-sm" />
@@ -111,6 +114,11 @@ export default function ApplicationDetail() {
           <ApplicationForm
             key={app.updated_at}
             initial={toInput(app)}
+            initialPlace={{
+              country: app.country,
+              city: app.city ? { id: app.city.id, label: `${app.city.name}, ${app.city.state.name}` } : null,
+              location: app.location,
+            }}
             submitLabel="Save changes"
             onSubmit={async (input) => {
               setSaved(false)

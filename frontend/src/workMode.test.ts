@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { WORK_MODES } from './api'
-import { roleLine, workModeLabel } from './workMode'
+import { placeLine, roleLine, workModeLabel } from './workMode'
 
 describe('work mode labels', () => {
   it('has readable words for every mode, never the stored value', () => {
@@ -11,14 +11,27 @@ describe('work mode labels', () => {
 })
 
 describe('roleLine', () => {
-  it('joins role, location and work mode with commas', () => {
-    expect(roleLine({ role: 'Analyst', location: 'Portland', work_mode: 'hybrid' })).toBe('Analyst, Portland, Hybrid')
+  it('is the role, then the work mode when there is one', () => {
+    expect(roleLine({ role: 'Analyst', work_mode: 'hybrid' })).toBe('Analyst, Hybrid')
+    expect(roleLine({ role: 'Analyst', work_mode: 'in_person' })).toBe('Analyst, In person')
   })
 
-  it('leaves out whatever is not given', () => {
-    expect(roleLine({ role: 'Analyst', location: null, work_mode: null })).toBe('Analyst')
-    expect(roleLine({ role: 'Analyst', location: 'Portland', work_mode: null })).toBe('Analyst, Portland')
-    expect(roleLine({ role: 'Analyst', location: null, work_mode: 'remote' })).toBe('Analyst, Remote')
-    expect(roleLine({ role: 'Analyst', location: '', work_mode: null })).toBe('Analyst')
+  it('leaves out a work mode that is not specified', () => {
+    expect(roleLine({ role: 'Analyst', work_mode: null })).toBe('Analyst')
+  })
+})
+
+describe('placeLine', () => {
+  it('is the generated place, with its state, for a picked city', () => {
+    expect(placeLine({ location_display: 'Springfield, Illinois, United States' })).toBe('Springfield, Illinois, United States')
+  })
+
+  it('is null when there is no place, so nothing is shown', () => {
+    expect(placeLine({ location_display: null })).toBeNull()
+    expect(placeLine({ location_display: '' })).toBeNull()
+  })
+
+  it('keeps two Springfields distinguishable', () => {
+    expect(placeLine({ location_display: 'Springfield, Illinois, United States' })).not.toBe(placeLine({ location_display: 'Springfield, Ohio, United States' }))
   })
 })

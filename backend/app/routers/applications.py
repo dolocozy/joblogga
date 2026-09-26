@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.export import applications_to_csv
 from app.deps import get_current_user
-from app.models import Application, ApplicationStatus, StatusChange, User, WorkMode
+from app.geo import place_label
+from app.models import Application, ApplicationStatus, City, Country, StatusChange, User, WorkMode
 from app.schemas import (
     ApplicationCreate,
     ApplicationDetail,
@@ -33,6 +34,42 @@ CLOSED_STATUSES = (
 )
 
 
+def resolve_place(db: Session, changes: dict, current: Application | None) -> None:
+    """Make the place fields of a create or update consistent, editing `changes` in place.
+
+    The client sends what the person chose: a city (which fixes the state and country), a country
+    alone, or neither, plus any typed text. This checks the ids are real dataset rows and keeps them
+    consistent: a city's country is always its own, and a picked city's readable `location` is
+    generated here, never trusted from the client, so the text can never disagree with the id.
+    Only runs when a place field was actually sent, so an edit to something else leaves it alone.
+    """
+    if "city_id" not in changes and "country_id" not in changes:
+        return
+    city_id = changes["city_id"] if "city_id" in changes else (current.city_id if current else None)
+    # A newly chosen city brings its own country, so the stored country is not compared against it. Only a country the
+    # client sent in this request is, and a country change with the old city left in place is a mismatch.
+    if "country_id" in changes:
+        country_id = changes["country_id"]
+    elif "city_id" in changes:
+        country_id = None
+    else:
+        country_id = current.country_id if current else None
+    country = None
+    if country_id is not None:
+        country = db.get(Country, country_id)
+        if country is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown country")
+    if city_id is not None:
+        city = db.get(City, city_id)
+        if city is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown city")
+        if country is not None and country.id != city.country_id:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="That city is not in that country")
+        changes["country_id"] = city.country_id
+        changes["city_id"] = city.id
+        changes["location"] = place_label(city.name, city.state.name, city.country.name)
+
+
 def get_owned_application(db: Session, user: User, application_id: int) -> Application:
     """Fetch an application only if it belongs to `user`.
 
@@ -49,7 +86,9 @@ def get_owned_application(db: Session, user: User, application_id: int) -> Appli
 
 @router.post("", response_model=ApplicationDetail, status_code=status.HTTP_201_CREATED)
 def create_application(body: ApplicationCreate, db: DbSession, user: CurrentUser) -> Application:
-    app = Application(**body.model_dump(), user_id=user.id)
+    data = body.model_dump()
+    resolve_place(db, data, None)
+    app = Application(**data, user_id=user.id)
     # The first history row records where the application started (from = None).
     app.history.append(StatusChange(from_status=None, to_status=app.status))
     db.add(app)
@@ -63,8 +102,10 @@ def list_applications(
     user: CurrentUser,
     status_in: Annotated[list[ApplicationStatus] | None, Query(alias="status")] = None,
     work_mode: Annotated[list[WorkMode] | None, Query(description="Only these work modes (repeat the parameter for several)")] = None,
+    country_id: Annotated[int | None, Query(ge=1, description="Only this country (a picked city or country)")] = None,
+    state_id: Annotated[int | None, Query(ge=1, description="Only places in this state or province")] = None,
     company: Annotated[str | None, Query(max_length=200, description="Company contains…")] = None,
-    q: Annotated[str | None, Query(max_length=200, description="Keyword in company, role, location or notes")] = None,
+    q: Annotated[str | None, Query(max_length=200, description="Keyword in company, role, location (city, state or country) or notes")] = None,
     date_from: date | None = None,
     date_to: date | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
@@ -76,6 +117,11 @@ def list_applications(
         conditions.append(Application.status.in_(status_in))
     if work_mode:
         conditions.append(Application.work_mode.in_(work_mode))
+    if country_id:
+        conditions.append(Application.country_id == country_id)
+    if state_id:
+        # A state is known only through a picked city, so this is "the city is one of that state's".
+        conditions.append(Application.city_id.in_(select(City.id).where(City.state_id == state_id)))
     if company:
         # autoescape: a user typing "%" or "_" searches for those characters
         # literally instead of them acting as SQL wildcards.
@@ -86,6 +132,8 @@ def list_applications(
                 Application.company.icontains(q, autoescape=True),
                 Application.role.icontains(q, autoescape=True),
                 Application.location.icontains(q, autoescape=True),
+                # A typed place with a picked country ("Somewhere" + Canada) is still found by "canada".
+                Application.country.has(Country.name.icontains(q, autoescape=True)),
                 Application.notes.icontains(q, autoescape=True),
             )
         )
@@ -185,6 +233,8 @@ def update_application(
     except ValueError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
+    resolve_place(db, changes, app)
+
     new_status = changes.pop("status", None)
     resulting_status = new_status if new_status is not None else app.status
     resulting_date = changes["date_applied"] if "date_applied" in changes else app.date_applied
@@ -200,6 +250,8 @@ def update_application(
         app.history.append(StatusChange(from_status=app.status, to_status=new_status))
         app.status = new_status
     db.commit()
+    # The place relationships were loaded before the change; reload so the response shows the new city and country.
+    db.refresh(app)
     return app
 
 

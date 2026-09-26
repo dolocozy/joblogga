@@ -144,6 +144,13 @@ export default function Landing() {
             </a>
             .
           </p>
+          <p>
+            Place data from the{' '}
+            <a href="https://github.com/dr5hn/countries-states-cities-database" className="link" target="_blank" rel="noopener noreferrer">
+              countries-states-cities database
+            </a>{' '}
+            (ODbL).
+          </p>
           <p>Built with Claude Code as a development tool.</p>
         </div>
       </footer>

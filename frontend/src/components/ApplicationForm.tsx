@@ -10,9 +10,13 @@ import { workModeLabel } from '../workMode'
 import { showsRoundFields } from '../rounds'
 import { httpUrlRule, required, roundRule, wholeNumberRule } from '../validation'
 import Field from './Field'
+import PlacePicker from './PlacePicker'
+import type { InitialPlace, PlaceValue } from './PlacePicker'
 
 interface Props {
   initial?: ApplicationInput
+  // The names behind the ids in `initial` (which country and city), for showing them. Blank for a new application.
+  initialPlace?: InitialPlace
   submitLabel: string
   onSubmit: (input: ApplicationInput) => Promise<void>
 }
@@ -21,7 +25,7 @@ interface Props {
 const orNull = (v: string) => (v.trim() === '' ? null : v.trim())
 const numOrNull = (v: string) => (v.trim() === '' ? null : Number(v))
 
-export default function ApplicationForm({ initial = blankApplication(), submitLabel, onSubmit }: Props) {
+export default function ApplicationForm({ initial = blankApplication(), initialPlace, submitLabel, onSubmit }: Props) {
   const base = useId()
   const id = (name: string) => `${base}-${name}`
 
@@ -32,7 +36,8 @@ export default function ApplicationForm({ initial = blankApplication(), submitLa
   const [resume, setResume] = useState(initial.resume_version ?? '')
   const [salaryMin, setSalaryMin] = useState(initial.salary_min?.toString() ?? '')
   const [salaryMax, setSalaryMax] = useState(initial.salary_max?.toString() ?? '')
-  const [location, setLocation] = useState(initial.location ?? '')
+  // The picker reports what to send; until it does, what the application already has.
+  const [place, setPlace] = useState<PlaceValue>({ country_id: initial.country_id, city_id: initial.city_id, location: initial.location })
   const [workMode, setWorkMode] = useState<WorkMode | ''>(initial.work_mode ?? '')
   const [notes, setNotes] = useState(initial.notes ?? '')
   const [round, setRound] = useState(initial.interview_round?.toString() ?? '')
@@ -107,7 +112,7 @@ export default function ApplicationForm({ initial = blankApplication(), submitLa
         resume_version: orNull(resume),
         salary_min: numOrNull(salaryMin),
         salary_max: numOrNull(salaryMax),
-        location: orNull(location),
+        ...place,
         work_mode: workMode || null,
         notes: orNull(notes),
         interview_round: numOrNull(round),
@@ -143,9 +148,7 @@ export default function ApplicationForm({ initial = blankApplication(), submitLa
             {(c) => <input {...c} type="url" placeholder="https://" value={jobUrl} {...bind('job_url', setJobUrl)} className="input" />}
           </Field>
         </div>
-        <Field id={id('location')} label="Location">
-          {(c) => <input {...c} maxLength={200} value={location} onChange={(e) => setLocation(e.target.value)} className="input" />}
-        </Field>
+        <PlacePicker idBase={id('place')} initial={initialPlace ?? { country: null, city: null, location: initial.location }} onChange={setPlace} />
         <Field id={id('work_mode')} label="Work mode">
           {(c) => (
             <select {...c} value={workMode} onChange={(e) => setWorkMode(e.target.value as WorkMode | '')} className="input">

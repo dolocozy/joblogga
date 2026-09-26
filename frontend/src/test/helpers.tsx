@@ -11,7 +11,7 @@ export const url = (path: string) => `${API_URL}${path}`
 export const USER = { id: 1, email: 'me@example.com', created_at: '2026-01-01T00:00:00Z', email_verified: true }
 
 export function makeApplication(overrides: Partial<Application> = {}): Application {
-  return {
+  const app: Application = {
     id: 1,
     company: 'Acme',
     role: 'Engineer',
@@ -21,6 +21,9 @@ export function makeApplication(overrides: Partial<Application> = {}): Applicati
     salary_min: null,
     salary_max: null,
     location: null,
+    location_display: null,
+    country: null,
+    city: null,
     work_mode: null,
     notes: null,
     interview_round: null,
@@ -31,11 +34,13 @@ export function makeApplication(overrides: Partial<Application> = {}): Applicati
     updated_at: '2026-03-01T12:00:00Z',
     ...overrides,
   }
+  // Typed text reads as itself, like the server's location_display, unless a test sets the display explicitly.
+  return { ...app, location_display: overrides.location_display !== undefined ? overrides.location_display : app.location }
 }
 
 export function makeDetail(overrides: Partial<ApplicationDetail> = {}): ApplicationDetail {
   return {
-    ...makeApplication(),
+    ...makeApplication(overrides),
     history: [{ id: 1, from_status: null, to_status: 'applied', changed_at: '2026-03-01T12:00:00Z' }],
     ...overrides,
   }
@@ -118,4 +123,55 @@ export function mockStats(stats: Stats = makeStats(), seen: URL[] = []) {
     }),
   )
   return seen
+}
+
+/** Real-looking city rows, including the ambiguous names the picker exists to tell apart. */
+export const CITIES = [
+  { id: 108, name: 'Springfield', state_id: 15, state: 'Illinois', country_id: 6 },
+  { id: 109, name: 'Springfield', state_id: 16, state: 'Missouri', country_id: 6 },
+  { id: 110, name: 'Springfield', state_id: 17, state: 'Ohio', country_id: 6 },
+  { id: 100, name: 'Toronto', state_id: 10, state: 'Ontario', country_id: 1 },
+  { id: 105, name: 'Zürich', state_id: 13, state: 'Zürich', country_id: 4 },
+]
+
+/** Fake `GET /geo/cities`: names starting with q, in the country, each with its state and full label. Records each query. */
+export function mockCities(seen: URL[] = []) {
+  const country = (id: number) => ({ 1: 'Canada', 4: 'Switzerland', 6: 'United States' })[id]
+  server.use(
+    http.get(url('/geo/cities'), ({ request }) => {
+      const u = new URL(request.url)
+      seen.push(u)
+      const q = (u.searchParams.get('q') ?? '').toLowerCase()
+      const norm = (s: string) => s.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase()
+      const hits = CITIES.filter((c) => c.country_id === Number(u.searchParams.get('country_id')) && norm(c.name).startsWith(norm(q)))
+      return HttpResponse.json(hits.map((c) => ({ id: c.id, name: c.name, state_id: c.state_id, state: c.state, label: `${c.name}, ${c.state}, ${country(c.country_id)}` })))
+    }),
+  )
+  return seen
+}
+
+/** Fake `GET /geo/states` for the state filter. */
+export function mockStates(byCountry: Record<number, { id: number; name: string }[]>, seen: URL[] = []) {
+  server.use(
+    http.get(url('/geo/states'), ({ request }) => {
+      const u = new URL(request.url)
+      seen.push(u)
+      return HttpResponse.json(byCountry[Number(u.searchParams.get('country_id'))] ?? [])
+    }),
+  )
+  return seen
+}
+
+/** An application with a picked place, as the API returns it: the city with its state, the country, and the generated text. */
+export function withPlace(cityId: number, overrides: Partial<Application> = {}): Partial<Application> {
+  const c = CITIES.find((x) => x.id === cityId)!
+  const country = { 1: 'Canada', 4: 'Switzerland', 6: 'United States' }[c.country_id]!
+  const label = `${c.name}, ${c.state}, ${country}`
+  return {
+    country: { id: c.country_id, name: country },
+    city: { id: c.id, name: c.name, state: { id: c.state_id, name: c.state } },
+    location: label,
+    location_display: label,
+    ...overrides,
+  }
 }

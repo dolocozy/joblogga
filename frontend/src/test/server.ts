@@ -5,4 +5,14 @@ import { API_URL } from '../api'
 // A fake backend. Apart from the health check (the landing page pings it to wake a
 // sleeping server), it starts with no handlers: each test declares exactly the
 // endpoints it expects, and any other request fails the test (see setup.ts).
-export const server = setupServer(http.get(`${API_URL}/health`, () => HttpResponse.json({ status: 'ok' })))
+// A few real-looking countries, so any page that offers a country picker or filter can load them.
+export const COUNTRIES = [
+  { id: 1, name: 'Canada', iso2: 'CA' },
+  { id: 4, name: 'Switzerland', iso2: 'CH' },
+  { id: 6, name: 'United States', iso2: 'US' },
+]
+
+export const server = setupServer(
+  http.get(`${API_URL}/health`, () => HttpResponse.json({ status: 'ok' })),
+  http.get(`${API_URL}/geo/countries`, () => HttpResponse.json(COUNTRIES)),
+)

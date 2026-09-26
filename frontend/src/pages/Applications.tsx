@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { exportApplicationsCsv, fetchUpcoming, listApplications, updateApplication, WORK_MODES } from '../api'
-import type { Application, ApplicationStatus, WorkMode } from '../api'
+import { exportApplicationsCsv, fetchCountries, fetchStates, fetchUpcoming, listApplications, updateApplication, WORK_MODES } from '../api'
+import type { Application, ApplicationStatus, Country, PlaceRef, WorkMode } from '../api'
 import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader, SAVED_LEDGER_COLUMNS } from '../components/Ledger'
 import PostingLink from '../components/PostingLink'
 import RoundsNote from '../components/RoundsNote'
@@ -11,7 +11,7 @@ import { saveFile } from '../download'
 import { useDebounced } from '../hooks'
 import { isOverdue } from '../overdue'
 import { APPLIED_STATUSES, statusLabel } from '../status'
-import { roleLine, workModeLabel } from '../workMode'
+import { placeLine, roleLine, workModeLabel } from '../workMode'
 
 export const PAGE_SIZE = 20
 // The board shows everything matching the filters at once (no pages), up to the API's maximum.
@@ -25,11 +25,13 @@ interface Filters {
   company: string
   status: ApplicationStatus | ''
   workMode: WorkMode | ''
+  countryId: number | '' // a country, and within it a state or province
+  stateId: number | ''
   dateFrom: string
   dateTo: string
 }
 
-const NO_FILTERS: Filters = { q: '', company: '', status: '', workMode: '', dateFrom: '', dateTo: '' }
+const NO_FILTERS: Filters = { q: '', company: '', status: '', workMode: '', countryId: '', stateId: '', dateFrom: '', dateTo: '' }
 
 function UpcomingPanel({ reloadKey }: { reloadKey: number }) {
   const [items, setItems] = useState<Application[]>([])
@@ -87,7 +89,30 @@ export default function Applications() {
   // Text fields wait for a pause in typing; dropdowns and dates apply at once.
   const q = useDebounced(filters.q.trim(), 300)
   const company = useDebounced(filters.company.trim(), 300)
-  const { status, workMode, dateFrom, dateTo } = filters
+  const { status, workMode, countryId, stateId, dateFrom, dateTo } = filters
+
+  // The choices for the country and state filters. Both come from our own place data; if either cannot be
+  // loaded the filter is simply not offered, and everything else still works.
+  const [countries, setCountries] = useState<Country[]>([])
+  // The states of one country, remembered with which country they belong to, so the states of a country that was
+  // chosen before are never shown under a different one while the new list is on its way.
+  const [statesOf, setStatesOf] = useState<{ countryId: number; list: PlaceRef[] } | null>(null)
+  const states = statesOf !== null && statesOf.countryId === countryId ? statesOf.list : []
+  useEffect(() => {
+    fetchCountries()
+      .then(setCountries)
+      .catch(() => setCountries([]))
+  }, [])
+  useEffect(() => {
+    if (countryId === '') return
+    let cancelled = false
+    fetchStates(countryId)
+      .then((list) => !cancelled && setStatesOf({ countryId, list }))
+      .catch(() => !cancelled && setStatesOf(null))
+    return () => {
+      cancelled = true
+    }
+  }, [countryId])
 
   useEffect(() => {
     // `cancelled` drops the result of an outdated request, so a slow earlier
@@ -102,6 +127,8 @@ export default function Applications() {
       // The list is the jobs you have applied to; the saved view is the ones you have not.
       status: board ? undefined : saved ? 'saved' : status ? status : APPLIED_STATUSES,
       work_mode: workMode || undefined,
+      country_id: countryId || undefined,
+      state_id: stateId || undefined,
       // Saved jobs have no applied date, so a date range means nothing there.
       date_from: saved ? undefined : dateFrom,
       date_to: saved ? undefined : dateTo,
@@ -128,7 +155,7 @@ export default function Applications() {
     return () => {
       cancelled = true
     }
-  }, [q, company, status, workMode, dateFrom, dateTo, page, reloadKey, view])
+  }, [q, company, status, workMode, countryId, stateId, dateFrom, dateTo, page, reloadKey, view])
 
   async function changeStatus(app: Application, next: ApplicationStatus) {
     if (next === app.status) return
@@ -188,7 +215,7 @@ export default function Applications() {
   // The status filter only exists in the list; the board's columns are the statuses.
   const statusFiltering = view === 'list' && status !== ''
   const dateFiltering = view !== 'saved' && (dateFrom !== '' || dateTo !== '') // saved jobs have no applied date
-  const filtered = q !== '' || company !== '' || statusFiltering || workMode !== '' || dateFiltering
+  const filtered = q !== '' || company !== '' || statusFiltering || workMode !== '' || countryId !== '' || dateFiltering
   const badRange = view !== 'saved' && dateFrom !== '' && dateTo !== '' && dateFrom > dateTo
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const firstShown = total === 0 ? 0 : page * PAGE_SIZE + 1
@@ -274,6 +301,37 @@ export default function Applications() {
             </option>
           ))}
         </select>
+        {countries.length > 0 && (
+          <select
+            value={filters.countryId}
+            // Changing the country clears the state, which belongs to it.
+            onChange={(e) => setFilter({ countryId: e.target.value === '' ? '' : Number(e.target.value), stateId: '' })}
+            aria-label="Filter by country"
+            className="input lg:col-span-2"
+          >
+            <option value="">All countries</option>
+            {countries.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {states.length > 0 && (
+          <select
+            value={filters.stateId}
+            onChange={(e) => setFilter({ stateId: e.target.value === '' ? '' : Number(e.target.value) })}
+            aria-label="Filter by state or province"
+            className="input lg:col-span-2"
+          >
+            <option value="">All states and provinces</option>
+            {states.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        )}
         {view !== 'saved' && (
         <label className="flex items-center gap-2 text-sm text-ink-soft lg:col-span-2">
           Applied from
@@ -367,8 +425,8 @@ export default function Applications() {
                 <div className="flex min-w-0 items-center gap-x-4">
                   <Link to={`/applications/${a.id}`} className="group min-w-0 flex-1">
                     <span className="block truncate font-semibold group-hover:underline">{a.company}</span>
-                    {/* Role, location and work mode are separated by commas, as in a sentence. */}
                     <span className="block truncate text-sm text-ink-soft">{roleLine(a)}</span>
+                    {placeLine(a) && <span className="block truncate text-sm text-ink-soft">{placeLine(a)}</span>}
                   </Link>
                   <PostingLink url={a.job_url} company={a.company} className="shrink-0 whitespace-nowrap" />
                 </div>

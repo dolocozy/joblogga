@@ -2,10 +2,11 @@ import enum
 import secrets
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Date, Enum, ForeignKey, String, Text
+from sqlalchemy import Date, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base, UtcDateTime
+from app.geo import place_label
 
 
 def _now() -> datetime:
@@ -42,6 +43,53 @@ class User(Base):
     @property
     def email_verified(self) -> bool:
         return self.email_verified_at is not None
+
+
+class Country(Base):
+    """A country or territory, loaded once from the vendored dataset (see app/geo.py).
+
+    The primary key is the dataset's own id, not a number we generate: an application that
+    points at a country points at that exact dataset row.
+    """
+
+    __tablename__ = "countries"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    name: Mapped[str] = mapped_column(String(120))
+    iso2: Mapped[str | None] = mapped_column(String(2))
+    iso3: Mapped[str | None] = mapped_column(String(3))
+
+
+class State(Base):
+    """A state, province, region or similar: the first division under a country."""
+
+    __tablename__ = "states"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    country_id: Mapped[int] = mapped_column(ForeignKey("countries.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+
+    country: Mapped[Country] = relationship(lazy="joined", innerjoin=True)
+
+
+class City(Base):
+    """A city, town or district. Every city belongs to exactly one state, so picking a city fixes the state too."""
+
+    __tablename__ = "cities"
+    # Autocomplete asks "in this country, names starting with ...": one index answers it.
+    __table_args__ = (Index("ix_cities_country_id_search_name", "country_id", "search_name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    state_id: Mapped[int] = mapped_column(ForeignKey("states.id"), index=True)
+    country_id: Mapped[int] = mapped_column(ForeignKey("countries.id"))
+    name: Mapped[str] = mapped_column(String(120))
+    # The name lower-cased with accents removed (app.geo.search_key): what searches are matched against.
+    search_name: Mapped[str] = mapped_column(String(120), index=True)
+    # For ranking matches, biggest first. Unknown for some places.
+    population: Mapped[int | None] = mapped_column()
+
+    state: Mapped[State] = relationship(lazy="joined", innerjoin=True)
+    country: Mapped[Country] = relationship(lazy="joined", innerjoin=True)
 
 
 class ApplicationStatus(enum.StrEnum):
@@ -103,7 +151,13 @@ class Application(Base):
     resume_version: Mapped[str | None] = mapped_column(String(100))
     salary_min: Mapped[int | None] = mapped_column()
     salary_max: Mapped[int | None] = mapped_column()
+    # The readable place. For a picked city it is generated ("Springfield, Illinois, United States");
+    # otherwise it is whatever was typed. Existing applications' free text stays exactly as it was.
     location: Mapped[str | None] = mapped_column(String(200))
+    # The structure behind it, when a place was picked from the dataset. A city fixes its country.
+    # SET NULL: if a dataset row ever went away, the application keeps its readable location text.
+    country_id: Mapped[int | None] = mapped_column(ForeignKey("countries.id", ondelete="SET NULL"), index=True)
+    city_id: Mapped[int | None] = mapped_column(ForeignKey("cities.id", ondelete="SET NULL"), index=True)
     # NULL means "not specified", which is the honest default: nothing forces a guess.
     work_mode: Mapped[WorkMode | None] = mapped_column(_work_mode_enum())
     notes: Mapped[str | None] = mapped_column(Text)
@@ -117,6 +171,23 @@ class Application(Base):
 
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_now)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_now, onupdate=_now)
+
+    country: Mapped[Country | None] = relationship(lazy="joined")
+    city: Mapped[City | None] = relationship(lazy="joined")
+
+    @property
+    def location_display(self) -> str | None:
+        """The place as it reads everywhere it is shown.
+
+        A picked city: "Springfield, Illinois, United States" (its state is part of it, so two
+        Springfields never look alike). A country with a typed place: "Somewhere, Canada". A country
+        alone: "Canada". Otherwise the typed text, exactly as entered.
+        """
+        if self.city is not None and self.country is not None:
+            return place_label(self.city.name, self.city.state.name, self.country.name)
+        if self.country is not None:
+            return place_label(self.location, None, self.country.name) if self.location else self.country.name
+        return self.location
 
     history: Mapped[list["StatusChange"]] = relationship(
         back_populates="application",

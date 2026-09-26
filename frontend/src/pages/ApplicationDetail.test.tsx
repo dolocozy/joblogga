@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { localToday } from '../dates'
 import { server } from '../test/server'
-import { makeDetail, mockList, mockUpcoming, renderApp, signIn, url } from '../test/helpers'
+import { makeDetail, mockCities, mockList, mockUpcoming, renderApp, signIn, url, withPlace } from '../test/helpers'
 
 beforeEach(() => signIn())
 
@@ -19,16 +19,17 @@ describe('loading and display', () => {
 
     expect(await screen.findByRole('heading', { name: /Globex/ })).toBeInTheDocument()
     expect(screen.getByLabelText('Company')).toHaveValue('Globex')
-    expect(screen.getByLabelText('Location')).toHaveValue('Remote')
+    expect(screen.getByLabelText('Place, typed')).toHaveValue('Remote') // typed before places could be picked, so it opens as typed text
     expect(screen.getByLabelText('Status')).toHaveValue('interview')
     expect(screen.getByLabelText('Resume version')).toHaveValue('tech-focused')
   })
 
-  it('shows the work mode in the heading beside the location, and selected in the form', async () => {
+  it('shows the work mode beside the role, the place on its own line, and the mode selected in the form', async () => {
     mockGet(makeDetail({ id: 3, role: 'Analyst', location: 'Portland', work_mode: 'hybrid' }))
     renderApp('/applications/3')
 
-    expect(await screen.findByText('Analyst, Portland, Hybrid')).toBeInTheDocument()
+    expect(await screen.findByText('Analyst, Hybrid')).toBeInTheDocument()
+    expect(screen.getAllByText('Portland').length).toBeGreaterThan(0)
     expect(screen.getByLabelText('Work mode')).toHaveValue('hybrid')
   })
 
@@ -151,7 +152,7 @@ describe('editing', () => {
     )
     renderApp('/applications/3')
 
-    await user.clear(await screen.findByLabelText('Location'))
+    await user.clear(await screen.findByLabelText('Place, typed'))
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await screen.findByRole('status')
@@ -375,5 +376,95 @@ describe('interview rounds on the detail page', () => {
     await waitFor(() => expect(bodies).toHaveLength(2))
     expect(bodies.map((b) => [b.interview_round, b.interview_rounds_total])).toEqual([[2, 3], [null, 3]])
     expect(bodies.map((b) => b.status)).toEqual(['interview', 'interview']) // the status is not touched by it
+  })
+})
+
+describe('a picked place on the detail page', () => {
+  it('shows the city with its state and country on a line of its own', async () => {
+    mockGet(makeDetail({ id: 3, company: 'Acme', role: 'Analyst', ...withPlace(109) }))
+    renderApp('/applications/3')
+    expect(await screen.findByText('Springfield, Missouri, United States', { selector: 'p' })).toBeInTheDocument()
+  })
+
+  it('opens the form with the country and city already chosen, showing the state', async () => {
+    mockGet(makeDetail({ id: 3, ...withPlace(109) }))
+    renderApp('/applications/3')
+    expect(await screen.findByRole('combobox', { name: 'Country' })).toHaveValue('United States')
+    expect(screen.getByRole('combobox', { name: 'City' })).toHaveValue('Springfield, Missouri')
+    expect(screen.queryByLabelText('Place, typed')).not.toBeInTheDocument()
+  })
+
+  it('saves the same place unchanged as the same ids, letting the server write the text', async () => {
+    const user = userEvent.setup()
+    const bodies: Record<string, unknown>[] = []
+    mockGet(makeDetail({ id: 3, ...withPlace(109) }))
+    server.use(http.patch(url('/applications/3'), async ({ request }) => (bodies.push((await request.json()) as Record<string, unknown>), HttpResponse.json(makeDetail({ id: 3, ...withPlace(109), updated_at: '2026-04-01T00:00:00Z' })))))
+    renderApp('/applications/3')
+
+    await user.click(await screen.findByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).toMatchObject({ country_id: 6, city_id: 109, location: null })
+  })
+
+  it('moves to another Springfield by choosing it: a different id, the same name', async () => {
+    const user = userEvent.setup()
+    const bodies: Record<string, unknown>[] = []
+    mockCities()
+    mockGet(makeDetail({ id: 3, ...withPlace(109) }))
+    server.use(http.patch(url('/applications/3'), async ({ request }) => (bodies.push((await request.json()) as Record<string, unknown>), HttpResponse.json(makeDetail({ id: 3, ...withPlace(110), updated_at: '2026-04-01T00:00:00Z' })))))
+    renderApp('/applications/3')
+
+    const box = await screen.findByRole('combobox', { name: 'City' })
+    await user.clear(box)
+    await user.type(box, 'spring')
+    await user.click(await within(await screen.findByRole('listbox')).findByRole('option', { name: 'Springfield, Ohio' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).toMatchObject({ country_id: 6, city_id: 110 })
+    expect(await screen.findByText('Springfield, Ohio, United States', { selector: 'p' })).toBeInTheDocument()
+  })
+
+  it('opens a place typed before places existed as typed text, and can be left as it is', async () => {
+    const user = userEvent.setup()
+    const bodies: Record<string, unknown>[] = []
+    mockGet(makeDetail({ id: 3, location: 'Springfield' }))
+    server.use(http.patch(url('/applications/3'), async ({ request }) => (bodies.push((await request.json()) as Record<string, unknown>), HttpResponse.json(makeDetail({ id: 3, location: 'Springfield', updated_at: '2026-04-01T00:00:00Z' })))))
+    renderApp('/applications/3')
+
+    expect(await screen.findByLabelText('Place, typed')).toHaveValue('Springfield')
+    expect(screen.getByText(/no state or other structure/i)).toBeInTheDocument() // the reason to pick instead
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).toMatchObject({ location: 'Springfield', country_id: null, city_id: null }) // exactly as it was
+  })
+
+  it('a typed place can be upgraded to a picked one', async () => {
+    const user = userEvent.setup()
+    const bodies: Record<string, unknown>[] = []
+    mockCities()
+    mockGet(makeDetail({ id: 3, location: 'Springfield' }))
+    server.use(http.patch(url('/applications/3'), async ({ request }) => (bodies.push((await request.json()) as Record<string, unknown>), HttpResponse.json(makeDetail({ id: 3, ...withPlace(108), updated_at: '2026-04-01T00:00:00Z' })))))
+    renderApp('/applications/3')
+
+    await user.click(await screen.findByRole('button', { name: 'Pick a city from the list instead' }))
+    await user.type(screen.getByRole('combobox', { name: 'Country' }), 'united')
+    await user.click(within(screen.getByRole('listbox')).getByRole('option', { name: 'United States' }))
+    await user.type(screen.getByRole('combobox', { name: 'City' }), 'spring')
+    await user.click(await within(await screen.findByRole('listbox')).findByRole('option', { name: 'Springfield, Illinois' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).toMatchObject({ country_id: 6, city_id: 108, location: null })
+  })
+
+  it('a country with a typed place shows both, and the text field keeps only what was typed', async () => {
+    mockGet(makeDetail({ id: 3, location: 'Nowheresville', country: { id: 1, name: 'Canada' }, location_display: 'Nowheresville, Canada' }))
+    renderApp('/applications/3')
+    expect(await screen.findByText('Nowheresville, Canada', { selector: 'p' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Place, typed')).toHaveValue('Nowheresville') // not "Nowheresville, Canada", which would repeat the country on save
+    expect(screen.getByRole('combobox', { name: 'Country' })).toHaveValue('Canada')
   })
 })

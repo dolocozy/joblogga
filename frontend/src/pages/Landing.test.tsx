@@ -215,3 +215,12 @@ describe('/login and /signup still work', () => {
     expect(await screen.findByRole('heading', { name: 'Applications' })).toBeInTheDocument()
   })
 })
+
+describe('attribution', () => {
+  it('credits the place data and links to its source, as its license requires', async () => {
+    renderApp('/')
+    const link = await screen.findByRole('link', { name: 'countries-states-cities database' })
+    expect(link).toHaveAttribute('href', 'https://github.com/dr5hn/countries-states-cities-database')
+    expect(link.closest('p')).toHaveTextContent('ODbL')
+  })
+})

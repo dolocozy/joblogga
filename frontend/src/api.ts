@@ -143,6 +143,15 @@ export type ApplicationStatus = (typeof STATUSES)[number]
 export const WORK_MODES = ['remote', 'hybrid', 'in_person'] as const
 export type WorkMode = (typeof WORK_MODES)[number]
 
+// A row of the place dataset (see backend/data/geo). Places are always picked by id, never matched by text.
+export interface PlaceRef {
+  id: number
+  name: string
+}
+export interface CityRef extends PlaceRef {
+  state: PlaceRef
+}
+
 export interface Application {
   id: number
   company: string
@@ -152,7 +161,10 @@ export interface Application {
   resume_version: string | null
   salary_min: number | null
   salary_max: number | null
-  location: string | null
+  location: string | null // the typed text, or the generated place for a picked city
+  location_display: string | null // the place as it reads everywhere: "Springfield, Illinois, United States"
+  country: PlaceRef | null
+  city: CityRef | null // with its state
   work_mode: WorkMode | null // null = not specified
   notes: string | null
   interview_round: number | null // which round, if recorded
@@ -183,7 +195,9 @@ export interface ApplicationInput {
   resume_version: string | null
   salary_min: number | null
   salary_max: number | null
-  location: string | null
+  location: string | null // typed text; the server replaces it with the generated place when a city is picked
+  country_id: number | null
+  city_id: number | null // a city fixes the state and country too
   work_mode: WorkMode | null
   notes: string | null
   interview_round: number | null
@@ -197,6 +211,8 @@ export interface ApplicationFilters {
   company?: string
   status?: ApplicationStatus | ApplicationStatus[] // several statuses: the parameter repeats
   work_mode?: WorkMode
+  country_id?: number
+  state_id?: number
   date_from?: string // YYYY-MM-DD
   date_to?: string
   limit?: number
@@ -228,6 +244,38 @@ export const updateApplication = (id: number, input: Partial<ApplicationInput>) 
 
 export const deleteApplication = (id: number) =>
   request<void>(`/applications/${id}`, { method: 'DELETE' })
+
+// --- places -----------------------------------------------------------------
+// All of these read our own copy of the dataset: there is no third-party service behind them.
+
+export interface Country extends PlaceRef {
+  iso2: string | null
+}
+export interface CityMatch {
+  id: number // the exact dataset row that gets stored
+  name: string
+  state_id: number
+  state: string
+  label: string // "Springfield, Illinois, United States"
+}
+
+// The list of countries never changes while the app is open, so it is fetched once.
+let countries: Promise<Country[]> | null = null
+export function fetchCountries(): Promise<Country[]> {
+  countries ??= request<Country[]>('/geo/countries').catch((err) => {
+    countries = null // a failure is not remembered: the next try asks again
+    throw err
+  })
+  return countries
+}
+export function forgetCountries() {
+  countries = null // for tests
+}
+
+export const fetchStates = (countryId: number) => request<PlaceRef[]>(`/geo/states?country_id=${countryId}`)
+
+export const searchCities = (countryId: number, q: string) =>
+  request<CityMatch[]>(`/geo/cities?country_id=${countryId}&q=${encodeURIComponent(q)}&limit=10`)
 
 // --- dashboard stats --------------------------------------------------------
 
