@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth'
 import VerifyBanner from './VerifyBanner'
 import Wordmark from './Wordmark'
@@ -26,7 +26,9 @@ export default function Layout() {
             </nav>
           </div>
           <div className="flex items-center gap-4 text-sm">
-            <span className="hidden text-ink-soft sm:inline">{user?.email}</span>
+            <Link to="/account" className="hidden text-ink-soft underline-offset-2 hover:text-ink hover:underline sm:inline" aria-label={`Account: ${user?.email}`}>
+              {user?.email}
+            </Link>
             <button onClick={logout} className="btn btn-secondary btn-sm whitespace-nowrap">
               Log out
             </button>

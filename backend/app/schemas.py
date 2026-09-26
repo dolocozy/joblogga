@@ -62,6 +62,12 @@ class PasswordResetConfirm(BaseModel):
         return validate_new_password(v)
 
 
+class DeleteAccountRequest(BaseModel):
+    # Asked for again even though they are logged in: deleting is irreversible, and a
+    # borrowed laptop or a stolen token should not be enough to do it.
+    password: str = Field(max_length=200)
+
+
 class EmailVerificationConfirm(BaseModel):
     token: str = Field(min_length=20, max_length=200)
 

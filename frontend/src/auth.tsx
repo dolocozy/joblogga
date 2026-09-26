@@ -11,9 +11,13 @@ interface AuthContextValue {
   // True after a logged-in session ended on the server side (e.g. token expired),
   // so the login page can explain why the user is back there.
   sessionExpired: boolean
+  // True right after the user deleted their account, so the login form can confirm it.
+  accountDeleted: boolean
   login: (email: string, password: string) => Promise<void>
   // Creates the account and emails a verification link. Does not log in (see api.signup).
   signup: (email: string, password: string) => Promise<void>
+  // Permanently deletes the account and ends the session. Throws (leaving the session alone) if the password is wrong.
+  deleteAccount: (password: string) => Promise<void>
   // Re-reads the logged-in user, e.g. after their address was just verified.
   refreshUser: () => Promise<void>
   logout: () => void
@@ -25,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(() => api.tokenStore.get() !== null)
   const [sessionExpired, setSessionExpired] = useState(false)
+  const [accountDeleted, setAccountDeleted] = useState(false)
 
   // Any request that comes back 401 while logged in ends the session: dropping
   // `user` makes ProtectedRoute redirect to the login page.
@@ -57,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api.tokenStore.set(access_token)
     setUser(await api.fetchMe())
     setSessionExpired(false)
+    setAccountDeleted(false)
   }, [])
 
   const signup = useCallback(async (email: string, password: string) => {
@@ -67,15 +73,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (api.tokenStore.get()) setUser(await api.fetchMe())
   }, [])
 
+  const deleteAccount = useCallback(async (password: string) => {
+    await api.deleteAccount(password)
+    api.tokenStore.clear()
+    setUser(null)
+    setSessionExpired(false)
+    setAccountDeleted(true)
+  }, [])
+
   const logout = useCallback(() => {
     api.tokenStore.clear()
     setUser(null)
     setSessionExpired(false)
+    setAccountDeleted(false)
   }, [])
 
   const value = useMemo(
-    () => ({ user, loading, sessionExpired, login, signup, refreshUser, logout }),
-    [user, loading, sessionExpired, login, signup, refreshUser, logout],
+    () => ({ user, loading, sessionExpired, accountDeleted, login, signup, refreshUser, deleteAccount, logout }),
+    [user, loading, sessionExpired, accountDeleted, login, signup, refreshUser, deleteAccount, logout],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

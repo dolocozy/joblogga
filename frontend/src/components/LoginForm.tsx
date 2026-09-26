@@ -8,7 +8,7 @@ import Field from './Field'
 
 // Used on the landing page and on /login.
 export default function LoginForm() {
-  const { login, sessionExpired } = useAuth()
+  const { login, sessionExpired, accountDeleted } = useAuth()
   // A message handed over by the page that sent us here, e.g. "Your password has been updated".
   const notice = (useLocation().state as { notice?: unknown } | null)?.notice
   const base = useId()
@@ -44,6 +44,11 @@ export default function LoginForm() {
       {typeof notice === 'string' && !serverError && (
         <p role="status" className="border-l-2 border-pine bg-pine/5 px-3 py-2 text-sm">
           {notice}
+        </p>
+      )}
+      {accountDeleted && !serverError && typeof notice !== 'string' && (
+        <p role="status" className="border-l-2 border-pine bg-pine/5 px-3 py-2 text-sm">
+          Your account and all of its data have been deleted.
         </p>
       )}
       {sessionExpired && !serverError && typeof notice !== 'string' && (

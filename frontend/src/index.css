@@ -53,6 +53,10 @@
   .btn-secondary {
     @apply border border-ink text-ink hover:bg-ink/5;
   }
+  /* The irreversible confirm button: filled, so it cannot be mistaken for a routine action. */
+  .btn-destructive {
+    @apply bg-brick text-sheet hover:bg-brick-deep;
+  }
   .btn-danger {
     @apply px-2 text-brick hover:text-brick-deep hover:underline;
   }

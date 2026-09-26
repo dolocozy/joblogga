@@ -101,6 +101,9 @@ class RateLimits:
         self.signup_email = SlidingWindowLimiter(3, 60 * 60, clock)
         # "Resend verification" is for a logged-in user, so it is limited per account.
         self.verify_resend_user = SlidingWindowLimiter(3, 60 * 60, clock)
+        # Wrong passwords on "delete my account", per account. A stolen session must not
+        # become a way to guess the password that guards the irreversible action.
+        self.delete_account_user = SlidingWindowLimiter(5, 15 * 60, clock)
         # Only bad verification tokens count, as with reset tokens.
         self.verify_confirm_ip = SlidingWindowLimiter(20, 15 * 60, clock)
 
@@ -162,6 +165,13 @@ class RateLimits:
     def record_verify_resend(self, user_id: int) -> None:
         self.verify_resend_user.record(str(user_id))
 
+    def check_delete_account(self, user_id: int) -> tuple[str, int] | None:
+        wait = self.delete_account_user.retry_after(str(user_id))
+        return ("delete_account_user", wait) if wait > 0 else None
+
+    def record_delete_account_failure(self, user_id: int) -> None:
+        self.delete_account_user.record(str(user_id))
+
     def check_verify_confirm(self, ip: str) -> tuple[str, int] | None:
         wait = self.verify_confirm_ip.retry_after(ip)
         return ("verify_confirm_ip", wait) if wait > 0 else None
@@ -180,6 +190,7 @@ class RateLimits:
             self.reset_confirm_ip,
             self.signup_email,
             self.verify_resend_user,
+            self.delete_account_user,
             self.verify_confirm_ip,
         ):
             limiter.clear()

@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from app.deps import client_ip, get_current_user, get_email_sender, get_session_
 from app.mailer import EmailSender
 from app.models import PasswordResetToken, User
 from app.schemas import (
+    DeleteAccountRequest,
     EmailVerificationConfirm,
     LoginRequest,
     MessageResponse,
@@ -210,3 +211,32 @@ def resend_verification(
     db.commit()
     background.add_task(email_verification.send_verification_email, sender, user.email, raw)
     return MessageResponse(detail="We've sent a new verification link to your email address.")
+
+
+@router.post("/delete-account", status_code=status.HTTP_204_NO_CONTENT)
+def delete_account(
+    body: DeleteAccountRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    db: DbSession,
+    request: Request,
+    ip: ClientIp,
+) -> Response:
+    """Permanently delete the logged-in user's account and everything in it.
+
+    One DELETE on the user row is the whole job: their applications, each application's
+    status history, and any reset or verification tokens go with it because the
+    database's foreign keys say ON DELETE CASCADE (checked by a test that leaves no
+    orphan behind). Nothing is kept, and it cannot be undone. Login tokens die with the
+    row: `get_current_user` finds no user for them, so the session that made this
+    request is over the moment it returns.
+    """
+    blocked = ratelimit.limits.check_delete_account(user.id)
+    if blocked:
+        raise too_many_attempts(request, blocked[0], ip, blocked[1])
+    if not verify_password(body.password, user.hashed_password):
+        ratelimit.limits.record_delete_account_failure(user.id)
+        # 403, not 401: a 401 tells the app the session ended, and this one has not.
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Incorrect password")
+    db.execute(delete(User).where(User.id == user.id))
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

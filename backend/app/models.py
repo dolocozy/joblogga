@@ -1,4 +1,5 @@
 import enum
+import secrets
 from datetime import UTC, date, datetime
 
 from sqlalchemy import Date, Enum, ForeignKey, String, Text
@@ -9,6 +10,10 @@ from app.db import Base, UtcDateTime
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _new_session_version() -> int:
+    return secrets.randbelow(2**30)  # fits a 32-bit column with room for the resets that bump it
 
 
 class User(Base):
@@ -23,9 +28,11 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_now)
     # Baked into every login token. Bumping it (a password reset does) makes all
     # tokens issued before that stop working, so a stolen session cannot outlive a
-    # password change. The server default lets code from before this column existed
-    # keep inserting users during a deploy.
-    session_version: Mapped[int] = mapped_column(default=0, server_default="0")
+    # password change. New accounts start at a random value, not 0: a database may
+    # hand a deleted account's id to the next signup (SQLite does), and the old
+    # token must not then open the new account. The server default lets code from
+    # before this column existed keep inserting users during a deploy.
+    session_version: Mapped[int] = mapped_column(default=_new_session_version, server_default="0")
     # When the owner proved they can read mail sent to this address (by opening a
     # verification link, or by completing a password reset, which is the same proof).
     # NULL means not yet. Accounts that existed before verification was added were

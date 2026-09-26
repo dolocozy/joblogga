@@ -3,6 +3,7 @@ import { Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth'
 import Layout from './components/Layout'
 import { GuestRoute, ProtectedRoute } from './components/RouteGuards'
+import Account from './pages/Account'
 import ApplicationDetail from './pages/ApplicationDetail'
 import Applications from './pages/Applications'
 import ForgotPassword from './pages/ForgotPassword'
@@ -43,6 +44,7 @@ export default function App() {
                 </Suspense>
               }
             />
+            <Route path="/account" element={<Account />} />
             <Route path="/applications/new" element={<NewApplication />} />
             <Route path="/applications/:id" element={<ApplicationDetail />} />
           </Route>

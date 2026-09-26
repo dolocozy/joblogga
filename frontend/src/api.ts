@@ -119,6 +119,10 @@ export const login = (email: string, password: string) =>
 
 export const fetchMe = () => request<User>('/auth/me')
 
+// Permanent. The password is asked for again so a borrowed session is not enough.
+export const deleteAccount = (password: string) =>
+  request<void>('/auth/delete-account', { method: 'POST', body: JSON.stringify({ password }) })
+
 // Password reset. The server answers a reset request the same way whether or not the
 // address has an account, and so does this app: it never says which.
 export const requestPasswordReset = (email: string) =>
