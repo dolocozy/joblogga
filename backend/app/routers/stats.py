@@ -3,19 +3,24 @@ from datetime import date, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_user
-from app.models import Application, ApplicationStatus, User
+from app.models import Application, ApplicationStatus, StatusChange, User
 from app.schemas import ResponseRate, StatsOut, StatusCount, WeekCount
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
 # An employer "responded" once an application moved past Applied, and a
-# rejection is a response. Withdrawn is the applicant's own decision, so it says
-# nothing about employer behavior and is left out of BOTH sides of the ratio.
+# rejection is a response. An application counts as responded if it EVER reached
+# one of these (its status history says so), not only if it is in one right now:
+# Applied -> Interview -> Withdrawn was answered, however it ended.
+#
+# Withdrawn is the applicant's own decision. Withdrawing BEFORE any response says
+# nothing about employer behavior, so such an application is left out of both sides
+# of the ratio; withdrawing after a response leaves it in both.
 RESPONDED = (
     ApplicationStatus.SCREENING,
     ApplicationStatus.INTERVIEW,
@@ -29,9 +34,7 @@ def week_start(d: date) -> date:
     return d - timedelta(days=d.weekday())
 
 
-def response_rate(counts: dict[ApplicationStatus, int]) -> ResponseRate:
-    responded = sum(counts[s] for s in RESPONDED)
-    eligible = sum(counts.values()) - counts[ApplicationStatus.WITHDRAWN]
+def response_rate(responded: int, eligible: int) -> ResponseRate:
     return ResponseRate(
         responded=responded,
         eligible=eligible,
@@ -51,9 +54,10 @@ def get_stats(
     """Dashboard numbers. Every figure covers the same slice of applications,
     so the totals, breakdown, response rate and weekly chart always agree.
 
-    Note: status is each application's *current* status. An application that
-    reached Interview and was then withdrawn counts as Withdrawn, so it is left
-    out of the response rate.
+    Note: the status breakdown is each application's *current* status, but the
+    response rate looks at history: an application that reached Interview and was
+    then withdrawn shows as Withdrawn in the breakdown and still counts as a
+    response in the rate.
     """
     this_week = week_start(date.today())
     # Applications dated later than this week (e.g. entered in advance) are left
@@ -61,6 +65,20 @@ def get_stats(
     conditions = [Application.user_id == user.id, Application.date_applied < this_week + timedelta(days=7)]
     if weeks is not None:
         conditions.append(Application.date_applied >= this_week - timedelta(weeks=weeks - 1))
+
+    # Reached a response status at some point: now, or per the history. Checking the current
+    # status too keeps an application counted even if its history were ever missing a row.
+    ever_responded = or_(
+        Application.status.in_(RESPONDED),
+        exists().where(StatusChange.application_id == Application.id, StatusChange.to_status.in_(RESPONDED)),
+    )
+    responded = db.scalar(select(func.count()).select_from(Application).where(*conditions, ever_responded)) or 0
+    eligible = (
+        db.scalar(
+            select(func.count()).select_from(Application).where(*conditions, or_(Application.status != ApplicationStatus.WITHDRAWN, ever_responded))
+        )
+        or 0
+    )
 
     counts = {s: 0 for s in ApplicationStatus}
     for status, n in db.execute(select(Application.status, func.count()).where(*conditions).group_by(Application.status)):
@@ -88,6 +106,6 @@ def get_stats(
     return StatsOut(
         total=sum(counts.values()),
         by_status=[StatusCount(status=s, count=counts[s]) for s in ApplicationStatus],
-        response=response_rate(counts),
+        response=response_rate(responded, eligible),
         per_week=per_week,
     )

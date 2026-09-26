@@ -33,29 +33,14 @@ def counts_by_status(body):
 # --- the response-rate definition (pure function) ---------------------------
 
 
-def counts(**kw):
-    c = {s: 0 for s in ApplicationStatus}
-    c.update({ApplicationStatus(k): v for k, v in kw.items()})
-    return c
-
-
-def test_rate_counts_screening_interview_offer_and_rejected_as_responses():
-    r = response_rate(counts(applied=4, screening=1, interview=1, offer=1, rejected=1))
-    assert (r.responded, r.eligible) == (4, 8)
-    assert r.rate == 0.5
-
-
-def test_withdrawn_is_excluded_from_both_numerator_and_denominator():
-    without = response_rate(counts(applied=3, interview=1))
-    with_withdrawn = response_rate(counts(applied=3, interview=1, withdrawn=50))
-    assert with_withdrawn.rate == without.rate == 0.25
-    assert with_withdrawn.eligible == 4  # not 54
+def test_rate_is_responded_over_eligible():
+    r = response_rate(4, 8)
+    assert (r.responded, r.eligible, r.rate) == (4, 8, 0.5)
 
 
 def test_rate_is_none_when_nothing_is_eligible_and_zero_when_nobody_replied():
-    assert response_rate(counts()).rate is None
-    assert response_rate(counts(withdrawn=3)).rate is None  # only withdrawn: still no data
-    assert response_rate(counts(applied=2)).rate == 0.0  # eligible, no replies: a real 0%
+    assert response_rate(0, 0).rate is None  # no data is not 0%
+    assert response_rate(0, 2).rate == 0.0  # eligible, no replies: a real 0%
 
 
 # --- endpoint ---------------------------------------------------------------
@@ -95,6 +80,65 @@ def test_response_rate_end_to_end(client, auth):
     assert body["response"]["responded"] == 4
     assert body["response"]["eligible"] == 6
     assert body["response"]["rate"] == pytest.approx(4 / 6)
+
+
+def move(client, auth, app_id, *statuses):
+    for s in statuses:
+        assert client.patch(f"/applications/{app_id}", json={"status": s}, headers=auth).status_code == 200
+
+
+def first_id(client, auth):
+    return client.get("/applications", headers=auth).json()["items"][0]["id"]
+
+
+def test_interview_then_withdrawn_still_counts_as_a_response(client, auth):
+    """The regression this fixes: Applied -> Interview -> Withdrawn used to drop out of the rate."""
+    add(client, auth, "applied")
+    move(client, auth, first_id(client, auth), "interview", "withdrawn")
+
+    body = stats(client, auth)
+
+    assert counts_by_status(body)["withdrawn"] == 1  # it does end as withdrawn...
+    assert body["response"] == {"responded": 1, "eligible": 1, "rate": 1.0}  # ...and was answered
+
+
+def test_withdrawing_before_any_response_stays_out_of_both_sides(client, auth):
+    add(client, auth, "applied")  # one plain unanswered application
+    add(client, auth, "applied")
+    move(client, auth, first_id(client, auth), "withdrawn")  # the newest, withdrawn unanswered
+
+    assert stats(client, auth)["response"] == {"responded": 0, "eligible": 1, "rate": 0.0}
+
+
+def test_any_response_status_in_the_history_counts_not_only_interview(client, auth):
+    for reached in ("screening", "offer", "rejected"):
+        add(client, auth, "applied")
+        move(client, auth, first_id(client, auth), reached, "withdrawn")
+    body = stats(client, auth)
+    assert body["response"] == {"responded": 3, "eligible": 3, "rate": 1.0}
+
+
+def test_history_is_what_counts_so_moving_back_to_applied_keeps_the_response(client, auth):
+    add(client, auth, "applied")
+    move(client, auth, first_id(client, auth), "interview", "applied")  # corrected a slip
+    assert stats(client, auth)["response"] == {"responded": 1, "eligible": 1, "rate": 1.0}
+
+
+def test_history_and_the_window_agree_on_which_applications_are_counted(client, auth):
+    old = date.today() - timedelta(weeks=10)
+    add(client, auth, "applied", applied=old)
+    move(client, auth, first_id(client, auth), "interview", "withdrawn")  # answered, but outside the window
+    add(client, auth, "applied")
+
+    assert stats(client, auth, weeks=4)["response"] == {"responded": 0, "eligible": 1, "rate": 0.0}
+    assert stats(client, auth)["response"] == {"responded": 1, "eligible": 2, "rate": 0.5}
+
+
+def test_another_users_history_does_not_leak_into_my_rate(client, auth, other_auth):
+    add(client, other_auth, "applied")
+    move(client, other_auth, first_id(client, other_auth), "interview")
+    add(client, auth, "applied")
+    assert stats(client, auth)["response"] == {"responded": 0, "eligible": 1, "rate": 0.0}
 
 
 def test_status_changes_are_reflected(client, auth):

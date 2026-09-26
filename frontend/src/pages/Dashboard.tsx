@@ -115,8 +115,9 @@ export default function Dashboard() {
           </div>
 
           <p className="max-w-3xl text-sm text-ink-soft">
-            Response rate counts Screening, Interview, Offer and Rejected as a response. Withdrawn applications are
-            left out entirely, since withdrawing is your decision, not the employer&apos;s.
+            An application counts as a response once it has reached Screening, Interview, Offer or Rejected, even if you
+            withdrew it afterwards. Applications withdrawn before any reply are left out entirely, since withdrawing is
+            your decision, not the employer&apos;s.
           </p>
 
           <div className="grid gap-6 lg:grid-cols-2">

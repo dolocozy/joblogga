@@ -35,11 +35,12 @@ describe('response rate', () => {
     expect(screen.getByText('0 of 5 heard back')).toBeInTheDocument()
   })
 
-  it('explains the definition, including that Withdrawn is left out', async () => {
+  it('explains the definition: a later withdrawal keeps the response, an early one is left out', async () => {
     mockStats()
     renderApp('/dashboard')
-    const note = await screen.findByText(/counts screening, interview, offer and rejected/i)
-    expect(note).toHaveTextContent(/withdrawn applications are left out entirely/i)
+    const note = await screen.findByText(/reached screening, interview, offer or rejected/i)
+    expect(note).toHaveTextContent(/even if you withdrew it afterwards/i)
+    expect(note).toHaveTextContent(/withdrawn before any reply are left out entirely/i)
   })
 })
 

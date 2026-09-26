@@ -125,8 +125,8 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 
 ## Dashboard
 
-- **Response rate** = (Screening + Interview + Offer + Rejected) ÷ (all applications − Withdrawn). A rejection is a response; a withdrawal is your decision, so it is excluded from both sides of the ratio. When nothing is eligible the rate is "no data" (shown as a dash), not 0%.
-- Status is each application's *current* status, so one that reached Interview and was then withdrawn counts as withdrawn.
+- **Response rate** = applications that ever reached Screening, Interview, Offer or Rejected ÷ all applications except those withdrawn before any response. It reads the status *history*, not just the current status, so Applied → Interview → Withdrawn still counts as answered. A rejection is a response; withdrawing before hearing anything is your decision, so that application is left out of both sides of the ratio. When nothing is eligible the rate is "no data" (shown as a dash), not 0%.
+- The status breakdown chart is different on purpose: it shows where each application stands *now*, so that same application appears under Withdrawn there.
 - One time-range filter scopes every number and chart, so they always agree. Each chart has a "View as table" twin so no value depends on hovering.
 - The charts are loaded on demand, so the login and list pages don't download the charting library.
 
