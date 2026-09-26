@@ -20,6 +20,7 @@ import { formatDate, localToday } from '../dates'
 import { columnByColumn } from '../boardKeyboard'
 import { isOverdue } from '../overdue'
 import { statusLabel, statusText } from '../status'
+import { roleLine } from '../workMode'
 import { FollowUp } from './Ledger'
 import StageMeter from './StageMeter'
 import PostingLink from './PostingLink'
@@ -45,10 +46,7 @@ function CardSummary({ app, today }: { app: Application; today: string }) {
   return (
     <>
       <p className="truncate font-semibold">{app.company}</p>
-      <p className="truncate text-sm text-ink-soft">
-        {app.role}
-        {app.location ? `, ${app.location}` : ''}
-      </p>
+      <p className="truncate text-sm text-ink-soft">{roleLine(app)}</p>
       <p className="figure mt-2 text-ink-soft">{formatDate(app.date_applied)}</p>
       {app.follow_up_date && (
         <p className="figure mt-1">

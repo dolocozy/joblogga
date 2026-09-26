@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.export import applications_to_csv
 from app.deps import get_current_user
-from app.models import Application, ApplicationStatus, StatusChange, User
+from app.models import Application, ApplicationStatus, StatusChange, User, WorkMode
 from app.schemas import (
     ApplicationCreate,
     ApplicationDetail,
@@ -61,6 +61,7 @@ def list_applications(
     db: DbSession,
     user: CurrentUser,
     status_in: Annotated[list[ApplicationStatus] | None, Query(alias="status")] = None,
+    work_mode: Annotated[list[WorkMode] | None, Query(description="Only these work modes (repeat the parameter for several)")] = None,
     company: Annotated[str | None, Query(max_length=200, description="Company contains…")] = None,
     q: Annotated[str | None, Query(max_length=200, description="Keyword in company, role, location or notes")] = None,
     date_from: date | None = None,
@@ -72,6 +73,8 @@ def list_applications(
     conditions = [Application.user_id == user.id]
     if status_in:
         conditions.append(Application.status.in_(status_in))
+    if work_mode:
+        conditions.append(Application.work_mode.in_(work_mode))
     if company:
         # autoescape: a user typing "%" or "_" searches for those characters
         # literally instead of them acting as SQL wildcards.

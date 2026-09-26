@@ -23,6 +23,45 @@ describe('loading and display', () => {
     expect(screen.getByLabelText('Resume version')).toHaveValue('tech-focused')
   })
 
+  it('shows the work mode in the heading beside the location, and selected in the form', async () => {
+    mockGet(makeDetail({ id: 3, role: 'Analyst', location: 'Portland', work_mode: 'hybrid' }))
+    renderApp('/applications/3')
+
+    expect(await screen.findByText('Analyst, Portland, Hybrid')).toBeInTheDocument()
+    expect(screen.getByLabelText('Work mode')).toHaveValue('hybrid')
+  })
+
+  it('shows nothing extra, and "Not specified" in the form, when there is no work mode', async () => {
+    mockGet(makeDetail({ id: 3, role: 'Analyst', location: null, work_mode: null }))
+    renderApp('/applications/3')
+
+    expect(await screen.findByText('Analyst')).toBeInTheDocument()
+    expect(screen.getByLabelText('Work mode')).toHaveValue('')
+  })
+
+  it('saves a changed work mode, and can put it back to not specified', async () => {
+    const user = userEvent.setup()
+    const bodies: Record<string, unknown>[] = []
+    mockGet(makeDetail({ id: 3, work_mode: 'remote' }))
+    server.use(
+      http.patch(url('/applications/3'), async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        bodies.push(body)
+        return HttpResponse.json(makeDetail({ id: 3, work_mode: body.work_mode as never, updated_at: `2026-04-0${bodies.length}T00:00:00Z` }))
+      }),
+    )
+    renderApp('/applications/3')
+
+    await user.selectOptions(await screen.findByLabelText('Work mode'), 'In person')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await screen.findByText(/saved/i)
+    await user.selectOptions(screen.getByLabelText('Work mode'), 'Not specified')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await screen.findByText(/saved/i)
+    expect(bodies.map((b) => b.work_mode)).toEqual(['in_person', null])
+  })
+
   it('lists status history, newest first', async () => {
     mockGet(
       makeDetail({

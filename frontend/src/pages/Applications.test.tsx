@@ -419,6 +419,93 @@ describe('follow-up reminders panel', () => {
   })
 })
 
+describe('work mode on the list', () => {
+  it('shows it after the location, as part of the same phrase', async () => {
+    mockList([makeApplication({ id: 1, company: 'Globex', role: 'Analyst', location: 'Portland', work_mode: 'hybrid' })])
+    renderApp('/applications')
+    expect(await screen.findByText('Analyst, Portland, Hybrid')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['remote', 'Analyst, Remote'],
+    ['in_person', 'Analyst, In person'],
+  ] as const)('shows %s even with no location', async (mode, text) => {
+    mockList([makeApplication({ role: 'Analyst', location: null, work_mode: mode })])
+    renderApp('/applications')
+    expect(await screen.findByText(text)).toBeInTheDocument()
+  })
+
+  it('shows nothing for an application with no work mode, not a placeholder', async () => {
+    mockList([makeApplication({ role: 'Analyst', location: 'Portland', work_mode: null })])
+    renderApp('/applications')
+    expect(await screen.findByText('Analyst, Portland')).toBeInTheDocument()
+    expect(screen.queryByText(/not specified/i, { selector: 'span' })).not.toBeInTheDocument()
+  })
+})
+
+describe('the work mode filter', () => {
+  it('starts on all modes and sends nothing', async () => {
+    const seen = mockList([])
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+
+    expect(screen.getByRole('combobox', { name: 'Filter by work mode' })).toHaveValue('')
+    expect(lastParams(seen)).not.toHaveProperty('work_mode')
+  })
+
+  it('offers every mode and sends the chosen one straight away', async () => {
+    const user = userEvent.setup()
+    const seen = mockList([])
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+    const select = screen.getByRole('combobox', { name: 'Filter by work mode' })
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['All modes', 'Remote', 'Hybrid', 'In person'])
+
+    await user.selectOptions(select, 'Hybrid')
+
+    await waitFor(() => expect(lastParams(seen).work_mode).toBe('hybrid'))
+  })
+
+  it('goes back to the first page when it changes, like the other filters', async () => {
+    const user = userEvent.setup()
+    const seen = mockList(manyApplications(45))
+    renderApp('/applications')
+    await screen.findByText('Company 1')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() => expect(lastParams(seen).offset).toBe('20'))
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by work mode' }), 'Remote')
+
+    await waitFor(() => expect(lastParams(seen)).toMatchObject({ work_mode: 'remote', offset: '0' }))
+  })
+
+  it('counts as an active filter: says nothing matched, and Clear filters resets it', async () => {
+    const user = userEvent.setup()
+    const seen = mockList([])
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by work mode' }), 'Remote')
+    expect(await screen.findByText('No applications match your filters.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(screen.getByRole('combobox', { name: 'Filter by work mode' })).toHaveValue('')
+    await waitFor(() => expect(lastParams(seen)).not.toHaveProperty('work_mode'))
+  })
+
+  it('also applies on the board, where the status filter does not', async () => {
+    const user = userEvent.setup()
+    const seen = mockList([])
+    renderApp('/applications?view=board')
+    await screen.findByText(/no applications yet/i)
+
+    expect(screen.queryByRole('combobox', { name: 'Filter by status' })).not.toBeInTheDocument()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by work mode' }), 'Remote')
+
+    await waitFor(() => expect(lastParams(seen)).toMatchObject({ work_mode: 'remote', limit: '200' }))
+  })
+})
+
 describe('the posting link on the list', () => {
   it('is one click from the row, opening the posting in a new tab without leaving the logbook', async () => {
     mockList([makeApplication({ id: 7, company: 'Globex', job_url: 'https://jobs.example.com/globex/7' })])

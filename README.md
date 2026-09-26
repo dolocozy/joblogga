@@ -63,7 +63,7 @@ The Applications page has a List/Board toggle. On the board each status is a col
 - **Keyboard and screen readers:** focus a card's grip, press Space to lift, Left/Right to move a column at a time, Space to drop, Escape to cancel. Each step is announced.
 - **No dragging at all:** every card has a status dropdown.
 
-A drop moves the card immediately and puts it back with an error if the server refuses. The board loads up to 200 applications at once and notes when there are more; it shares the list's search, company and date filters. Drag-and-drop is built on `@dnd-kit` and loaded only when the board is opened.
+A drop moves the card immediately and puts it back with an error if the server refuses. The board loads up to 200 applications at once and notes when there are more; it shares the list's search, company, work-mode and date filters. Drag-and-drop is built on `@dnd-kit` and loaded only when the board is opened.
 
 ## Screenshots
 
@@ -106,7 +106,7 @@ Interactive docs are at http://localhost:8000/docs when the backend is running.
 | POST | `/auth/password-reset/confirm` | Set a new password with a reset token |
 | GET | `/health` | Liveness check |
 | POST | `/applications` | Create (records the initial status) |
-| GET | `/applications` | List; filters `status`, `company`, `q`, `date_from`, `date_to`; `limit`/`offset` |
+| GET | `/applications` | List; filters `status`, `work_mode` (either can repeat), `company`, `q`, `date_from`, `date_to`; `limit`/`offset` |
 | GET | `/applications/export.csv` | Every application as a CSV file (your backup); includes status history; ignores list filters |
 | GET | `/applications/upcoming` | Open applications with a follow-up overdue or due within `days` (default 7) |
 | GET / PATCH / DELETE | `/applications/{id}` | Read (with status history) / partial update / delete |
@@ -120,7 +120,7 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 
 - `users`: email (unique), bcrypt hash, `session_version` (bumped by a password reset to end earlier sessions).
 - `password_reset_tokens`: hash of each reset token, its expiry, and when it was used.
-- `applications`: belongs to a user; company, role, job link, date applied, resume version, salary min/max, location, notes, current status, follow-up date.
+- `applications`: belongs to a user; company, role, job link, date applied, resume version, salary min/max, location, work mode (remote, hybrid or in person; empty means not specified), notes, current status, follow-up date.
 - `status_changes`: append-only log (`from_status`, `to_status`, timestamp) written whenever an application's status changes, so the full timeline is kept.
 
 ## Dashboard

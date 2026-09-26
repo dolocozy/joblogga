@@ -47,6 +47,7 @@ describe('add application form', () => {
       salary_min: 90000, // a number, not "90000"
       salary_max: 120000,
       location: null,
+      work_mode: null, // left unset unless chosen: nothing is guessed
       notes: null,
       status: 'applied',
       follow_up_date: null,
@@ -299,3 +300,44 @@ describe('add application: inline validation', () => {
   })
 })
 
+
+describe('work mode on the form', () => {
+  const submitWith = async (choose?: (user: ReturnType<typeof userEvent.setup>) => Promise<void>) => {
+    const user = userEvent.setup()
+    let body: Record<string, unknown> | null = null
+    server.use(
+      http.post(url('/applications'), async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(makeDetail({ id: 9 }), { status: 201 })
+      }),
+      http.get(url('/applications/9'), () => HttpResponse.json(makeDetail({ id: 9 }))),
+    )
+    renderApp('/applications/new')
+    await user.type(await screen.findByLabelText('Company'), 'Acme')
+    await user.type(screen.getByLabelText('Role'), 'Engineer')
+    await choose?.(user)
+    await user.click(screen.getByRole('button', { name: 'Add application' }))
+    await screen.findByRole('heading', { name: /Acme/ })
+    return body as Record<string, unknown> | null
+  }
+
+  it('starts on "Not specified" and offers Remote, Hybrid and In person', async () => {
+    renderApp('/applications/new')
+    const select = await screen.findByLabelText('Work mode')
+    expect(select).toHaveValue('')
+    expect(Array.from((select as HTMLSelectElement).options).map((o) => o.textContent)).toEqual(['Not specified', 'Remote', 'Hybrid', 'In person'])
+  })
+
+  it.each([
+    ['remote', 'Remote'],
+    ['hybrid', 'Hybrid'],
+    ['in_person', 'In person'],
+  ])('sends %s when %s is chosen', async (value, label) => {
+    const body = await submitWith((user) => user.selectOptions(screen.getByLabelText('Work mode'), label))
+    expect(body).toMatchObject({ work_mode: value })
+  })
+
+  it('sends null when it is left alone', async () => {
+    expect(await submitWith()).toMatchObject({ work_mode: null })
+  })
+})

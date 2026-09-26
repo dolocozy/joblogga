@@ -1,10 +1,11 @@
 import { useId, useState } from 'react'
 import type { FormEvent } from 'react'
-import { STATUSES } from '../api'
-import type { ApplicationInput, ApplicationStatus } from '../api'
+import { STATUSES, WORK_MODES } from '../api'
+import type { ApplicationInput, ApplicationStatus, WorkMode } from '../api'
 import { localToday } from '../dates'
 import { useFieldErrors } from '../hooks'
 import { statusLabel } from '../status'
+import { workModeLabel } from '../workMode'
 import { httpUrlRule, required, wholeNumberRule } from '../validation'
 import Field from './Field'
 
@@ -23,6 +24,7 @@ const EMPTY: ApplicationInput = {
   salary_min: null,
   salary_max: null,
   location: null,
+  work_mode: null,
   notes: null,
   status: 'applied',
   follow_up_date: null,
@@ -44,6 +46,7 @@ export default function ApplicationForm({ initial = EMPTY, submitLabel, onSubmit
   const [salaryMin, setSalaryMin] = useState(initial.salary_min?.toString() ?? '')
   const [salaryMax, setSalaryMax] = useState(initial.salary_max?.toString() ?? '')
   const [location, setLocation] = useState(initial.location ?? '')
+  const [workMode, setWorkMode] = useState<WorkMode | ''>(initial.work_mode ?? '')
   const [notes, setNotes] = useState(initial.notes ?? '')
   const [status, setStatus] = useState<ApplicationStatus>(initial.status)
   const [followUp, setFollowUp] = useState(initial.follow_up_date ?? '')
@@ -101,6 +104,7 @@ export default function ApplicationForm({ initial = EMPTY, submitLabel, onSubmit
         salary_min: numOrNull(salaryMin),
         salary_max: numOrNull(salaryMax),
         location: orNull(location),
+        work_mode: workMode || null,
         notes: orNull(notes),
         status,
         follow_up_date: orNull(followUp),
@@ -128,11 +132,26 @@ export default function ApplicationForm({ initial = EMPTY, submitLabel, onSubmit
         <Field id={id('role')} label="Role" required error={fields.error('role')}>
           {(c) => <input {...c} maxLength={200} value={role} {...bind('role', setRole)} className="input" />}
         </Field>
-        <Field id={id('job_url')} label="Job posting link" error={fields.error('job_url')}>
-          {(c) => <input {...c} type="url" placeholder="https://" value={jobUrl} {...bind('job_url', setJobUrl)} className="input" />}
-        </Field>
+        <div className="sm:col-span-2">
+          <Field id={id('job_url')} label="Job posting link" error={fields.error('job_url')}>
+            {(c) => <input {...c} type="url" placeholder="https://" value={jobUrl} {...bind('job_url', setJobUrl)} className="input" />}
+          </Field>
+        </div>
         <Field id={id('location')} label="Location">
           {(c) => <input {...c} maxLength={200} value={location} onChange={(e) => setLocation(e.target.value)} className="input" />}
+        </Field>
+        <Field id={id('work_mode')} label="Work mode">
+          {(c) => (
+            <select {...c} value={workMode} onChange={(e) => setWorkMode(e.target.value as WorkMode | '')} className="input">
+              {/* Left unset unless the posting says: nothing is guessed. */}
+              <option value="">Not specified</option>
+              {WORK_MODES.map((m) => (
+                <option key={m} value={m}>
+                  {workModeLabel[m]}
+                </option>
+              ))}
+            </select>
+          )}
         </Field>
         <Field id={id('date_applied')} label="Date applied" required error={fields.error('date_applied')}>
           {(c) => <input {...c} type="date" value={dateApplied} {...bind('date_applied', setDateApplied)} className="input" />}

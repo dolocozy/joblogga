@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { exportApplicationsCsv, fetchUpcoming, listApplications, STATUSES, updateApplication } from '../api'
-import type { Application, ApplicationStatus } from '../api'
+import { exportApplicationsCsv, fetchUpcoming, listApplications, STATUSES, updateApplication, WORK_MODES } from '../api'
+import type { Application, ApplicationStatus, WorkMode } from '../api'
 import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader } from '../components/Ledger'
 import PostingLink from '../components/PostingLink'
 import StatusSelect from '../components/StatusSelect'
@@ -10,6 +10,7 @@ import { saveFile } from '../download'
 import { useDebounced } from '../hooks'
 import { isOverdue } from '../overdue'
 import { statusLabel } from '../status'
+import { roleLine, workModeLabel } from '../workMode'
 
 export const PAGE_SIZE = 20
 // The board shows everything matching the filters at once (no pages), up to the API's maximum.
@@ -22,11 +23,12 @@ interface Filters {
   q: string
   company: string
   status: ApplicationStatus | ''
+  workMode: WorkMode | ''
   dateFrom: string
   dateTo: string
 }
 
-const NO_FILTERS: Filters = { q: '', company: '', status: '', dateFrom: '', dateTo: '' }
+const NO_FILTERS: Filters = { q: '', company: '', status: '', workMode: '', dateFrom: '', dateTo: '' }
 
 function UpcomingPanel({ reloadKey }: { reloadKey: number }) {
   const [items, setItems] = useState<Application[]>([])
@@ -84,7 +86,7 @@ export default function Applications() {
   // Text fields wait for a pause in typing; dropdowns and dates apply at once.
   const q = useDebounced(filters.q.trim(), 300)
   const company = useDebounced(filters.company.trim(), 300)
-  const { status, dateFrom, dateTo } = filters
+  const { status, workMode, dateFrom, dateTo } = filters
 
   useEffect(() => {
     // `cancelled` drops the result of an outdated request, so a slow earlier
@@ -96,6 +98,7 @@ export default function Applications() {
       company,
       // The board's columns are the statuses, so the status filter doesn't apply there.
       status: board ? undefined : status || undefined,
+      work_mode: workMode || undefined,
       date_from: dateFrom,
       date_to: dateTo,
       limit: board ? BOARD_LIMIT : PAGE_SIZE,
@@ -121,7 +124,7 @@ export default function Applications() {
     return () => {
       cancelled = true
     }
-  }, [q, company, status, dateFrom, dateTo, page, reloadKey, view])
+  }, [q, company, status, workMode, dateFrom, dateTo, page, reloadKey, view])
 
   async function changeStatus(app: Application, next: ApplicationStatus) {
     if (next === app.status) return
@@ -180,7 +183,7 @@ export default function Applications() {
 
   // The status filter only exists in the list; the board's columns are the statuses.
   const statusFiltering = view === 'list' && status !== ''
-  const filtered = q !== '' || company !== '' || statusFiltering || dateFrom !== '' || dateTo !== ''
+  const filtered = q !== '' || company !== '' || statusFiltering || workMode !== '' || dateFrom !== '' || dateTo !== ''
   const badRange = dateFrom !== '' && dateTo !== '' && dateFrom > dateTo
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const firstShown = total === 0 ? 0 : page * PAGE_SIZE + 1
@@ -228,7 +231,7 @@ export default function Applications() {
           aria-label="Search"
           value={filters.q}
           onChange={(e) => setFilter({ q: e.target.value })}
-          className="input sm:col-span-2 lg:col-span-3"
+          className="input sm:col-span-2 lg:col-span-2"
         />
         <input
           type="search"
@@ -253,6 +256,19 @@ export default function Applications() {
             ))}
           </select>
         )}
+        <select
+          value={filters.workMode}
+          onChange={(e) => setFilter({ workMode: e.target.value as WorkMode | '' })}
+          aria-label="Filter by work mode"
+          className="input"
+        >
+          <option value="">All modes</option>
+          {WORK_MODES.map((m) => (
+            <option key={m} value={m}>
+              {workModeLabel[m]}
+            </option>
+          ))}
+        </select>
         <label className="flex items-center gap-2 text-sm text-ink-soft lg:col-span-2">
           Applied from
           <input
@@ -334,11 +350,8 @@ export default function Applications() {
                 <div className="flex min-w-0 items-center gap-x-4">
                   <Link to={`/applications/${a.id}`} className="group min-w-0 flex-1">
                     <span className="block truncate font-semibold group-hover:underline">{a.company}</span>
-                    {/* Role and location are separated by a comma, as in a sentence. */}
-                    <span className="block truncate text-sm text-ink-soft">
-                      {a.role}
-                      {a.location ? `, ${a.location}` : ''}
-                    </span>
+                    {/* Role, location and work mode are separated by commas, as in a sentence. */}
+                    <span className="block truncate text-sm text-ink-soft">{roleLine(a)}</span>
                   </Link>
                   <PostingLink url={a.job_url} company={a.company} className="shrink-0 whitespace-nowrap" />
                 </div>

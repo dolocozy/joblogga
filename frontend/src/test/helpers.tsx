@@ -21,6 +21,7 @@ export function makeApplication(overrides: Partial<Application> = {}): Applicati
     salary_min: null,
     salary_max: null,
     location: null,
+    work_mode: null,
     notes: null,
     status: 'applied',
     follow_up_date: null,

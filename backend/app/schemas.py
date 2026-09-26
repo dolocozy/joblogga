@@ -11,7 +11,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.models import ApplicationStatus
+from app.models import ApplicationStatus, WorkMode
 
 
 def validate_new_password(v: str) -> str:
@@ -141,6 +141,7 @@ class ApplicationFields(BaseModel):
     salary_min: int | None = Field(default=None, ge=0)
     salary_max: int | None = Field(default=None, ge=0)
     location: optional_text(200) = None
+    work_mode: WorkMode | None = None  # None = not specified
     notes: optional_text(10000) = None
     status: ApplicationStatus = ApplicationStatus.APPLIED
     follow_up_date: date | None = None
@@ -169,6 +170,7 @@ class ApplicationUpdate(BaseModel):
     salary_min: int | None = Field(default=None, ge=0)
     salary_max: int | None = Field(default=None, ge=0)
     location: optional_text(200) = None
+    work_mode: WorkMode | None = None  # sending null clears it back to "not specified"
     notes: optional_text(10000) = None
     status: ApplicationStatus | None = None
     follow_up_date: date | None = None
@@ -214,6 +216,7 @@ class ApplicationOut(BaseModel):
     salary_min: int | None
     salary_max: int | None
     location: str | None
+    work_mode: WorkMode | None
     notes: str | None
     status: ApplicationStatus
     follow_up_date: date | None

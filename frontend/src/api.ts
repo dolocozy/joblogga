@@ -138,6 +138,10 @@ export const confirmPasswordReset = (token: string, password: string) =>
 export const STATUSES = ['applied', 'screening', 'interview', 'offer', 'offer_accepted', 'offer_declined', 'rejected', 'withdrawn'] as const
 export type ApplicationStatus = (typeof STATUSES)[number]
 
+// Where the job is done. Optional: many postings do not say, and nothing forces a guess.
+export const WORK_MODES = ['remote', 'hybrid', 'in_person'] as const
+export type WorkMode = (typeof WORK_MODES)[number]
+
 export interface Application {
   id: number
   company: string
@@ -148,6 +152,7 @@ export interface Application {
   salary_min: number | null
   salary_max: number | null
   location: string | null
+  work_mode: WorkMode | null // null = not specified
   notes: string | null
   status: ApplicationStatus
   follow_up_date: string | null // YYYY-MM-DD
@@ -176,6 +181,7 @@ export interface ApplicationInput {
   salary_min: number | null
   salary_max: number | null
   location: string | null
+  work_mode: WorkMode | null
   notes: string | null
   status: ApplicationStatus
   follow_up_date: string | null
@@ -185,6 +191,7 @@ export interface ApplicationFilters {
   q?: string
   company?: string
   status?: ApplicationStatus
+  work_mode?: WorkMode
   date_from?: string // YYYY-MM-DD
   date_to?: string
   limit?: number

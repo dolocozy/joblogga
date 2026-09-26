@@ -59,6 +59,19 @@ class ApplicationStatus(enum.StrEnum):
     WITHDRAWN = "withdrawn"
 
 
+class WorkMode(enum.StrEnum):
+    """Where the job is done. Optional on an application: plenty of postings don't say."""
+
+    REMOTE = "remote"
+    HYBRID = "hybrid"
+    IN_PERSON = "in_person"
+
+
+def _work_mode_enum() -> Enum:
+    # A plain string like the status, so a new value later is a code change, not a migration.
+    return Enum(WorkMode, native_enum=False, length=20, values_callable=lambda e: [m.value for m in e])
+
+
 def _status_enum() -> Enum:
     # Stored as a plain string (native_enum=False), not a Postgres ENUM type:
     # adding a status later is then a code change, not a database migration.
@@ -86,6 +99,8 @@ class Application(Base):
     salary_min: Mapped[int | None] = mapped_column()
     salary_max: Mapped[int | None] = mapped_column()
     location: Mapped[str | None] = mapped_column(String(200))
+    # NULL means "not specified", which is the honest default: nothing forces a guess.
+    work_mode: Mapped[WorkMode | None] = mapped_column(_work_mode_enum())
     notes: Mapped[str | None] = mapped_column(Text)
 
     status: Mapped[ApplicationStatus] = mapped_column(_status_enum(), index=True)

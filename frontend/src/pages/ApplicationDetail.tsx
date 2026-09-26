@@ -7,6 +7,7 @@ import PostingLink from '../components/PostingLink'
 import StatusBadge from '../components/StatusBadge'
 import { formatDateTime } from '../dates'
 import { statusLabel } from '../status'
+import { roleLine } from '../workMode'
 
 function toInput(a: Detail): ApplicationInput {
   return {
@@ -18,6 +19,7 @@ function toInput(a: Detail): ApplicationInput {
     salary_min: a.salary_min,
     salary_max: a.salary_max,
     location: a.location,
+    work_mode: a.work_mode,
     notes: a.notes,
     status: a.status,
     follow_up_date: a.follow_up_date,
@@ -77,7 +79,7 @@ export default function ApplicationDetail() {
       </Link>
       <div className="mb-6 mt-3">
         <h1 className="text-3xl">{app.company}</h1>
-        <p className="text-lg text-ink-soft">{app.role}</p>
+        <p className="text-lg text-ink-soft">{roleLine(app)}</p>
         <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1">
           <StatusBadge status={app.status} />
           <PostingLink url={app.job_url} />

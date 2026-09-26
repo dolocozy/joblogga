@@ -296,3 +296,48 @@ def test_downgrading_maps_the_new_statuses_back_so_older_code_can_read_every_row
     assert set(statuses(engine).values()) <= {"applied", "screening", "interview", "offer", "rejected", "withdrawn"}
     assert statuses(engine)[1] == "rejected" and statuses(engine)[3] == "offer"
     assert transitions(engine, 1)[-1] == ("offer", "rejected")
+
+
+# --- 0005: work mode ---------------------------------------------------------
+
+
+def test_existing_applications_get_no_work_mode_and_the_upgrade_does_not_error(engine):
+    migrate_to(engine, "0004")
+    seed_rows(engine)  # an application entered before the field existed
+
+    upgrade_database(engine)
+
+    assert version(engine) == HEAD
+    assert counts(engine) == (1, 1, 1)
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT work_mode FROM applications")).scalar() is None  # not specified, nothing guessed
+        assert conn.execute(text("SELECT company FROM applications")).scalar() == "Acme"
+        assert schema_differences(conn) == []
+
+
+def test_old_code_can_still_add_applications_while_the_new_column_is_live(engine):
+    """During a deploy the previous version keeps serving. It doesn't know work_mode; the column must not stop it."""
+    migrate_to(engine, "0004")
+    seed_rows(engine)
+    upgrade_database(engine)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO applications (user_id, company, role, date_applied, status, created_at, updated_at) "
+                "VALUES (1, 'Old code', 'Eng', '2026-03-02', 'applied', '2026-03-02 00:00:00', '2026-03-02 00:00:00')"
+            )
+        )
+        assert conn.execute(text("SELECT work_mode FROM applications WHERE company = 'Old code'")).scalar() is None
+
+
+def test_a_stored_work_mode_survives_the_downgrade_of_a_later_step_and_dropping_it_loses_only_that_column(engine):
+    upgrade_database(engine)
+    seed_rows(engine)
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE applications SET work_mode = 'hybrid'"))
+
+    with engine.begin() as conn:
+        command.downgrade(alembic_config(conn), "0004")
+
+    assert "work_mode" not in {c["name"] for c in inspect(engine).get_columns("applications")}
+    assert counts(engine) == (1, 1, 1)  # every row still there
