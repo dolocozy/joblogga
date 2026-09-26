@@ -6,7 +6,7 @@ A multi-user job application tracker: log applications, move them through a stat
 
 ![The Joblogga applications list: a ruled ledger with a stage meter per status and an overdue follow-up highlighted](docs/screenshots/applications-list.png)
 
-> **Status: v0.1.0, feature-complete for personal use.** Accounts with password reset, application tracking with status history, follow-up reminders, search and filters, a dashboard, a Kanban board, CSV export and login rate limiting are all built, tested and deployed. See [Known limitations](#known-limitations).
+> **Status: v0.1.1, feature-complete for personal use.** Accounts with email verification, password reset and account deletion, application tracking with status history, follow-up reminders, search and filters, a dashboard, a Kanban board, CSV export and login rate limiting are all built, tested and deployed. See [Known limitations](#known-limitations).
 
 *Screenshots use fictional demo data.*
 
@@ -87,6 +87,8 @@ The rules that keep it from looking generic are enforced by a test (`frontend/sr
 | `/` | Landing page with the login form (logged in: redirects to `/applications`) |
 | `/login`, `/signup` | Stand-alone forms |
 | `/forgot-password`, `/reset-password` | Request a reset link by email / choose a new password (open to everyone, logged in or not) |
+| `/verify-email` | Where the verification link in the signup email lands (open to everyone) |
+| `/account` | Who you are, CSV export, and deleting your account |
 | `/applications`, `/applications/new`, `/applications/:id` | Your applications, as a ledger list or (`?view=board`) a Kanban board |
 | `/dashboard` | Response rate and charts |
 
@@ -100,8 +102,12 @@ Interactive docs are at http://localhost:8000/docs when the backend is running.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/auth/signup`, `/auth/login` | Create account / get a token |
-| GET | `/auth/me` | Current user |
+| POST | `/auth/signup` | Start an account: the same `202` reply for every address; a verification email follows |
+| POST | `/auth/login` | Get a token (unverified accounts can log in) |
+| GET | `/auth/me` | Current user, including `email_verified` |
+| POST | `/auth/verify-email/confirm` | Redeem a verification token (no login needed) |
+| POST | `/auth/verify-email/resend` | Email the logged-in user a fresh verification link |
+| POST | `/auth/delete-account` | Permanently delete the account and all its data; needs the password again |
 | POST | `/auth/password-reset/request` | Email a reset link (same `202` reply for every address) |
 | POST | `/auth/password-reset/confirm` | Set a new password with a reset token |
 | GET | `/health` | Liveness check |
@@ -118,8 +124,8 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 
 ## Data model
 
-- `users`: email (unique), bcrypt hash, `session_version` (bumped by a password reset to end earlier sessions).
-- `password_reset_tokens`: hash of each reset token, its expiry, and when it was used.
+- `users`: email (unique), bcrypt hash, `email_verified_at` (empty until verified), `session_version` (random at signup; bumped by a password reset to end earlier sessions).
+- `password_reset_tokens`, `email_verification_tokens`: hash of each token, its expiry, and when it was used.
 - `applications`: belongs to a user; company, role, job link, date applied, resume version, salary min/max, location, work mode (remote, hybrid or in person; empty means not specified), notes, current status, follow-up date.
 - `status_changes`: append-only log (`from_status`, `to_status`, timestamp) written whenever an application's status changes, so the full timeline is kept.
 
@@ -143,7 +149,17 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 
 Setup on Render: add `RESEND_API_KEY` under the service's Environment tab (the domain must be verified in Resend). `FRONTEND_URL` and `EMAIL_FROM` are in `render.yaml`. For local development, leave the key empty and set `LOG_RESET_LINKS=true` to see the link in the server log.
 
-Known limitation: `POST /auth/signup` still answers "Email already registered" for an existing address, which reveals that an account exists. Closing that properly means email verification at signup.
+## Email verification
+
+Signing up emails a verification link (`/verify-email#token=...`); the same token design as password reset (256 random bits, hash stored, single use, fragment stripped from the address bar), valid for 24 hours. Requesting a new one retires the old.
+
+- **Unverified people can log in and use everything.** A banner with a "Resend email" button stays until they verify. The email is only used to reset a password, so the cost of not verifying is a reset link that may not reach them, and locking people out because a message was slow would be worse. Completing a password reset also verifies the address, since it proves the same thing.
+- **Signup does not reveal who has an account.** It returns the same `202` for every address and does no database work or password hashing before replying; the account is created (or found) in a background task. A new address gets a verification link, an unverified one gets a fresh link, and a verified one gets a "you already have an account" email. Signing up again never changes an existing password. Mail to any one address is capped at 3 per hour, silently, so the reply stays identical.
+- **Accounts that existed before verification** were marked verified by the migration.
+
+## Account deletion
+
+`/account` deletes the account permanently. It asks for the password again (a borrowed or stolen session should not be enough), and wrong guesses are rate limited per account. One `DELETE` on the user row does the work: applications, status history and pending tokens go with it through the database's `ON DELETE CASCADE`, and the login token stops working because its user no longer exists. New accounts start at a random `session_version` so a deleted account's token cannot open a later account that happens to reuse its id (SQLite reuses ids).
 
 ## Rate limiting
 
@@ -155,6 +171,10 @@ Failed logins are limited three ways, and signups and reset requests per address
 | Per account, any address | 20 failures / hour | Stops guessing spread over many addresses |
 | Per address, any account | 50 failures / 15 min | Stops one address trying many accounts |
 | Signups per address | 10 / hour | Slows account spam |
+| Signup emails per address | 3 / hour, silently | Stops inbox flooding without changing the reply, which must not vary |
+| Resend verification, per account | 3 / hour | Stops mail flooding from a logged-in session |
+| Bad verification links per address | 20 / 15 min | Same as bad reset links |
+| Wrong passwords on delete account, per account | 5 / 15 min | A stolen session cannot be used to guess the password |
 | Reset requests per account / per address | 3 / hour, 10 / hour | Stops inbox flooding; counted whether or not the account exists |
 | Bad reset links per address | 20 / 15 min | There is nothing to guess, but no reason to allow it |
 
@@ -167,7 +187,7 @@ Limits are held in the API process's memory: fine for one server, reset on resta
 - **Passwords** are hashed with bcrypt (per-password random salt); plaintext is never stored, and responses never include the hash.
 - **Login** returns a short-lived JWT (default 60 min) signed with `SECRET_KEY`, carrying the user's `session_version`. The client sends it as `Authorization: Bearer <token>`.
 - **Protected routes** use the `get_current_user` dependency, which verifies the signature and expiry (pinned algorithm) and loads the user. Data routes filter by that user's id, which is how per-user isolation is enforced.
-- Wrong email and wrong password return the identical error, and unknown emails still run a bcrypt check, so neither the message nor the response time reveals which emails are registered.
+- **Signup and login give nothing away:** signup answers identically for every address (see Email verification), and wrong email and wrong password return the identical error, and unknown emails still run a bcrypt check, so neither the message nor the response time reveals which emails are registered.
 - The frontend keeps the token in `localStorage` and re-validates it against `/auth/me` on load. `localStorage` is readable by page scripts (XSS); an httpOnly cookie would avoid that at the cost of CSRF handling.
 
 ## Database migrations
@@ -212,7 +232,6 @@ Notes:
 
 ## Known limitations
 
-- **Signup reveals which emails have accounts.** `POST /auth/signup` answers "Email already registered" for an existing address. Password reset does not leak this; closing it for signup would need email verification.
 - **Rate limits live in the API process's memory.** Fine for one server (they reset on restart); running several instances would need a shared store.
 - **The free hosting tiers sleep.** The first request after a quiet spell can take up to a minute; the landing page pings the API to wake it early.
 - **Touch dragging is untested.** The board is configured for touch (a brief press starts a drag, so swiping still scrolls) but has not been tried on a real touch device. Mouse and keyboard dragging were tested in a browser.
