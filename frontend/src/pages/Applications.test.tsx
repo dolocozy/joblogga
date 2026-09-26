@@ -418,3 +418,46 @@ describe('follow-up reminders panel', () => {
     expect(screen.queryByText('Follow-ups due soon')).not.toBeInTheDocument()
   })
 })
+
+describe('the posting link on the list', () => {
+  it('is one click from the row, opening the posting in a new tab without leaving the logbook', async () => {
+    mockList([makeApplication({ id: 7, company: 'Globex', job_url: 'https://jobs.example.com/globex/7' })])
+    renderApp('/applications')
+
+    const link = await screen.findByRole('link', { name: 'View posting for Globex' })
+    expect(link).toHaveAttribute('href', 'https://jobs.example.com/globex/7')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
+  it('is a separate link from the one to the detail page, which still works', async () => {
+    mockList([makeApplication({ id: 7, company: 'Globex', job_url: 'https://jobs.example.com/globex/7' })])
+    renderApp('/applications')
+
+    const detail = await screen.findByRole('link', { name: /^Globex/ })
+    expect(detail).toHaveAttribute('href', '/applications/7')
+    expect(detail).not.toContainElement(screen.getByRole('link', { name: 'View posting for Globex' })) // never nested
+  })
+
+  it('appears only on applications that have a link, and leaves no dead link on the others', async () => {
+    mockList([
+      makeApplication({ id: 1, company: 'Has', job_url: 'https://jobs.example.com/1' }),
+      makeApplication({ id: 2, company: 'Lacks', job_url: null }),
+    ])
+    renderApp('/applications')
+    await screen.findByText('Lacks')
+
+    expect(screen.getAllByRole('link', { name: /View posting/ })).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'View posting for Has' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'View posting for Lacks' })).not.toBeInTheDocument()
+  })
+
+  it('never renders a javascript: link, even if one somehow reached the database', async () => {
+    mockList([makeApplication({ id: 1, company: 'Sneaky', job_url: 'javascript:alert(1)' })])
+    renderApp('/applications')
+    await screen.findByText('Sneaky')
+
+    expect(screen.queryByRole('link', { name: /View posting/ })).not.toBeInTheDocument()
+    expect(document.querySelector('a[href^="javascript"]')).toBeNull()
+  })
+})

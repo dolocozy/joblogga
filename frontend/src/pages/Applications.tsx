@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { exportApplicationsCsv, fetchUpcoming, listApplications, STATUSES, updateApplication } from '../api'
 import type { Application, ApplicationStatus } from '../api'
 import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader } from '../components/Ledger'
+import PostingLink from '../components/PostingLink'
 import StatusSelect from '../components/StatusSelect'
 import { formatDate, localToday } from '../dates'
 import { saveFile } from '../download'
@@ -329,14 +330,18 @@ export default function Applications() {
                 key={a.id}
                 className={`grid gap-x-4 gap-y-1 border-b border-rule py-3 md:items-center ${LEDGER_COLUMNS}`}
               >
-                <Link to={`/applications/${a.id}`} className="group min-w-0">
-                  <span className="block truncate font-semibold group-hover:underline">{a.company}</span>
-                  {/* Role and location are separated by a comma, as in a sentence. */}
-                  <span className="block truncate text-sm text-ink-soft">
-                    {a.role}
-                    {a.location ? `, ${a.location}` : ''}
-                  </span>
-                </Link>
+                {/* The posting link sits beside the company link, not inside it: a link nested in a link is invalid HTML. */}
+                <div className="flex min-w-0 items-center gap-x-4">
+                  <Link to={`/applications/${a.id}`} className="group min-w-0 flex-1">
+                    <span className="block truncate font-semibold group-hover:underline">{a.company}</span>
+                    {/* Role and location are separated by a comma, as in a sentence. */}
+                    <span className="block truncate text-sm text-ink-soft">
+                      {a.role}
+                      {a.location ? `, ${a.location}` : ''}
+                    </span>
+                  </Link>
+                  <PostingLink url={a.job_url} company={a.company} className="shrink-0 whitespace-nowrap" />
+                </div>
                 {/* The status control sits beside the link (not inside it): a control nested in a link is invalid HTML. */}
                 <StatusSelect
                   value={a.status}

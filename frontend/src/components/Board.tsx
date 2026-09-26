@@ -22,6 +22,7 @@ import { isOverdue } from '../overdue'
 import { statusLabel, statusText } from '../status'
 import { FollowUp } from './Ledger'
 import StageMeter from './StageMeter'
+import PostingLink from './PostingLink'
 import StatusSelect from './StatusSelect'
 
 interface Props {
@@ -81,6 +82,7 @@ function BoardCard({ app, today, busy, onMove }: { app: Application; today: stri
           </svg>
         </button>
       </div>
+      <PostingLink url={app.job_url} company={app.company} className="mt-2 inline-block" />
       {/* A plain control for changing status, so moving a card never depends on being able to drag. */}
       <div className="mt-3">
         <StatusSelect value={app.status} label={`Status for ${app.company}`} disabled={busy} onChange={(next) => onMove(app, next)} />

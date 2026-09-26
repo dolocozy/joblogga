@@ -405,3 +405,43 @@ describe('Board on its own', () => {
     expect(onMove).not.toHaveBeenCalled()
   })
 })
+
+describe('the posting link on a card', () => {
+  const WITH_LINKS = [
+    makeApplication({ id: 1, company: 'Acme', status: 'applied', job_url: 'https://jobs.example.com/acme' }),
+    makeApplication({ id: 2, company: 'Globex', status: 'interview', job_url: null }),
+    makeApplication({ id: 3, company: 'Sneaky', status: 'interview', job_url: 'javascript:alert(1)' }),
+  ]
+
+  it('opens the posting in a new tab straight from the card', async () => {
+    mockBackend(WITH_LINKS)
+    renderApp('/applications?view=board')
+    await screen.findByRole('region', { name: /^Applied,/ })
+
+    const link = within(cardIn(column('Applied'), 'Acme')).getByRole('link', { name: 'View posting for Acme' })
+    expect(link).toHaveAttribute('href', 'https://jobs.example.com/acme')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
+  it('is left off cards with no link or an unsafe one, so nothing on the board is dead', async () => {
+    mockBackend(WITH_LINKS)
+    renderApp('/applications?view=board')
+    await screen.findByRole('region', { name: /^Applied,/ })
+
+    expect(screen.getAllByRole('link', { name: /View posting/ })).toHaveLength(1)
+    expect(within(cardIn(column('Interview'), 'Globex')).queryByRole('link', { name: /View posting/ })).not.toBeInTheDocument()
+    expect(document.querySelector('a[href^="javascript"]')).toBeNull()
+  })
+
+  it('leaves the card link to the detail page separate from it', async () => {
+    mockBackend(WITH_LINKS)
+    renderApp('/applications?view=board')
+    await screen.findByRole('region', { name: /^Applied,/ })
+
+    const card = cardIn(column('Applied'), 'Acme')
+    const detail = within(card).getByRole('link', { name: /Acme/, description: '' })
+    expect(within(card).getAllByRole('link')).toHaveLength(2)
+    expect(detail).not.toContainElement(within(card).getByRole('link', { name: 'View posting for Acme' }))
+  })
+})

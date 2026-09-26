@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, deleteApplication, getApplication, updateApplication } from '../api'
 import type { ApplicationDetail as Detail, ApplicationInput } from '../api'
 import ApplicationForm from '../components/ApplicationForm'
+import PostingLink from '../components/PostingLink'
 import StatusBadge from '../components/StatusBadge'
 import { formatDateTime } from '../dates'
 import { statusLabel } from '../status'
@@ -69,10 +70,6 @@ export default function ApplicationDetail() {
     }
   }
 
-  // Only render the link if it's really http(s). The API already enforces this;
-  // checking again here means a bad value could never become a script-running link.
-  const safeUrl = app.job_url && /^https?:\/\//i.test(app.job_url) ? app.job_url : null
-
   return (
     <>
       <Link to="/applications" className="link text-sm">
@@ -83,11 +80,7 @@ export default function ApplicationDetail() {
         <p className="text-lg text-ink-soft">{app.role}</p>
         <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1">
           <StatusBadge status={app.status} />
-          {safeUrl && (
-            <a href={safeUrl} target="_blank" rel="noopener noreferrer" className="link text-sm">
-              View posting
-            </a>
-          )}
+          <PostingLink url={app.job_url} />
         </div>
       </div>
 
