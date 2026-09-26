@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -339,5 +339,70 @@ describe('work mode on the form', () => {
 
   it('sends null when it is left alone', async () => {
     expect(await submitWith()).toMatchObject({ work_mode: null })
+  })
+})
+
+describe('saving a job before applying', () => {
+  const capture = () => {
+    const bodies: Record<string, unknown>[] = []
+    server.use(
+      http.post(url('/applications'), async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>)
+        return HttpResponse.json(makeDetail({ id: 11, status: 'saved', date_applied: null }), { status: 201 })
+      }),
+      http.get(url('/applications/11'), () => HttpResponse.json(makeDetail({ id: 11, status: 'saved', date_applied: null }))),
+    )
+    return bodies
+  }
+
+  it('?status=saved opens a "Save a job" form on Saved with no applied date to fill in', async () => {
+    renderApp('/applications/new?status=saved')
+    expect(await screen.findByRole('heading', { name: 'Save a job' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Status')).toHaveValue('saved')
+    expect(screen.queryByLabelText('Date applied')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save job' })).toBeInTheDocument()
+  })
+
+  it('sends the job as saved, with no applied date', async () => {
+    const user = userEvent.setup()
+    const bodies = capture()
+    renderApp('/applications/new?status=saved')
+
+    await user.type(await screen.findByLabelText('Company'), 'Wish Co')
+    await user.type(screen.getByLabelText('Role'), 'Engineer')
+    await user.click(screen.getByRole('button', { name: 'Save job' }))
+
+    await screen.findByRole('heading', { name: /Wish Co|Acme/ })
+    expect(bodies[0]).toMatchObject({ status: 'saved', date_applied: null })
+  })
+
+  it('an ordinary add still asks for the date, defaulting to today', async () => {
+    renderApp('/applications/new')
+    expect(await screen.findByLabelText('Date applied')).toHaveValue(localToday())
+    expect(screen.getByRole('heading', { name: 'Add application' })).toBeInTheDocument()
+  })
+
+  it('choosing Saved in the status box hides the date, and choosing anything else brings it back set to today', async () => {
+    const user = userEvent.setup()
+    renderApp('/applications/new')
+    await screen.findByLabelText('Date applied')
+
+    await user.selectOptions(screen.getByLabelText('Status'), 'Saved')
+    expect(screen.queryByLabelText('Date applied')).not.toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Status'), 'Applied')
+    expect(screen.getByLabelText('Date applied')).toHaveValue(localToday())
+  })
+
+  it('does not demand a date for a saved job when the form is submitted empty-handed elsewhere', async () => {
+    const user = userEvent.setup()
+    const bodies = capture()
+    renderApp('/applications/new?status=saved')
+    await user.type(await screen.findByLabelText('Company'), 'Wish Co')
+    await user.type(screen.getByLabelText('Role'), 'Engineer')
+    await user.click(screen.getByRole('button', { name: 'Save job' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(screen.queryByText('Enter the date you applied')).not.toBeInTheDocument()
   })
 })

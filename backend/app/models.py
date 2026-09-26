@@ -47,6 +47,9 @@ class User(Base):
 class ApplicationStatus(enum.StrEnum):
     """The pipeline stages. Declaration order is the typical progression."""
 
+    # A job you are interested in but have not applied to. It has no applied date, and it is
+    # left out of every applied-only figure (see docs/status-audit.md).
+    SAVED = "saved"
     APPLIED = "applied"
     SCREENING = "screening"
     INTERVIEW = "interview"
@@ -94,7 +97,9 @@ class Application(Base):
     company: Mapped[str] = mapped_column(String(200))
     role: Mapped[str] = mapped_column(String(200))
     job_url: Mapped[str | None] = mapped_column(String(2048))
-    date_applied: Mapped[date] = mapped_column(Date, index=True)
+    # NULL only while the job is Saved: there is no real "applied on" date until you apply.
+    # Leaving Saved fills it in (today, unless one was given).
+    date_applied: Mapped[date | None] = mapped_column(Date, index=True)
     resume_version: Mapped[str | None] = mapped_column(String(100))
     salary_min: Mapped[int | None] = mapped_column()
     salary_max: Mapped[int | None] = mapped_column()

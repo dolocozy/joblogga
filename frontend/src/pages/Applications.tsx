@@ -1,15 +1,15 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { exportApplicationsCsv, fetchUpcoming, listApplications, STATUSES, updateApplication, WORK_MODES } from '../api'
+import { exportApplicationsCsv, fetchUpcoming, listApplications, updateApplication, WORK_MODES } from '../api'
 import type { Application, ApplicationStatus, WorkMode } from '../api'
-import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader } from '../components/Ledger'
+import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader, SAVED_LEDGER_COLUMNS } from '../components/Ledger'
 import PostingLink from '../components/PostingLink'
 import StatusSelect from '../components/StatusSelect'
-import { formatDate, localToday } from '../dates'
+import { formatDate, formatIsoDate, localToday } from '../dates'
 import { saveFile } from '../download'
 import { useDebounced } from '../hooks'
 import { isOverdue } from '../overdue'
-import { statusLabel } from '../status'
+import { APPLIED_STATUSES, statusLabel } from '../status'
 import { roleLine, workModeLabel } from '../workMode'
 
 export const PAGE_SIZE = 20
@@ -61,9 +61,9 @@ function UpcomingPanel({ reloadKey }: { reloadKey: number }) {
 }
 
 export default function Applications() {
-  // The list/board choice lives in the URL (?view=board), so a refresh or a shared link keeps it.
+  // The list/board/saved choice lives in the URL (?view=board, ?view=saved), so a refresh or a shared link keeps it.
   const [params, setParams] = useSearchParams()
-  const view = params.get('view') === 'board' ? 'board' : 'list'
+  const view = params.get('view') === 'board' ? 'board' : params.get('view') === 'saved' ? 'saved' : 'list'
   const [filters, setFilters] = useState<Filters>(NO_FILTERS)
   const [page, setPage] = useState(0)
   const [items, setItems] = useState<Application[]>([])
@@ -93,14 +93,17 @@ export default function Applications() {
     // response can't overwrite a newer one.
     let cancelled = false
     const board = view === 'board'
+    const saved = view === 'saved'
     listApplications({
       q,
       company,
-      // The board's columns are the statuses, so the status filter doesn't apply there.
-      status: board ? undefined : status || undefined,
+      // The board's columns are the statuses (Saved included), so the status filter doesn't apply there.
+      // The list is the jobs you have applied to; the saved view is the ones you have not.
+      status: board ? undefined : saved ? 'saved' : status ? status : APPLIED_STATUSES,
       work_mode: workMode || undefined,
-      date_from: dateFrom,
-      date_to: dateTo,
+      // Saved jobs have no applied date, so a date range means nothing there.
+      date_from: saved ? undefined : dateFrom,
+      date_to: saved ? undefined : dateTo,
       limit: board ? BOARD_LIMIT : PAGE_SIZE,
       offset: board ? 0 : page * PAGE_SIZE,
     })
@@ -140,10 +143,10 @@ export default function Applications() {
     }
   }
 
-  function changeView(next: 'list' | 'board') {
+  function changeView(next: 'list' | 'board' | 'saved') {
     if (next === view) return
     setLoading(true) // the other view needs different data, so show "Loading" instead of the wrong rows
-    setParams(next === 'board' ? { view: 'board' } : {}, { replace: true })
+    setParams(next === 'list' ? {} : { view: next }, { replace: true })
   }
 
   // Dropping a card on another column changes its status. The card moves at once
@@ -183,8 +186,9 @@ export default function Applications() {
 
   // The status filter only exists in the list; the board's columns are the statuses.
   const statusFiltering = view === 'list' && status !== ''
-  const filtered = q !== '' || company !== '' || statusFiltering || workMode !== '' || dateFrom !== '' || dateTo !== ''
-  const badRange = dateFrom !== '' && dateTo !== '' && dateFrom > dateTo
+  const dateFiltering = view !== 'saved' && (dateFrom !== '' || dateTo !== '') // saved jobs have no applied date
+  const filtered = q !== '' || company !== '' || statusFiltering || workMode !== '' || dateFiltering
+  const badRange = view !== 'saved' && dateFrom !== '' && dateTo !== '' && dateFrom > dateTo
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const firstShown = total === 0 ? 0 : page * PAGE_SIZE + 1
   const lastShown = page * PAGE_SIZE + items.length
@@ -197,16 +201,16 @@ export default function Applications() {
         <h1 className="text-3xl">Applications</h1>
         <div className="flex flex-wrap items-center gap-3">
           <div role="group" aria-label="View" className="flex">
-            {(['list', 'board'] as const).map((v) => (
+            {(['list', 'board', 'saved'] as const).map((v) => (
               <button
                 key={v}
                 type="button"
                 aria-pressed={view === v}
                 onClick={() => changeView(v)}
                 // Two halves of one control: only the outer corners are rounded.
-                className={`btn btn-sm border border-ink ${v === 'list' ? 'rounded-r-none' : '-ml-px rounded-l-none'} ${view === v ? 'bg-ink text-sheet' : 'text-ink hover:bg-ink/5'}`}
+                className={`btn btn-sm border border-ink ${v === 'list' ? 'rounded-r-none' : v === 'saved' ? '-ml-px rounded-l-none' : '-ml-px rounded-none'} ${view === v ? 'bg-ink text-sheet' : 'text-ink hover:bg-ink/5'}`}
               >
-                {v === 'list' ? 'List' : 'Board'}
+                {v === 'list' ? 'List' : v === 'board' ? 'Board' : 'Saved'}
               </button>
             ))}
           </div>
@@ -216,8 +220,8 @@ export default function Applications() {
               {exporting ? 'Exporting…' : 'Export CSV'}
             </button>
           )}
-          <Link to="/applications/new" className="btn btn-primary">
-            Add application
+          <Link to={view === 'saved' ? '/applications/new?status=saved' : '/applications/new'} className="btn btn-primary">
+            {view === 'saved' ? 'Save a job' : 'Add application'}
           </Link>
         </div>
       </div>
@@ -249,7 +253,7 @@ export default function Applications() {
             className="input"
           >
             <option value="">All statuses</option>
-            {STATUSES.map((s) => (
+            {APPLIED_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {statusLabel(s)}
               </option>
@@ -269,6 +273,7 @@ export default function Applications() {
             </option>
           ))}
         </select>
+        {view !== 'saved' && (
         <label className="flex items-center gap-2 text-sm text-ink-soft lg:col-span-2">
           Applied from
           <input
@@ -278,6 +283,8 @@ export default function Applications() {
             className="input flex-1"
           />
         </label>
+        )}
+        {view !== 'saved' && (
         <label className="flex items-center gap-2 text-sm text-ink-soft lg:col-span-2">
           to
           <input
@@ -287,6 +294,7 @@ export default function Applications() {
             className="input flex-1"
           />
         </label>
+        )}
         {filtered && (
           <button type="button" onClick={() => setFilter(NO_FILTERS)} className="link self-center justify-self-start text-sm lg:col-span-2">
             Clear filters
@@ -311,6 +319,14 @@ export default function Applications() {
         <div className="sheet p-10 text-center text-ink-soft">
           {filtered ? (
             'No applications match your filters.'
+          ) : view === 'saved' ? (
+            <>
+              No saved jobs yet. Found one you like but haven&apos;t applied to?{' '}
+              <Link to="/applications/new?status=saved" className="link">
+                Save it here
+              </Link>
+              .
+            </>
           ) : (
             <>
               No applications yet.{' '}
@@ -339,12 +355,12 @@ export default function Applications() {
         </>
       ) : (
         <>
-          <LedgerHeader />
+          <LedgerHeader saved={view === 'saved'} />
           <ul>
             {items.map((a) => (
               <li
                 key={a.id}
-                className={`grid gap-x-4 gap-y-1 border-b border-rule py-3 md:items-center ${LEDGER_COLUMNS}`}
+                className={`grid gap-x-4 gap-y-1 border-b border-rule py-3 md:items-center ${view === 'saved' ? SAVED_LEDGER_COLUMNS : LEDGER_COLUMNS}`}
               >
                 {/* The posting link sits beside the company link, not inside it: a link nested in a link is invalid HTML. */}
                 <div className="flex min-w-0 items-center gap-x-4">
@@ -362,14 +378,29 @@ export default function Applications() {
                   disabled={busyId === a.id}
                   onChange={(next) => changeStatus(a, next)}
                 />
-                <DateCell label="Applied">{formatDate(a.date_applied)}</DateCell>
-                <DateCell label="Follow up">
+                {view === 'saved' ? (
+                  <DateCell label="Saved">{formatIsoDate(a.created_at)}</DateCell>
+                ) : (
+                  <DateCell label="Applied">{a.date_applied ? formatDate(a.date_applied) : ''}</DateCell>
+                )}
+                <DateCell label={view === 'saved' ? 'Apply by' : 'Follow up'}>
                   {a.follow_up_date ? (
                     <FollowUp text={formatDate(a.follow_up_date)} overdue={isOverdue(a, today)} />
                   ) : (
                     <span className="text-ink-soft">None</span>
                   )}
                 </DateCell>
+                {view === 'saved' && (
+                  <button
+                    type="button"
+                    onClick={() => changeStatus(a, 'applied')}
+                    disabled={busyId === a.id}
+                    aria-label={`Mark ${a.company} as applied`}
+                    className="btn btn-secondary btn-sm justify-self-start whitespace-nowrap"
+                  >
+                    Mark applied
+                  </button>
+                )}
               </li>
             ))}
           </ul>

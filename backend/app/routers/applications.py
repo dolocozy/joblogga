@@ -97,8 +97,9 @@ def list_applications(
     items = db.scalars(
         select(Application)
         .where(*conditions)
-        # Newest first; id breaks ties so paging is stable.
-        .order_by(Application.date_applied.desc(), Application.id.desc())
+        # Newest first; id breaks ties so paging is stable. Saved jobs have no date: NULLS LAST
+        # says where they go, because Postgres and SQLite otherwise disagree.
+        .order_by(Application.date_applied.desc().nulls_last(), Application.id.desc())
         .limit(limit)
         .offset(offset)
     ).all()
@@ -118,7 +119,7 @@ def export_applications(db: DbSession, user: CurrentUser) -> Response:
         .where(Application.user_id == user.id)
         # Load each application's history in one extra query, not one per row.
         .options(selectinload(Application.history))
-        .order_by(Application.date_applied.desc(), Application.id.desc())
+        .order_by(Application.date_applied.desc().nulls_last(), Application.id.desc())
     ).all()
     filename = f"joblogga-applications-{date.today().isoformat()}.csv"
     return Response(
@@ -179,6 +180,14 @@ def update_application(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
     new_status = changes.pop("status", None)
+    resulting_status = new_status if new_status is not None else app.status
+    resulting_date = changes["date_applied"] if "date_applied" in changes else app.date_applied
+    if resulting_date is None and resulting_status != ApplicationStatus.SAVED:
+        if app.status == ApplicationStatus.SAVED:
+            # Applying to a saved job: it is applied today unless the client said otherwise.
+            changes["date_applied"] = date.today()
+        else:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail="date_applied cannot be empty once you have applied")
     for field, value in changes.items():
         setattr(app, field, value)
     if new_status is not None and new_status != app.status:

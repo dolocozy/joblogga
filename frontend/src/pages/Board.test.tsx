@@ -173,8 +173,9 @@ describe('the board', () => {
     await screen.findByRole('region', { name: /^Applied,/ })
 
     const regions = screen.getAllByRole('region')
-    expect(regions).toHaveLength(8)
+    expect(regions).toHaveLength(9)
     expect(regions.map((r) => r.getAttribute('aria-label')?.split(',')[0])).toEqual([
+      'Saved',
       'Applied',
       'Screening',
       'Interview',

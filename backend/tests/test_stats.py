@@ -53,7 +53,7 @@ def test_requires_login(client):
 def test_empty_account(client, auth):
     body = stats(client, auth)
     assert body["total"] == 0
-    assert counts_by_status(body) == {s.value: 0 for s in ApplicationStatus}
+    assert counts_by_status(body) == {s.value: 0 for s in ApplicationStatus if s != ApplicationStatus.SAVED}
     assert body["response"] == {"responded": 0, "eligible": 0, "rate": None}
     assert body["per_week"] == []  # all time, no data: nothing to plot
 

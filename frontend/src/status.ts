@@ -1,7 +1,9 @@
+import { STATUSES } from './api'
 import type { ApplicationStatus } from './api'
 
 // The words shown for each status. The stored value is snake_case, so it is not shown as is.
 const LABELS: Record<ApplicationStatus, string> = {
+  saved: 'Saved',
   applied: 'Applied',
   screening: 'Screening',
   interview: 'Interview',
@@ -17,10 +19,14 @@ export const statusLabel = (s: ApplicationStatus) => LABELS[s]
 // Statuses where nothing is left to do: no follow-up is due and nothing is overdue.
 export const isClosed = (s: ApplicationStatus) => s === 'offer_accepted' || s === 'offer_declined' || s === 'rejected' || s === 'withdrawn'
 
+// The statuses of jobs you have actually applied to: everything but Saved.
+export const APPLIED_STATUSES = STATUSES.filter((s) => s !== 'saved')
+
 // How many of the four pipeline stages an application has reached. Accepting an offer
 // completes the pipeline. Declined, Rejected and Withdrawn are endings that do not
 // progress it, so they show none.
 export const stageCount: Record<ApplicationStatus, number> = {
+  saved: 0, // not applied yet
   applied: 1,
   screening: 2,
   interview: 3,
@@ -33,6 +39,7 @@ export const stageCount: Record<ApplicationStatus, number> = {
 
 // Text color per status. The word always carries the meaning; color only backs it up.
 export const statusText: Record<ApplicationStatus, string> = {
+  saved: 'text-ink-soft',
   applied: 'text-ink',
   screening: 'text-ink',
   interview: 'text-ink',

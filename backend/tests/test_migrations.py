@@ -341,3 +341,57 @@ def test_a_stored_work_mode_survives_the_downgrade_of_a_later_step_and_dropping_
 
     assert "work_mode" not in {c["name"] for c in inspect(engine).get_columns("applications")}
     assert counts(engine) == (1, 1, 1)  # every row still there
+
+
+# --- 0006: saved jobs (applied date becomes optional) ------------------------
+
+
+def date_column_is_nullable(engine) -> bool:
+    return next(c for c in inspect(engine).get_columns("applications") if c["name"] == "date_applied")["nullable"]
+
+
+def test_existing_applications_keep_their_dates_and_the_column_becomes_optional(engine):
+    migrate_to(engine, "0005")
+    seed_rows(engine)
+    assert not date_column_is_nullable(engine)
+
+    upgrade_database(engine)
+
+    assert date_column_is_nullable(engine)
+    assert counts(engine) == (1, 1, 1)
+    with engine.connect() as conn:
+        assert str(conn.execute(text("SELECT date_applied FROM applications")).scalar()) == "2026-03-01"
+        assert schema_differences(conn) == []  # models and migrations agree, including the index on the column
+
+
+def test_a_saved_job_can_be_stored_without_a_date_after_the_upgrade(engine):
+    upgrade_database(engine)
+    seed_rows(engine)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO applications (id, user_id, company, role, date_applied, status, created_at, updated_at) "
+                "VALUES (50, 1, 'Wish', 'Eng', NULL, 'saved', '2026-03-02 00:00:00', '2026-03-02 00:00:00')"
+            )
+        )
+        assert conn.execute(text("SELECT COUNT(*) FROM applications WHERE date_applied IS NULL")).scalar() == 1
+
+
+def test_downgrading_removes_saved_jobs_and_their_history_but_keeps_everything_else(engine):
+    upgrade_database(engine)
+    seed_rows(engine)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO applications (id, user_id, company, role, date_applied, status, created_at, updated_at) "
+                "VALUES (50, 1, 'Wish', 'Eng', NULL, 'saved', '2026-03-02 00:00:00', '2026-03-02 00:00:00')"
+            )
+        )
+        conn.execute(text("INSERT INTO status_changes (application_id, from_status, to_status, changed_at) VALUES (50, NULL, 'saved', '2026-03-02 00:00:00')"))
+
+    with engine.begin() as conn:
+        command.downgrade(alembic_config(conn), "0005")
+
+    assert version(engine) == "0005"
+    assert not date_column_is_nullable(engine)
+    assert counts(engine) == (1, 1, 1)  # the dated application and its history are untouched; no orphaned history row

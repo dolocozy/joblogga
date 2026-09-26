@@ -69,7 +69,13 @@ def get_stats(
     this_week = week_start(date.today())
     # Applications dated later than this week (e.g. entered in advance) are left
     # out so the weekly chart, which ends at the current week, matches the totals.
-    conditions = [Application.user_id == user.id, Application.date_applied < this_week + timedelta(days=7)]
+    # Saved jobs are not applications yet: they are out of every figure here until applied to.
+    # (Their missing date would exclude them from the date tests anyway; the status test says so plainly.)
+    conditions = [
+        Application.user_id == user.id,
+        Application.status != ApplicationStatus.SAVED,
+        Application.date_applied < this_week + timedelta(days=7),
+    ]
     if weeks is not None:
         conditions.append(Application.date_applied >= this_week - timedelta(weeks=weeks - 1))
 
@@ -96,7 +102,7 @@ def get_stats(
         or 0
     )
 
-    counts = {s: 0 for s in ApplicationStatus}
+    counts = {s: 0 for s in ApplicationStatus if s != ApplicationStatus.SAVED}
     for status, n in db.execute(select(Application.status, func.count()).where(*conditions).group_by(Application.status)):
         counts[status] = n
 
@@ -121,7 +127,7 @@ def get_stats(
 
     return StatsOut(
         total=sum(counts.values()),
-        by_status=[StatusCount(status=s, count=counts[s]) for s in ApplicationStatus],
+        by_status=[StatusCount(status=s, count=counts[s]) for s in ApplicationStatus if s != ApplicationStatus.SAVED],
         response=response_rate(responded, eligible),
         no_reply=NoReply(days=NO_REPLY_DAYS, count=no_reply),
         per_week=per_week,

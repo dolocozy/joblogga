@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, deleteApplication, getApplication, updateApplication } from '../api'
 import type { ApplicationDetail as Detail, ApplicationInput } from '../api'
 import ApplicationForm from '../components/ApplicationForm'
+import MarkApplied from '../components/MarkApplied'
 import PostingLink from '../components/PostingLink'
 import StatusBadge from '../components/StatusBadge'
 import { formatDateTime } from '../dates'
@@ -85,6 +86,15 @@ export default function ApplicationDetail() {
           <PostingLink url={app.job_url} />
         </div>
       </div>
+
+      {app.status === 'saved' && (
+        <MarkApplied
+          onApply={async (date) => {
+            setSaved(false)
+            setApp(await updateApplication(app.id, { status: 'applied', date_applied: date }))
+          }}
+        />
+      )}
 
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="sheet p-6 lg:col-span-2">

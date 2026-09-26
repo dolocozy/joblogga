@@ -3,14 +3,17 @@ import type { ReactNode } from 'react'
 // Column layout shared by the real applications list and the landing page's
 // sample page: company and role | status | applied | follow up.
 export const LEDGER_COLUMNS = 'md:grid-cols-[minmax(0,1fr)_10.5rem_9rem_11rem]'
+// The saved-jobs list has one more column, for the "Mark applied" button.
+export const SAVED_LEDGER_COLUMNS = 'md:grid-cols-[minmax(0,1fr)_10.5rem_9rem_11rem_8rem]'
 
-export function LedgerHeader() {
+export function LedgerHeader({ saved = false }: { saved?: boolean }) {
   return (
-    <div className={`hidden gap-x-4 border-b-2 border-ink pb-2 text-sm font-semibold text-ink-soft md:grid ${LEDGER_COLUMNS}`}>
+    <div className={`hidden gap-x-4 border-b-2 border-ink pb-2 text-sm font-semibold text-ink-soft md:grid ${saved ? SAVED_LEDGER_COLUMNS : LEDGER_COLUMNS}`}>
       <span>Company and role</span>
       <span>Status</span>
-      <span>Applied</span>
-      <span>Follow up</span>
+      <span>{saved ? 'Saved' : 'Applied'}</span>
+      <span>{saved ? 'Apply by' : 'Follow up'}</span>
+      {saved && <span aria-hidden />}
     </div>
   )
 }

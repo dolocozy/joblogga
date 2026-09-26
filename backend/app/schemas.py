@@ -136,7 +136,8 @@ class ApplicationFields(BaseModel):
     company: RequiredText
     role: RequiredText
     job_url: optional_text(2048) = None
-    date_applied: date = Field(default_factory=date.today)
+    # Omitted or null means today, except for a Saved job, which has no applied date yet.
+    date_applied: date | None = None
     resume_version: optional_text(100) = None
     salary_min: int | None = Field(default=None, ge=0)
     salary_max: int | None = Field(default=None, ge=0)
@@ -156,6 +157,12 @@ class ApplicationCreate(ApplicationFields):
     @model_validator(mode="after")
     def salary_range_is_ordered(self) -> "ApplicationCreate":
         check_salary_range(self.salary_min, self.salary_max)
+        return self
+
+    @model_validator(mode="after")
+    def applied_date_defaults_to_today(self) -> "ApplicationCreate":
+        if self.date_applied is None and self.status != ApplicationStatus.SAVED:
+            self.date_applied = date.today()
         return self
 
 
@@ -184,7 +191,9 @@ class ApplicationUpdate(BaseModel):
     def required_fields_not_null(self) -> "ApplicationUpdate":
         # For optional columns, sending null means "clear it". For columns that
         # must always have a value, explicitly sending null is an error.
-        for name in ("company", "role", "date_applied", "status"):
+        # date_applied may be null: a Saved job has none. Whether that is allowed for the
+        # resulting status is decided in the router, which knows the stored status too.
+        for name in ("company", "role", "status"):
             if name in self.model_fields_set and getattr(self, name) is None:
                 raise ValueError(f"{name} cannot be null")
         return self
@@ -211,7 +220,7 @@ class ApplicationOut(BaseModel):
     company: str
     role: str
     job_url: str | None
-    date_applied: date
+    date_applied: date | None  # None while the job is Saved
     resume_version: str | None
     salary_min: int | None
     salary_max: int | None
@@ -261,7 +270,7 @@ class WeekCount(BaseModel):
 
 class StatsOut(BaseModel):
     total: int
-    by_status: list[StatusCount]  # always every status, in pipeline order
+    by_status: list[StatusCount]  # every status except Saved, in pipeline order (Saved is not an application yet)
     response: ResponseRate
     per_week: list[WeekCount]  # oldest first, empty weeks included as 0
     no_reply: NoReply

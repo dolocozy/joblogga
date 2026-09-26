@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { localToday } from '../dates'
+import { formatIsoDate, localToday } from '../dates'
 import { saveFile } from '../download'
 import { server } from '../test/server'
 import { makeApplication, manyApplications, mockList, mockUpcoming, renderApp, signIn, url } from '../test/helpers'
@@ -119,7 +119,7 @@ describe('filters', () => {
 
     await user.click(screen.getByRole('button', { name: 'Clear filters' }))
 
-    await waitFor(() => expect(lastParams(seen).status).toBeUndefined())
+    await waitFor(() => expect(seen.at(-1)!.searchParams.getAll('status')).toHaveLength(8)) // back to every applied status
     expect(screen.getByRole('combobox', { name: 'Filter by status' })).toHaveValue('')
     expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
   })
@@ -546,5 +546,119 @@ describe('the posting link on the list', () => {
 
     expect(screen.queryByRole('link', { name: /View posting/ })).not.toBeInTheDocument()
     expect(document.querySelector('a[href^="javascript"]')).toBeNull()
+  })
+})
+
+describe('saved jobs', () => {
+  const statusParams = (seen: URL[]) => seen.at(-1)!.searchParams.getAll('status')
+
+  it('the list is the jobs you have applied to: it asks for every status except Saved', async () => {
+    const seen = mockList([])
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+
+    expect(statusParams(seen)).toEqual(['applied', 'screening', 'interview', 'offer', 'offer_accepted', 'offer_declined', 'rejected', 'withdrawn'])
+    const options = within(screen.getByRole('combobox', { name: 'Filter by status' })).getAllByRole('option')
+    expect(options.map((o) => o.textContent)).not.toContain('Saved')
+  })
+
+  it('has a Saved view beside List and Board, kept in the address so a refresh stays there', async () => {
+    const user = userEvent.setup()
+    const seen = mockList([])
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+    expect(screen.getByRole('button', { name: 'Saved' })).toHaveAttribute('aria-pressed', 'false')
+
+    await user.click(screen.getByRole('button', { name: 'Saved' }))
+
+    expect(screen.getByRole('button', { name: 'Saved' })).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() => expect(statusParams(seen)).toEqual(['saved']))
+  })
+
+  it('opens straight onto the saved jobs from ?view=saved', async () => {
+    const seen = mockList([])
+    renderApp('/applications?view=saved')
+    await screen.findByText(/no saved jobs yet/i)
+    expect(statusParams(seen)).toEqual(['saved'])
+  })
+
+  it('has no status or date filters there, since saved jobs have neither an applied date nor other statuses', async () => {
+    mockList([])
+    renderApp('/applications?view=saved')
+    await screen.findByText(/no saved jobs yet/i)
+
+    expect(screen.queryByRole('combobox', { name: 'Filter by status' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Applied from')).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Filter by work mode' })).toBeInTheDocument() // the rest still apply
+  })
+
+  it('does not send a date range that was set on the list once you are on Saved', async () => {
+    const user = userEvent.setup()
+    const seen = mockList([])
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+    fireEvent.change(screen.getByLabelText('Applied from'), { target: { value: '2026-01-01' } })
+    await waitFor(() => expect(seen.at(-1)!.searchParams.get('date_from')).toBe('2026-01-01'))
+
+    await user.click(screen.getByRole('button', { name: 'Saved' }))
+
+    await waitFor(() => expect(statusParams(seen)).toEqual(['saved']))
+    expect(seen.at(-1)!.searchParams.has('date_from')).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument() // an invisible filter is not "active"
+  })
+
+  it('shows each saved job with the date it was saved, not an applied date', async () => {
+    mockList([makeApplication({ id: 1, company: 'Wish Co', status: 'saved', date_applied: null, created_at: '2026-02-10T12:00:00Z' })])
+    renderApp('/applications?view=saved')
+
+    const row = (await screen.findByText('Wish Co')).closest('li')!
+    expect(row).toHaveTextContent(formatIsoDate('2026-02-10T12:00:00Z'))
+    expect(within(row).getByRole('combobox', { name: 'Status for Wish Co' })).toHaveValue('saved')
+    expect(screen.getAllByText('Apply by').length).toBeGreaterThan(0) // the follow-up column is called what it means here
+    expect(screen.queryByText('Follow up')).not.toBeInTheDocument()
+  })
+
+  it('"Mark applied" moves the job to Applied in one click and it leaves the saved view', async () => {
+    const user = userEvent.setup()
+    const patches: unknown[] = []
+    let all = [makeApplication({ id: 5, company: 'Wish Co', status: 'saved' as const, date_applied: null })]
+    server.use(
+      http.get(url('/applications'), () => HttpResponse.json({ items: all.filter((a) => a.status === 'saved'), total: all.filter((a) => a.status === 'saved').length })),
+      http.patch(url('/applications/5'), async ({ request }) => {
+        patches.push(await request.json())
+        all = all.map((a) => ({ ...a, status: 'applied' as const, date_applied: '2026-05-05' }))
+        return HttpResponse.json({ ...all[0], history: [] })
+      }),
+    )
+    renderApp('/applications?view=saved')
+
+    await user.click(await screen.findByRole('button', { name: 'Mark Wish Co as applied' }))
+
+    expect(patches).toEqual([{ status: 'applied' }]) // the server fills in today's date
+    expect(await screen.findByText(/no saved jobs yet/i)).toBeInTheDocument()
+  })
+
+  it('offers "Mark applied" only in the saved view', async () => {
+    mockList([makeApplication({ id: 1, company: 'Acme', status: 'applied' })])
+    renderApp('/applications')
+    await screen.findByText('Acme')
+    expect(screen.queryByRole('button', { name: /Mark .* as applied/ })).not.toBeInTheDocument()
+  })
+
+  it('the add button becomes "Save a job", which opens the form already on Saved', async () => {
+    mockList([])
+    renderApp('/applications?view=saved')
+    await screen.findByText(/no saved jobs yet/i)
+    expect(screen.getByRole('link', { name: 'Save a job' })).toHaveAttribute('href', '/applications/new?status=saved')
+    expect(screen.getByRole('link', { name: 'Save it here' })).toHaveAttribute('href', '/applications/new?status=saved')
+  })
+
+  it('the board has a Saved column first', async () => {
+    mockList([makeApplication({ id: 1, company: 'Wish Co', status: 'saved', date_applied: null, created_at: '2026-02-10T12:00:00Z' })])
+    renderApp('/applications?view=board')
+
+    const column = await screen.findByRole('region', { name: /^Saved,/ })
+    expect(column).toHaveAccessibleName('Saved, 1')
+    expect(within(column).getByText(/^Saved /, { selector: 'p' })).toHaveTextContent(formatIsoDate('2026-02-10T12:00:00Z'))
   })
 })

@@ -49,3 +49,34 @@ A status is something you record when something happens. Ghosting is the *absenc
 - Follow-up reminders and the overdue mark: accepted and declined are closed, like Rejected and Withdrawn.
 - Stage meter: Offer accepted fills all four ticks; Offer declined shows none, like the other non-progress endings.
 - Landing page copy, README.
+
+---
+
+# v0.1.2: Saved
+
+The v0.1.1 audit left "Saved / Wishlist" out because the model requires a date applied and the app reads as a record of what you *did*. This extends that decision rather than reversing it: the requirement is what changed.
+
+## Decision: a status, not a separate list
+
+A saved job is an application that has not been made yet, and it moves through the same lifecycle: it gets a company, role, link, notes and a follow-up date, and one day you click "I applied". A parallel "saved jobs" entity would duplicate all of that and need its own conversion code to copy fields across. So `saved` is the first status, before Applied, and it passes the audit's own test: there is a discrete moment when you click something (saving it, and later applying).
+
+## The date problem
+
+`date_applied` was required, so it became optional (migration 0006). The alternative, a placeholder date such as the day it was saved, would have been a lie that every date-based figure would then have counted. Rules:
+
+- A saved job has no applied date. Leaving Saved fills it in with today, or a date you choose.
+- A job moved *back* to Saved (say, an accidental drag) keeps its old date, so nothing is lost, and moving it forward again keeps that date rather than replacing it with today.
+- An application that has been made cannot have its date cleared.
+- Saved jobs sort after dated ones on both databases (`NULLS LAST` is explicit, because Postgres and SQLite otherwise disagree).
+
+## Kept out of the numbers
+
+Everything on the dashboard means "applications you have submitted", so the stats query excludes Saved by status (not just by the missing date): total, response rate, weekly chart, the no-reply count, and the status breakdown, which does not list Saved at all. A job moved back to Saved leaves the figures even though its history shows an interview, and returns when applied again.
+
+## Where they show up
+
+- **Saved view** (`?view=saved`) next to List and Board: the jobs you have not applied to, with a one-click "Mark applied". The List is the jobs you have applied to. It has no date filters, since there is nothing to filter on.
+- **Board:** a Saved column on the left; dragging a card to Applied applies it (today's date).
+- **Detail page:** an "Applied to this one?" panel with the date preset to today.
+- **Follow-up date** doubles as "apply by" for a saved job, so it appears in the reminders and goes overdue like any other.
+- The stage meter shows no progress for Saved, and Saved is not a closed status.

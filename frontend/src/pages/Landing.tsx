@@ -19,7 +19,7 @@ const SAMPLE: { company: string; role: string; status: ApplicationStatus; applie
 
 const FEATURES: [string, string][] = [
   ['Log each application.', 'Company, role, the posting link, salary range, location, notes, and which resume version you sent.'],
-  ['Follow a clear pipeline.', 'Applied, Screening, Interview and Offer, ending in Offer accepted, Offer declined, Rejected or Withdrawn, with every change dated and kept.'],
+  ['Follow a clear pipeline.', 'Save a job before you apply, then follow it through Applied, Screening, Interview and Offer, ending in Offer accepted, Offer declined, Rejected or Withdrawn, with every change dated and kept.'],
   ['Never lose a follow-up.', 'Set a follow-up date and the ones that are due or overdue rise to the top of your list.'],
   ['Find anything.', 'Search by keyword, or filter by status, company and date.'],
   ['See how it is going.', 'A dashboard shows your response rate and how many applications you send each week.'],

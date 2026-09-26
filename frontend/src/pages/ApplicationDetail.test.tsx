@@ -1,7 +1,8 @@
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { localToday } from '../dates'
 import { server } from '../test/server'
 import { makeDetail, mockList, mockUpcoming, renderApp, signIn, url } from '../test/helpers'
 
@@ -54,11 +55,11 @@ describe('loading and display', () => {
 
     await user.selectOptions(await screen.findByLabelText('Work mode'), 'In person')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    await screen.findByText(/saved/i)
+    await screen.findByRole('status')
     await user.selectOptions(screen.getByLabelText('Work mode'), 'Not specified')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    await screen.findByText(/saved/i)
+    await screen.findByRole('status')
     expect(bodies.map((b) => b.work_mode)).toEqual(['in_person', null])
   })
 
@@ -218,5 +219,109 @@ describe('deleting', () => {
     expect(deleted).toBe(false)
     expect(screen.getByRole('heading', { name: /Acme/ })).toBeInTheDocument()
     confirm.mockRestore()
+  })
+})
+
+describe('a saved job', () => {
+  const SAVED = () => makeDetail({ id: 3, company: 'Wish Co', status: 'saved', date_applied: null, history: [{ id: 1, from_status: null, to_status: 'saved', changed_at: '2026-03-01T12:00:00Z' }] })
+
+  it('offers to mark it applied, with the date already set to today', async () => {
+    mockGet(SAVED())
+    renderApp('/applications/3')
+
+    const panel = await screen.findByRole('form', { name: 'Mark as applied' })
+    expect(within(panel).getByLabelText('Date applied')).toHaveValue(localToday())
+    expect(panel).toHaveTextContent(/left out of your response rate/)
+  })
+
+  it('marking it applied sends the status and the date, and the page becomes an ordinary application', async () => {
+    const user = userEvent.setup()
+    const bodies: Record<string, unknown>[] = []
+    mockGet(SAVED())
+    server.use(
+      http.patch(url('/applications/3'), async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>)
+        return HttpResponse.json(makeDetail({ id: 3, company: 'Wish Co', status: 'applied', date_applied: localToday(), updated_at: '2026-04-01T00:00:00Z' }))
+      }),
+    )
+    renderApp('/applications/3')
+
+    await user.click(await screen.findByRole('button', { name: 'Mark as applied' }))
+
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Mark as applied' })).not.toBeInTheDocument())
+    expect(bodies).toEqual([{ status: 'applied', date_applied: localToday() }])
+    expect(screen.getByLabelText('Status')).toHaveValue('applied')
+    expect(screen.getByLabelText('Date applied')).toHaveValue(localToday())
+  })
+
+  it('the date can be changed first, for something applied to earlier', async () => {
+    const user = userEvent.setup()
+    const bodies: Record<string, unknown>[] = []
+    mockGet(SAVED())
+    server.use(
+      http.patch(url('/applications/3'), async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>)
+        return HttpResponse.json(makeDetail({ id: 3, status: 'applied', date_applied: '2026-03-04', updated_at: '2026-04-01T00:00:00Z' }))
+      }),
+    )
+    renderApp('/applications/3')
+
+    fireEvent.change(await screen.findByLabelText('Date applied'), { target: { value: '2026-03-04' } })
+    await user.click(screen.getByRole('button', { name: 'Mark as applied' }))
+
+    await waitFor(() => expect(bodies).toEqual([{ status: 'applied', date_applied: '2026-03-04' }]))
+  })
+
+  it('will not send an empty date', async () => {
+    const user = userEvent.setup()
+    const bodies: unknown[] = []
+    mockGet(SAVED())
+    server.use(http.patch(url('/applications/3'), async ({ request }) => (bodies.push(await request.json()), HttpResponse.json(SAVED()))))
+    renderApp('/applications/3')
+
+    fireEvent.change(await screen.findByLabelText('Date applied'), { target: { value: '' } })
+    await user.click(screen.getByRole('button', { name: 'Mark as applied' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Enter the date you applied')
+    expect(bodies).toHaveLength(0)
+  })
+
+  it('shows the server message and lets you try again if it fails', async () => {
+    const user = userEvent.setup()
+    mockGet(SAVED())
+    server.use(http.patch(url('/applications/3'), () => HttpResponse.json({ detail: 'Could not save that' }, { status: 500 })))
+    renderApp('/applications/3')
+
+    await user.click(await screen.findByRole('button', { name: 'Mark as applied' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not save that')
+    expect(screen.getByRole('button', { name: 'Mark as applied' })).toBeEnabled()
+  })
+
+  it('has no date field in its edit form, and saves other edits without inventing a date', async () => {
+    const user = userEvent.setup()
+    const bodies: Record<string, unknown>[] = []
+    mockGet(SAVED())
+    server.use(
+      http.patch(url('/applications/3'), async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>)
+        return HttpResponse.json({ ...SAVED(), updated_at: '2026-04-01T00:00:00Z' })
+      }),
+    )
+    renderApp('/applications/3')
+
+    const form = (await screen.findByRole('button', { name: 'Save changes' })).closest('form')!
+    expect(within(form).queryByLabelText('Date applied')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).toMatchObject({ status: 'saved', date_applied: null })
+  })
+
+  it('an application already made shows no such offer', async () => {
+    mockGet(makeDetail({ id: 3, status: 'applied' }))
+    renderApp('/applications/3')
+    await screen.findByLabelText('Company')
+    expect(screen.queryByRole('form', { name: 'Mark as applied' })).not.toBeInTheDocument()
   })
 })

@@ -89,7 +89,7 @@ The rules that keep it from looking generic are enforced by a test (`frontend/sr
 | `/forgot-password`, `/reset-password` | Request a reset link by email / choose a new password (open to everyone, logged in or not) |
 | `/verify-email` | Where the verification link in the signup email lands (open to everyone) |
 | `/account` | Who you are, CSV export, and deleting your account |
-| `/applications`, `/applications/new`, `/applications/:id` | Your applications, as a ledger list or (`?view=board`) a Kanban board |
+| `/applications`, `/applications/new`, `/applications/:id` | Your applications, as a ledger list, a Kanban board (`?view=board`), or the jobs you have saved but not applied to (`?view=saved`) |
 | `/dashboard` | Response rate and charts |
 
 Visiting a protected page while logged out sends you to `/`, and logging in returns you to the page you asked for.
@@ -126,13 +126,13 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 
 - `users`: email (unique), bcrypt hash, `email_verified_at` (empty until verified), `session_version` (random at signup; bumped by a password reset to end earlier sessions).
 - `password_reset_tokens`, `email_verification_tokens`: hash of each token, its expiry, and when it was used.
-- `applications`: belongs to a user; company, role, job link, date applied, resume version, salary min/max, location, work mode (remote, hybrid or in person; empty means not specified), notes, current status, follow-up date.
+- `applications`: belongs to a user; company, role, job link, date applied (empty while Saved), resume version, salary min/max, location, work mode (remote, hybrid or in person; empty means not specified), notes, current status, follow-up date.
 - `status_changes`: append-only log (`from_status`, `to_status`, timestamp) written whenever an application's status changes, so the full timeline is kept.
 
 ## Dashboard
 
 - **Response rate** = applications that ever reached Screening, Interview, Offer (or an offer's outcome) or Rejected ÷ all applications except those withdrawn before any response. It reads the status *history*, not just the current status, so Applied → Interview → Withdrawn still counts as answered. A rejection is a response; withdrawing before hearing anything is your decision, so that application is left out of both sides of the ratio. When nothing is eligible the rate is "no data" (shown as a dash), not 0%.
-- **Statuses:** Applied, Screening, Interview, Offer, then the endings Offer accepted, Offer declined, Rejected and Withdrawn. Declining an offer is your decision, so it is not filed as a rejection. "Ghosted" is not a status because nothing happens to record; the dashboard instead counts applications still at Applied after 30 days. The reasoning is in [docs/status-audit.md](docs/status-audit.md).
+- **Statuses:** Saved (a job you have not applied to yet), Applied, Screening, Interview, Offer, then the endings Offer accepted, Offer declined, Rejected and Withdrawn. Declining an offer is your decision, so it is not filed as a rejection. "Ghosted" is not a status because nothing happens to record; the dashboard instead counts applications still at Applied after 30 days. Saved jobs have no applied date and are left out of every figure here (total, response rate, weekly chart, no-reply count) until you mark them applied. The reasoning is in [docs/status-audit.md](docs/status-audit.md).
 - The status breakdown chart is different on purpose: it shows where each application stands *now*, so that same application appears under Withdrawn there.
 - One time-range filter scopes every number and chart, so they always agree. Each chart has a "View as table" twin so no value depends on hovering.
 - The charts are loaded on demand, so the login and list pages don't download the charting library.

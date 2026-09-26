@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import type { FormEvent } from 'react'
 import { STATUSES, WORK_MODES } from '../api'
 import type { ApplicationInput, ApplicationStatus, WorkMode } from '../api'
+import { blankApplication } from '../applicationDefaults'
 import { localToday } from '../dates'
 import { useFieldErrors } from '../hooks'
 import { statusLabel } from '../status'
@@ -15,33 +16,18 @@ interface Props {
   onSubmit: (input: ApplicationInput) => Promise<void>
 }
 
-const EMPTY: ApplicationInput = {
-  company: '',
-  role: '',
-  job_url: null,
-  date_applied: localToday(),
-  resume_version: null,
-  salary_min: null,
-  salary_max: null,
-  location: null,
-  work_mode: null,
-  notes: null,
-  status: 'applied',
-  follow_up_date: null,
-}
-
 // Inputs work with strings; the API wants null for "empty" and numbers for salary.
 const orNull = (v: string) => (v.trim() === '' ? null : v.trim())
 const numOrNull = (v: string) => (v.trim() === '' ? null : Number(v))
 
-export default function ApplicationForm({ initial = EMPTY, submitLabel, onSubmit }: Props) {
+export default function ApplicationForm({ initial = blankApplication(), submitLabel, onSubmit }: Props) {
   const base = useId()
   const id = (name: string) => `${base}-${name}`
 
   const [company, setCompany] = useState(initial.company)
   const [role, setRole] = useState(initial.role)
   const [jobUrl, setJobUrl] = useState(initial.job_url ?? '')
-  const [dateApplied, setDateApplied] = useState(initial.date_applied)
+  const [dateApplied, setDateApplied] = useState(initial.date_applied ?? '')
   const [resume, setResume] = useState(initial.resume_version ?? '')
   const [salaryMin, setSalaryMin] = useState(initial.salary_min?.toString() ?? '')
   const [salaryMax, setSalaryMax] = useState(initial.salary_max?.toString() ?? '')
@@ -66,7 +52,8 @@ export default function ApplicationForm({ initial = EMPTY, submitLabel, onSubmit
       company: required('Enter the company name')(company),
       role: required('Enter the role')(role),
       job_url: httpUrlRule(jobUrl),
-      date_applied: required('Enter the date you applied')(dateApplied),
+      // A saved job has no applied date yet, so none is asked for.
+      date_applied: status === 'saved' ? null : required('Enter the date you applied')(dateApplied),
       salary_min: wholeNumberRule(salaryMin),
       salary_max: salaryMaxError,
     },
@@ -89,6 +76,12 @@ export default function ApplicationForm({ initial = EMPTY, submitLabel, onSubmit
     onBlur: () => fields.visit(name),
   })
 
+  // Leaving Saved means the job has now been applied to: offer today's date rather than an empty box.
+  function changeStatus(next: ApplicationStatus) {
+    setStatus(next)
+    if (next !== 'saved' && dateApplied === '') setDateApplied(localToday())
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setServerError(null)
@@ -99,7 +92,7 @@ export default function ApplicationForm({ initial = EMPTY, submitLabel, onSubmit
         company: company.trim(),
         role: role.trim(),
         job_url: orNull(jobUrl),
-        date_applied: dateApplied,
+        date_applied: dateApplied || null,
         resume_version: orNull(resume),
         salary_min: numOrNull(salaryMin),
         salary_max: numOrNull(salaryMax),
@@ -153,15 +146,17 @@ export default function ApplicationForm({ initial = EMPTY, submitLabel, onSubmit
             </select>
           )}
         </Field>
-        <Field id={id('date_applied')} label="Date applied" required error={fields.error('date_applied')}>
-          {(c) => <input {...c} type="date" value={dateApplied} {...bind('date_applied', setDateApplied)} className="input" />}
-        </Field>
+        {status !== 'saved' && (
+          <Field id={id('date_applied')} label="Date applied" required error={fields.error('date_applied')}>
+            {(c) => <input {...c} type="date" value={dateApplied} {...bind('date_applied', setDateApplied)} className="input" />}
+          </Field>
+        )}
         <Field id={id('follow_up')} label="Follow up by">
           {(c) => <input {...c} type="date" value={followUp} onChange={(e) => setFollowUp(e.target.value)} className="input" />}
         </Field>
         <Field id={id('status')} label="Status">
           {(c) => (
-            <select {...c} value={status} onChange={(e) => setStatus(e.target.value as ApplicationStatus)} className="input">
+            <select {...c} value={status} onChange={(e) => changeStatus(e.target.value as ApplicationStatus)} className="input">
               {STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {statusLabel(s)}

@@ -133,9 +133,10 @@ export const confirmPasswordReset = (token: string, password: string) =>
 
 // --- applications -----------------------------------------------------------
 
-// In pipeline order. Offer accepted / Offer declined are the two endings that follow an offer
+// In pipeline order. Saved is a job you have not applied to yet: it has no applied date and is left out of every
+// applied-only figure. Offer accepted / Offer declined are the two endings that follow an offer
 // (declining is your decision, not a rejection); Rejected and Withdrawn end an application earlier.
-export const STATUSES = ['applied', 'screening', 'interview', 'offer', 'offer_accepted', 'offer_declined', 'rejected', 'withdrawn'] as const
+export const STATUSES = ['saved', 'applied', 'screening', 'interview', 'offer', 'offer_accepted', 'offer_declined', 'rejected', 'withdrawn'] as const
 export type ApplicationStatus = (typeof STATUSES)[number]
 
 // Where the job is done. Optional: many postings do not say, and nothing forces a guess.
@@ -147,7 +148,7 @@ export interface Application {
   company: string
   role: string
   job_url: string | null
-  date_applied: string // YYYY-MM-DD
+  date_applied: string | null // YYYY-MM-DD; null only while the job is Saved
   resume_version: string | null
   salary_min: number | null
   salary_max: number | null
@@ -176,7 +177,7 @@ export interface ApplicationInput {
   company: string
   role: string
   job_url: string | null
-  date_applied: string
+  date_applied: string | null // null is fine while Saved; leaving Saved fills in today
   resume_version: string | null
   salary_min: number | null
   salary_max: number | null
@@ -190,7 +191,7 @@ export interface ApplicationInput {
 export interface ApplicationFilters {
   q?: string
   company?: string
-  status?: ApplicationStatus
+  status?: ApplicationStatus | ApplicationStatus[] // several statuses: the parameter repeats
   work_mode?: WorkMode
   date_from?: string // YYYY-MM-DD
   date_to?: string
@@ -202,7 +203,8 @@ export function listApplications(filters: ApplicationFilters = {}) {
   const params = new URLSearchParams()
   // Skip unset/empty values so the URL only carries filters actually in use.
   for (const [key, value] of Object.entries(filters)) {
-    if (value !== undefined && value !== '') params.set(key, String(value))
+    if (Array.isArray(value)) value.forEach((v) => params.append(key, String(v)))
+    else if (value !== undefined && value !== '') params.set(key, String(value))
   }
   const qs = params.toString()
   return request<{ items: Application[]; total: number }>(`/applications${qs ? `?${qs}` : ''}`)
