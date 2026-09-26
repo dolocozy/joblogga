@@ -2,6 +2,28 @@
 
 Versions follow [semantic versioning](https://semver.org). Details of the reasoning behind each change are in the README and in `docs/`.
 
+## v0.1.2
+
+### Added
+
+- **Saved jobs.** Track a job you are interested in before you have applied. `saved` is a new first status, so a saved job has the same fields as any application (link, notes, location, work mode, and a follow-up date that doubles as "apply by"). It has no applied date until you apply: **Mark applied** (on the Saved view, the detail page, or by dragging the card on the board) sets today's date, or a date you choose. A job moved back to Saved keeps its old date, so an accidental drag loses nothing. Saved jobs get their own **Saved view** beside List and Board and a Saved column on the board, and are left out of every applied-only figure (total, response rate, weekly chart, no-reply count, status breakdown) until you apply.
+- **Interview rounds.** An optional current round and total, shown as "Round 2 of 3" beside the status on the list, board cards and detail page, and editable whenever the status is Interview or an offer. They are a record, not a rule: they keep their last values after the application moves on, and have no effect on status, the response rate or any statistic. Included in the CSV export.
+
+### Decided against
+
+- **Negotiating and On hold were not added.** Negotiating is a phase of Offer that nothing in the app would treat differently. On hold is a real event but not a stage, so if it is ever built it should be a flag on the current status, not a status; nothing would act on it today, so it was left to notes. The reasoning is in [docs/status-audit.md](docs/status-audit.md).
+
+### Changed
+
+- `applications.date_applied` is now optional (only a Saved job lacks one), and the applications list puts saved jobs last on both databases.
+
+### Database migrations
+
+Applied automatically on the next start.
+
+- `0006`: `date_applied` becomes nullable. Existing rows keep their dates. The previous release cannot read a Saved job, so a rollback after saving one needs the downgrade, which deletes Saved jobs (they cannot exist without the nullable date).
+- `0007`: nullable `interview_round` and `interview_rounds_total`. Existing rows stay empty. Backward compatible with the previous release.
+
 ## v0.1.1
 
 ### Added

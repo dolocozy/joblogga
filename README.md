@@ -6,7 +6,7 @@ A multi-user job application tracker: log applications, move them through a stat
 
 ![The Joblogga applications list: a ruled ledger with a stage meter per status and an overdue follow-up highlighted](docs/screenshots/applications-list.png)
 
-> **Status: v0.1.1, feature-complete for personal use.** Accounts with email verification, password reset and account deletion, application tracking with status history, follow-up reminders, search and filters, a dashboard, a Kanban board, CSV export and login rate limiting are all built, tested and deployed. See [Known limitations](#known-limitations).
+> **Status: v0.1.2, feature-complete for personal use.** Accounts with email verification, password reset and account deletion, application tracking with status history, saved jobs and interview rounds, follow-up reminders, search and filters, a dashboard, a Kanban board, CSV export and login rate limiting are all built, tested and deployed. See [Known limitations](#known-limitations).
 
 *Screenshots use fictional demo data.*
 
