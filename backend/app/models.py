@@ -107,6 +107,10 @@ class Application(Base):
     # NULL means "not specified", which is the honest default: nothing forces a guess.
     work_mode: Mapped[WorkMode | None] = mapped_column(_work_mode_enum())
     notes: Mapped[str | None] = mapped_column(Text)
+    # Lightweight interview progress: "round 2 of 3". Both optional and independent of the status:
+    # they keep their last values after the application moves on, as a record of how far it got.
+    interview_round: Mapped[int | None] = mapped_column()
+    interview_rounds_total: Mapped[int | None] = mapped_column()
 
     status: Mapped[ApplicationStatus] = mapped_column(_status_enum(), index=True)
     follow_up_date: Mapped[date | None] = mapped_column(Date, index=True)

@@ -7,7 +7,8 @@ import { localToday } from '../dates'
 import { useFieldErrors } from '../hooks'
 import { statusLabel } from '../status'
 import { workModeLabel } from '../workMode'
-import { httpUrlRule, required, wholeNumberRule } from '../validation'
+import { showsRoundFields } from '../rounds'
+import { httpUrlRule, required, roundRule, wholeNumberRule } from '../validation'
 import Field from './Field'
 
 interface Props {
@@ -34,6 +35,8 @@ export default function ApplicationForm({ initial = blankApplication(), submitLa
   const [location, setLocation] = useState(initial.location ?? '')
   const [workMode, setWorkMode] = useState<WorkMode | ''>(initial.work_mode ?? '')
   const [notes, setNotes] = useState(initial.notes ?? '')
+  const [round, setRound] = useState(initial.interview_round?.toString() ?? '')
+  const [roundsTotal, setRoundsTotal] = useState(initial.interview_rounds_total?.toString() ?? '')
   const [status, setStatus] = useState<ApplicationStatus>(initial.status)
   const [followUp, setFollowUp] = useState(initial.follow_up_date ?? '')
   const [serverError, setServerError] = useState<string | null>(null)
@@ -46,6 +49,11 @@ export default function ApplicationForm({ initial = blankApplication(), submitLa
       ? 'Max salary cannot be lower than min salary'
       : null)
 
+  // The total may not be below the round, checked once each is a valid number by itself.
+  const roundsTotalError =
+    roundRule(roundsTotal) ??
+    (round.trim() && roundsTotal.trim() && !roundRule(round) && Number(round) > Number(roundsTotal) ? 'The total cannot be lower than the round' : null)
+
   // Listed in form order, which is the order focus moves to on a failed submit.
   const fields = useFieldErrors(
     {
@@ -56,22 +64,25 @@ export default function ApplicationForm({ initial = blankApplication(), submitLa
       date_applied: status === 'saved' ? null : required('Enter the date you applied')(dateApplied),
       salary_min: wholeNumberRule(salaryMin),
       salary_max: salaryMaxError,
+      interview_round: roundRule(round),
+      interview_rounds_total: roundsTotalError,
     },
     id,
   )
 
   // Fields whose value is wrong until it is finished: the link ("h" is not a URL yet)
   // and the salaries (a max of "1" is below a min of 90000 while "100000" is being typed).
-  const SETTLED = new Set(['job_url', 'salary_min', 'salary_max'])
+  const SETTLED = new Set(['job_url', 'salary_min', 'salary_max', 'interview_round', 'interview_rounds_total'])
 
   // Wires a text control to its state, revealing its error once it's been used.
-  const bind = (name: 'company' | 'role' | 'job_url' | 'date_applied' | 'salary_min' | 'salary_max', set: (v: string) => void) => ({
+  const bind = (name: 'company' | 'role' | 'job_url' | 'date_applied' | 'salary_min' | 'salary_max' | 'interview_round' | 'interview_rounds_total', set: (v: string) => void) => ({
     onChange: (e: { target: { value: string } }) => {
       set(e.target.value)
       const reveal = SETTLED.has(name) ? fields.settle : fields.visit
       reveal(name)
       // Min and max are checked against each other, so editing one revisits the other.
       if (name === 'salary_min') fields.settle('salary_max')
+      if (name === 'interview_round') fields.settle('interview_rounds_total')
     },
     onBlur: () => fields.visit(name),
   })
@@ -99,6 +110,8 @@ export default function ApplicationForm({ initial = blankApplication(), submitLa
         location: orNull(location),
         work_mode: workMode || null,
         notes: orNull(notes),
+        interview_round: numOrNull(round),
+        interview_rounds_total: numOrNull(roundsTotal),
         status,
         follow_up_date: orNull(followUp),
       })
@@ -176,6 +189,16 @@ export default function ApplicationForm({ initial = blankApplication(), submitLa
         <Field id={id('salary_max')} label="Salary max" error={fields.error('salary_max')}>
           {(c) => <input {...c} inputMode="numeric" value={salaryMax} {...bind('salary_max', setSalaryMax)} className="input figure" />}
         </Field>
+        {showsRoundFields(status, round.trim() !== '' || roundsTotal.trim() !== '') && (
+          <>
+            <Field id={id('interview_round')} label="Interview round" hint="Which round you are in." error={fields.error('interview_round')}>
+              {(c) => <input {...c} inputMode="numeric" value={round} {...bind('interview_round', setRound)} className="input figure" />}
+            </Field>
+            <Field id={id('interview_rounds_total')} label="Total rounds" hint="If you know how many." error={fields.error('interview_rounds_total')}>
+              {(c) => <input {...c} inputMode="numeric" value={roundsTotal} {...bind('interview_rounds_total', setRoundsTotal)} className="input figure" />}
+            </Field>
+          </>
+        )}
       </div>
 
       <Field id={id('notes')} label="Notes">

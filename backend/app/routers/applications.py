@@ -15,6 +15,7 @@ from app.schemas import (
     ApplicationList,
     ApplicationOut,
     ApplicationUpdate,
+    check_rounds,
     check_salary_range,
 )
 
@@ -175,6 +176,11 @@ def update_application(
     try:
         check_salary_range(
             changes.get("salary_min", app.salary_min), changes.get("salary_max", app.salary_max)
+        )
+        # Likewise the rounds: the round you send is compared with the total already stored.
+        check_rounds(
+            changes.get("interview_round", app.interview_round),
+            changes.get("interview_rounds_total", app.interview_rounds_total),
         )
     except ValueError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))

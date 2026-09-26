@@ -462,3 +462,19 @@ describe('the posting link on a card', () => {
     expect(detail).not.toContainElement(within(card).getByRole('link', { name: 'View posting for Acme' }))
   })
 })
+
+describe('interview rounds on a card', () => {
+  it('shows the round under the status select, and only where one is recorded', async () => {
+    mockBackend([
+      makeApplication({ id: 1, company: 'Acme', status: 'interview', interview_round: 2, interview_rounds_total: 3 }),
+      makeApplication({ id: 2, company: 'Globex', status: 'interview' }),
+      makeApplication({ id: 3, company: 'Initech', status: 'offer', interview_round: 3 }),
+    ])
+    renderApp('/applications?view=board')
+    await screen.findByRole('region', { name: /^Interview,/ })
+
+    expect(cardIn(column('Interview'), 'Acme')).toHaveTextContent('Round 2 of 3')
+    expect(cardIn(column('Interview'), 'Globex')).not.toHaveTextContent(/round/i)
+    expect(cardIn(column('Offer'), 'Initech')).toHaveTextContent('Round 3') // kept after the move to Offer
+  })
+})

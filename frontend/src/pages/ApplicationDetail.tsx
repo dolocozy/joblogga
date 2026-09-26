@@ -5,6 +5,7 @@ import type { ApplicationDetail as Detail, ApplicationInput } from '../api'
 import ApplicationForm from '../components/ApplicationForm'
 import MarkApplied from '../components/MarkApplied'
 import PostingLink from '../components/PostingLink'
+import RoundsNote from '../components/RoundsNote'
 import StatusBadge from '../components/StatusBadge'
 import { formatDateTime } from '../dates'
 import { statusLabel } from '../status'
@@ -22,6 +23,8 @@ function toInput(a: Detail): ApplicationInput {
     location: a.location,
     work_mode: a.work_mode,
     notes: a.notes,
+    interview_round: a.interview_round,
+    interview_rounds_total: a.interview_rounds_total,
     status: a.status,
     follow_up_date: a.follow_up_date,
   }
@@ -83,6 +86,7 @@ export default function ApplicationDetail() {
         <p className="text-lg text-ink-soft">{roleLine(app)}</p>
         <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1">
           <StatusBadge status={app.status} />
+          <RoundsNote app={app} className="text-sm" />
           <PostingLink url={app.job_url} />
         </div>
       </div>

@@ -662,3 +662,27 @@ describe('saved jobs', () => {
     expect(within(column).getByText(/^Saved /, { selector: 'p' })).toHaveTextContent(formatIsoDate('2026-02-10T12:00:00Z'))
   })
 })
+
+describe('interview rounds on the list', () => {
+  it('shows the round under the status of an application that has one', async () => {
+    mockList([
+      makeApplication({ id: 1, company: 'Acme', status: 'interview', interview_round: 2, interview_rounds_total: 3 }),
+      makeApplication({ id: 2, company: 'Globex', status: 'interview', interview_round: 1 }),
+      makeApplication({ id: 3, company: 'Initech', status: 'applied' }),
+    ])
+    renderApp('/applications')
+
+    const row = (name: string) => screen.getByText(name).closest('li')!
+    await screen.findByText('Acme')
+    expect(row('Acme')).toHaveTextContent('Round 2 of 3')
+    expect(row('Globex')).toHaveTextContent('Round 1')
+    expect(row('Globex')).not.toHaveTextContent('of')
+    expect(row('Initech')).not.toHaveTextContent(/round/i)
+  })
+
+  it('still shows it after the application has moved on to an offer', async () => {
+    mockList([makeApplication({ id: 1, company: 'Acme', status: 'offer', interview_round: 3, interview_rounds_total: 3 })])
+    renderApp('/applications')
+    expect((await screen.findByText('Acme')).closest('li')).toHaveTextContent('Round 3 of 3')
+  })
+})

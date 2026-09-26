@@ -325,3 +325,55 @@ describe('a saved job', () => {
     expect(screen.queryByRole('form', { name: 'Mark as applied' })).not.toBeInTheDocument()
   })
 })
+
+describe('interview rounds on the detail page', () => {
+  it('shows "Round 2 of 3" beside the status and in the form', async () => {
+    mockGet(makeDetail({ id: 3, status: 'interview', interview_round: 2, interview_rounds_total: 3 }))
+    renderApp('/applications/3')
+
+    expect(await screen.findByText('Round 2 of 3')).toBeInTheDocument()
+    expect(screen.getByLabelText('Interview round')).toHaveValue('2')
+    expect(screen.getByLabelText('Total rounds')).toHaveValue('3')
+  })
+
+  it.each(['offer', 'rejected', 'withdrawn', 'offer_declined'] as const)('keeps showing the last round once the status is %s: it is a record of how far it got', async (status) => {
+    mockGet(makeDetail({ id: 3, status, interview_round: 2, interview_rounds_total: 3 }))
+    renderApp('/applications/3')
+    expect(await screen.findByText('Round 2 of 3')).toBeInTheDocument()
+    expect(screen.getByLabelText('Interview round')).toBeInTheDocument() // and it can still be corrected
+  })
+
+  it('shows nothing, and no fields, for an application that never got to interviews', async () => {
+    mockGet(makeDetail({ id: 3, status: 'applied' }))
+    renderApp('/applications/3')
+    await screen.findByLabelText('Company')
+    expect(screen.queryByText(/^Round /)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Interview round')).not.toBeInTheDocument()
+  })
+
+  it('advancing the round is a one-field edit, and clearing it sends null', async () => {
+    const user = userEvent.setup()
+    const bodies: Record<string, unknown>[] = []
+    mockGet(makeDetail({ id: 3, status: 'interview', interview_round: 1, interview_rounds_total: 3 }))
+    server.use(
+      http.patch(url('/applications/3'), async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        bodies.push(body)
+        return HttpResponse.json(makeDetail({ id: 3, status: 'interview', interview_round: body.interview_round as number | null, interview_rounds_total: 3, updated_at: `2026-04-0${bodies.length}T00:00:00Z` }))
+      }),
+    )
+    renderApp('/applications/3')
+
+    const round = await screen.findByLabelText('Interview round')
+    await user.clear(round)
+    await user.type(round, '2')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await screen.findByRole('status')
+    await user.clear(screen.getByLabelText('Interview round'))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(2))
+    expect(bodies.map((b) => [b.interview_round, b.interview_rounds_total])).toEqual([[2, 3], [null, 3]])
+    expect(bodies.map((b) => b.status)).toEqual(['interview', 'interview']) // the status is not touched by it
+  })
+})

@@ -42,6 +42,13 @@ export const wholeNumberRule: Rule = (v) => {
   return /^\d+$/.test(t) ? null : 'Enter a whole number, 0 or more'
 }
 
+// An interview round count: a whole number from 1 to 50 (the server's limit).
+export const roundRule: Rule = (v) => {
+  const t = v.trim()
+  if (!t) return null
+  return /^\d+$/.test(t) && Number(t) >= 1 && Number(t) <= 50 ? null : 'Enter a whole number from 1 to 50'
+}
+
 // The second "type it again" box on a new-password form.
 export const matches =
   (other: string, message = 'The passwords do not match'): Rule =>

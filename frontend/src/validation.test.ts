@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emailRequiredRule, httpUrlRule, loginPasswordRule, newPasswordRule, required, wholeNumberRule } from './validation'
+import { emailRequiredRule, httpUrlRule, loginPasswordRule, newPasswordRule, required, roundRule, wholeNumberRule } from './validation'
 
 describe('emailRequiredRule (every form with an email field)', () => {
   it('only asks for something to be typed', () => {
@@ -52,5 +52,15 @@ describe('required', () => {
   it('treats spaces-only as empty', () => {
     expect(required('Enter it')('   ')).toBe('Enter it')
     expect(required('Enter it')(' x ')).toBeNull()
+  })
+})
+
+describe('roundRule', () => {
+  it('accepts blank and whole numbers from 1 to 50', () => {
+    for (const v of ['', '  ', '1', '3', '50']) expect(roundRule(v), v).toBeNull()
+  })
+
+  it('refuses everything else with one message', () => {
+    for (const v of ['0', '51', '-1', '2.5', 'two', '1e2']) expect(roundRule(v), v).toBe('Enter a whole number from 1 to 50')
   })
 })

@@ -122,6 +122,12 @@ def optional_text(max_length: int):
     return Annotated[Annotated[str, Field(max_length=max_length)] | None, BeforeValidator(_blank_to_none)]
 
 
+# Far more rounds than any real process; the cap only stops nonsense.
+MAX_ROUNDS = 50
+# A whole number, and strictly so: JSON true would otherwise pass for 1.
+Round = Annotated[int, Field(strict=True, ge=1, le=MAX_ROUNDS)] | None
+
+
 def _check_http_url(v: str | None) -> str | None:
     # Only http(s). The frontend renders this as a clickable link, and a stored
     # "javascript:..." URL would run script when clicked (stored XSS).
@@ -144,6 +150,8 @@ class ApplicationFields(BaseModel):
     location: optional_text(200) = None
     work_mode: WorkMode | None = None  # None = not specified
     notes: optional_text(10000) = None
+    interview_round: Round = None  # which round you are in
+    interview_rounds_total: Round = None  # how many there will be, if known
     status: ApplicationStatus = ApplicationStatus.APPLIED
     follow_up_date: date | None = None
 
@@ -157,6 +165,7 @@ class ApplicationCreate(ApplicationFields):
     @model_validator(mode="after")
     def salary_range_is_ordered(self) -> "ApplicationCreate":
         check_salary_range(self.salary_min, self.salary_max)
+        check_rounds(self.interview_round, self.interview_rounds_total)
         return self
 
     @model_validator(mode="after")
@@ -179,6 +188,8 @@ class ApplicationUpdate(BaseModel):
     location: optional_text(200) = None
     work_mode: WorkMode | None = None  # sending null clears it back to "not specified"
     notes: optional_text(10000) = None
+    interview_round: Round = None  # null clears it
+    interview_rounds_total: Round = None
     status: ApplicationStatus | None = None
     follow_up_date: date | None = None
 
@@ -204,6 +215,11 @@ def check_salary_range(low: int | None, high: int | None) -> None:
         raise ValueError("salary_min cannot be greater than salary_max")
 
 
+def check_rounds(current: int | None, total: int | None) -> None:
+    if current is not None and total is not None and current > total:
+        raise ValueError("interview_round cannot be greater than interview_rounds_total")
+
+
 class StatusChangeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -227,6 +243,8 @@ class ApplicationOut(BaseModel):
     location: str | None
     work_mode: WorkMode | None
     notes: str | None
+    interview_round: int | None
+    interview_rounds_total: int | None
     status: ApplicationStatus
     follow_up_date: date | None
     created_at: datetime

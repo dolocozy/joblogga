@@ -16,6 +16,8 @@ export function blankApplication(status: ApplicationStatus = 'applied'): Applica
     location: null,
     work_mode: null,
     notes: null,
+    interview_round: null,
+    interview_rounds_total: null,
     status,
     follow_up_date: null,
   }

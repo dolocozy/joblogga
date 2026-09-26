@@ -4,6 +4,7 @@ import { exportApplicationsCsv, fetchUpcoming, listApplications, updateApplicati
 import type { Application, ApplicationStatus, WorkMode } from '../api'
 import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader, SAVED_LEDGER_COLUMNS } from '../components/Ledger'
 import PostingLink from '../components/PostingLink'
+import RoundsNote from '../components/RoundsNote'
 import StatusSelect from '../components/StatusSelect'
 import { formatDate, formatIsoDate, localToday } from '../dates'
 import { saveFile } from '../download'
@@ -372,12 +373,15 @@ export default function Applications() {
                   <PostingLink url={a.job_url} company={a.company} className="shrink-0 whitespace-nowrap" />
                 </div>
                 {/* The status control sits beside the link (not inside it): a control nested in a link is invalid HTML. */}
-                <StatusSelect
-                  value={a.status}
-                  label={`Status for ${a.company}`}
-                  disabled={busyId === a.id}
-                  onChange={(next) => changeStatus(a, next)}
-                />
+                <div>
+                  <StatusSelect
+                    value={a.status}
+                    label={`Status for ${a.company}`}
+                    disabled={busyId === a.id}
+                    onChange={(next) => changeStatus(a, next)}
+                  />
+                  <RoundsNote app={a} className="block" />
+                </div>
                 {view === 'saved' ? (
                   <DateCell label="Saved">{formatIsoDate(a.created_at)}</DateCell>
                 ) : (

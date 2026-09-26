@@ -155,6 +155,8 @@ export interface Application {
   location: string | null
   work_mode: WorkMode | null // null = not specified
   notes: string | null
+  interview_round: number | null // which round, if recorded
+  interview_rounds_total: number | null // how many, if known
   status: ApplicationStatus
   follow_up_date: string | null // YYYY-MM-DD
   created_at: string
@@ -184,6 +186,8 @@ export interface ApplicationInput {
   location: string | null
   work_mode: WorkMode | null
   notes: string | null
+  interview_round: number | null
+  interview_rounds_total: number | null
   status: ApplicationStatus
   follow_up_date: string | null
 }

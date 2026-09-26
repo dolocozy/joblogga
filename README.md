@@ -126,7 +126,7 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 
 - `users`: email (unique), bcrypt hash, `email_verified_at` (empty until verified), `session_version` (random at signup; bumped by a password reset to end earlier sessions).
 - `password_reset_tokens`, `email_verification_tokens`: hash of each token, its expiry, and when it was used.
-- `applications`: belongs to a user; company, role, job link, date applied (empty while Saved), resume version, salary min/max, location, work mode (remote, hybrid or in person; empty means not specified), notes, current status, follow-up date.
+- `applications`: belongs to a user; company, role, job link, date applied (empty while Saved), resume version, salary min/max, location, work mode (remote, hybrid or in person; empty means not specified), interview round and total rounds (optional, e.g. round 2 of 3; kept as a record after the application moves on, and with no effect on status or any statistic), notes, current status, follow-up date.
 - `status_changes`: append-only log (`from_status`, `to_status`, timestamp) written whenever an application's status changes, so the full timeline is kept.
 
 ## Dashboard

@@ -49,6 +49,8 @@ describe('add application form', () => {
       location: null,
       work_mode: null, // left unset unless chosen: nothing is guessed
       notes: null,
+      interview_round: null, // nothing recorded until entered
+      interview_rounds_total: null,
       status: 'applied',
       follow_up_date: null,
     })
@@ -404,5 +406,87 @@ describe('saving a job before applying', () => {
 
     await waitFor(() => expect(bodies).toHaveLength(1))
     expect(screen.queryByText('Enter the date you applied')).not.toBeInTheDocument()
+  })
+})
+
+describe('interview rounds on the form', () => {
+  const capture = () => {
+    const bodies: Record<string, unknown>[] = []
+    server.use(
+      http.post(url('/applications'), async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>)
+        return HttpResponse.json(makeDetail({ id: 12 }), { status: 201 })
+      }),
+      http.get(url('/applications/12'), () => HttpResponse.json(makeDetail({ id: 12 }))),
+    )
+    return bodies
+  }
+
+  it('is not asked for while an application is only Applied', async () => {
+    renderApp('/applications/new')
+    await screen.findByLabelText('Company')
+    expect(screen.queryByLabelText('Interview round')).not.toBeInTheDocument()
+  })
+
+  it.each(['Interview', 'Offer', 'Offer accepted', 'Offer declined'])('appears when the status is %s', async (label) => {
+    const user = userEvent.setup()
+    renderApp('/applications/new')
+    await user.selectOptions(await screen.findByLabelText('Status'), label)
+    expect(screen.getByLabelText('Interview round')).toBeInTheDocument()
+    expect(screen.getByLabelText('Total rounds')).toBeInTheDocument()
+  })
+
+  it('sends the numbers, and null for whatever is left blank', async () => {
+    const user = userEvent.setup()
+    const bodies = capture()
+    renderApp('/applications/new')
+    await user.type(await screen.findByLabelText('Company'), 'Acme')
+    await user.type(screen.getByLabelText('Role'), 'Engineer')
+    await user.selectOptions(screen.getByLabelText('Status'), 'Interview')
+    await user.type(screen.getByLabelText('Interview round'), '2')
+    await user.click(screen.getByRole('button', { name: 'Add application' }))
+
+    await screen.findByRole('heading', { name: /Acme/ })
+    expect(bodies[0]).toMatchObject({ status: 'interview', interview_round: 2, interview_rounds_total: null })
+  })
+
+  it('sends both when both are given', async () => {
+    const user = userEvent.setup()
+    const bodies = capture()
+    renderApp('/applications/new')
+    await user.type(await screen.findByLabelText('Company'), 'Acme')
+    await user.type(screen.getByLabelText('Role'), 'Engineer')
+    await user.selectOptions(screen.getByLabelText('Status'), 'Interview')
+    await user.type(screen.getByLabelText('Interview round'), '2')
+    await user.type(screen.getByLabelText('Total rounds'), '3')
+    await user.click(screen.getByRole('button', { name: 'Add application' }))
+
+    await screen.findByRole('heading', { name: /Acme/ })
+    expect(bodies[0]).toMatchObject({ interview_round: 2, interview_rounds_total: 3 })
+  })
+
+  it('refuses a round that is not a whole number from 1 to 50, next to the field, without sending', async () => {
+    const user = userEvent.setup()
+    const bodies = capture()
+    renderApp('/applications/new')
+    await user.type(await screen.findByLabelText('Company'), 'Acme')
+    await user.type(screen.getByLabelText('Role'), 'Engineer')
+    await user.selectOptions(screen.getByLabelText('Status'), 'Interview')
+    await user.type(screen.getByLabelText('Interview round'), '0')
+    await user.click(screen.getByRole('button', { name: 'Add application' }))
+
+    expect(await screen.findByText('Enter a whole number from 1 to 50')).toBeInTheDocument()
+    expect(bodies).toHaveLength(0)
+  })
+
+  it('says so once you pause, when the total is lower than the round', async () => {
+    const t = typing()
+    renderApp('/applications/new')
+    await t.selectOptions(await screen.findByLabelText('Status'), 'Interview')
+    await t.type(screen.getByLabelText('Interview round'), '4')
+    await t.type(screen.getByLabelText('Total rounds'), '3')
+    expect(screen.queryByText('The total cannot be lower than the round')).not.toBeInTheDocument() // not while typing
+    await pause()
+    expect(screen.getByText('The total cannot be lower than the round')).toBeInTheDocument()
   })
 })

@@ -25,6 +25,7 @@ import { roleLine } from '../workMode'
 import { FollowUp } from './Ledger'
 import StageMeter from './StageMeter'
 import PostingLink from './PostingLink'
+import RoundsNote from './RoundsNote'
 import StatusSelect from './StatusSelect'
 
 interface Props {
@@ -85,6 +86,7 @@ function BoardCard({ app, today, busy, onMove }: { app: Application; today: stri
       {/* A plain control for changing status, so moving a card never depends on being able to drag. */}
       <div className="mt-3">
         <StatusSelect value={app.status} label={`Status for ${app.company}`} disabled={busy} onChange={(next) => onMove(app, next)} />
+        <RoundsNote app={app} className="mt-1 block" />
       </div>
     </li>
   )
