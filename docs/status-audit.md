@@ -80,3 +80,29 @@ Everything on the dashboard means "applications you have submitted", so the stat
 - **Detail page:** an "Applied to this one?" panel with the date preset to today.
 - **Follow-up date** doubles as "apply by" for a saved job, so it appears in the reminders and goes overdue like any other.
 - The stage meter shows no progress for Saved, and Saved is not a closed status.
+
+---
+
+# v0.1.2: Negotiating and On hold (not added)
+
+The v0.1.1 audit called both "detail inside a stage". They were revisited now that Saved and interview rounds have been added, and neither was added. The test used throughout: a status should be something you would click a button for, and it should change what the app does or shows. A pipeline stage earns a column; a detail belongs in notes, history or a small field.
+
+## Negotiating: not added, as a status or as a flag
+
+It is a phase of Offer, not a step after it. There is a moment you could point to ("I countered"), but nothing else in the app would treat it differently:
+
+- The dashboard already counts every offer stage together, and Offer means "awaiting your answer" whether or not you are haggling over it.
+- It is not a response (it follows one), not a closed state, and it changes no reminder or figure.
+- As a status it would add a tenth board column that carries no more information than Offer. As a flag it would be a switch that nothing reads.
+
+Notes and the dated history already say "countered on Friday", which is where that detail belongs.
+
+## On hold: not added, though it is the closer call
+
+Unlike Negotiating, On hold is a real event and is not a stage. A hiring freeze can hit an application at Screening, Interview or Offer, and it later resumes at the same stage. That is why it does not work as a status: it would pull the card out of its stage column, you would have to remember where it came from, and the history would read Interview → On hold → Interview, which the response-rate logic and stage meter would then have to look through.
+
+The right shape, if it were built, is a flag layered on the current status: a boolean that leaves the card in its column with a small mark, filterable and one click to toggle. It was not built because nothing in the app would act on it. It would change no figure and no reminder, so it would be a label for the owner's memory that the notes field already provides. If it later proves worth having, the flag (not a status) is the design, and it is roughly the size of the interview rounds change.
+
+## Status list after v0.1.2
+
+Saved, Applied, Screening, Interview, Offer, Offer accepted, Offer declined, Rejected, Withdrawn. Interview rounds are a field, not statuses. Ghosted, Negotiating and On hold are deliberately not statuses.
