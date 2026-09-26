@@ -323,8 +323,8 @@ def test_old_code_can_still_add_applications_while_the_new_column_is_live(engine
     with engine.begin() as conn:
         conn.execute(
             text(
-                "INSERT INTO applications (user_id, company, role, date_applied, status, created_at, updated_at) "
-                "VALUES (1, 'Old code', 'Eng', '2026-03-02', 'applied', '2026-03-02 00:00:00', '2026-03-02 00:00:00')"
+                "INSERT INTO applications (id, user_id, company, role, date_applied, status, created_at, updated_at) "
+                "VALUES (99, 1, 'Old code', 'Eng', '2026-03-02', 'applied', '2026-03-02 00:00:00', '2026-03-02 00:00:00')"
             )
         )
         assert conn.execute(text("SELECT work_mode FROM applications WHERE company = 'Old code'")).scalar() is None
