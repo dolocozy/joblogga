@@ -501,16 +501,20 @@ def test_resetting_signs_out_every_earlier_session(client, outbox, user):
 
 
 def test_each_reset_moves_the_session_version_on(client, outbox, db, user):
-    assert user.session_version == 0
+    before = user.session_version
     request_reset(client)
     confirm(client, token_in(outbox.sent[0]))
     db.refresh(user)
-    assert user.session_version == 1
+    assert user.session_version == before + 1
 
 
-def test_sessions_that_predate_session_versions_stay_valid_until_a_reset(client, user):
-    """Tokens issued before this feature carry no version claim; deploying it must not log anyone out."""
+def test_sessions_that_predate_session_versions_stay_valid_until_a_reset(client, db, user):
+    """Tokens issued before this feature carry no version claim; deploying it must not log anyone out.
+    Those belong to accounts the migration gave version 0 (new accounts start at a random one)."""
     import jwt
+
+    user.session_version = 0
+    db.commit()
 
     legacy = jwt.encode(
         {"sub": str(user.id), "exp": datetime.now(UTC) + timedelta(hours=1)}, settings.secret_key, algorithm=settings.jwt_algorithm
