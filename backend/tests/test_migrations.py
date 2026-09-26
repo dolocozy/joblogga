@@ -214,3 +214,85 @@ def test_two_instances_starting_at_once_do_not_collide(engine):
     assert errors == []
     assert TABLES <= tables(engine)
     assert version(engine) == HEAD
+
+
+# --- 0004: a declined offer used to be recorded as a rejection ---------------
+
+
+def seed_outcomes(engine) -> None:
+    """Four applications as the code before `offer_declined` could have written them."""
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO users (id, email, hashed_password, created_at) VALUES (1, 'me@example.com', 'x', '2026-01-01 00:00:00')"))
+        apps = [
+            (1, "Declined it", "rejected"),  # offer, then "rejected": really the person declining
+            (2, "Plain rejection", "rejected"),  # applied, then rejected: a real rejection
+            (3, "Still an offer", "offer"),
+            (4, "Withdrew after offer", "withdrawn"),  # ambiguous, deliberately left alone
+        ]
+        for id_, company, status in apps:
+            conn.execute(
+                text(
+                    "INSERT INTO applications (id, user_id, company, role, date_applied, status, created_at, updated_at) "
+                    f"VALUES ({id_}, 1, '{company}', 'Engineer', '2026-03-01', '{status}', '2026-03-01 00:00:00', '2026-03-01 00:00:00')"
+                )
+            )
+        history = [
+            (1, None, "applied"), (1, "applied", "offer"), (1, "offer", "rejected"),
+            (2, None, "applied"), (2, "applied", "rejected"),
+            (3, None, "applied"), (3, "applied", "offer"),
+            (4, None, "applied"), (4, "applied", "offer"), (4, "offer", "withdrawn"),
+        ]  # fmt: skip
+        for app_id, from_status, to_status in history:
+            frm = "NULL" if from_status is None else f"'{from_status}'"
+            conn.execute(
+                text(f"INSERT INTO status_changes (application_id, from_status, to_status, changed_at) VALUES ({app_id}, {frm}, '{to_status}', '2026-03-02 00:00:00')")
+            )
+
+
+def statuses(engine) -> dict[int, str]:
+    with engine.connect() as conn:
+        return {row[0]: row[1] for row in conn.execute(text("SELECT id, status FROM applications ORDER BY id"))}
+
+
+def transitions(engine, application_id: int) -> list[tuple[str | None, str]]:
+    with engine.connect() as conn:
+        rows = conn.execute(text(f"SELECT from_status, to_status FROM status_changes WHERE application_id = {application_id} ORDER BY id"))
+        return [(r[0], r[1]) for r in rows]
+
+
+def test_a_rejection_that_followed_an_offer_becomes_a_declined_offer(engine):
+    migrate_to(engine, "0003")
+    seed_outcomes(engine)
+
+    upgrade_database(engine)
+
+    assert statuses(engine) == {1: "offer_declined", 2: "rejected", 3: "offer", 4: "withdrawn"}
+    # The record is corrected too, not just the current value, so the timeline reads true.
+    assert transitions(engine, 1) == [(None, "applied"), ("applied", "offer"), ("offer", "offer_declined")]
+    assert transitions(engine, 2) == [(None, "applied"), ("applied", "rejected")]  # untouched
+    assert transitions(engine, 4) == [(None, "applied"), ("applied", "offer"), ("offer", "withdrawn")]
+    with engine.connect() as conn:
+        assert schema_differences(conn) == []
+
+
+def test_the_outcome_migration_is_safe_on_an_empty_database_and_on_rerun(engine):
+    upgrade_database(engine)
+    upgrade_database(engine)
+    assert version(engine) == HEAD
+
+
+def test_downgrading_maps_the_new_statuses_back_so_older_code_can_read_every_row(engine):
+    migrate_to(engine, "0003")
+    seed_outcomes(engine)
+    upgrade_database(engine)
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE applications SET status = 'offer_accepted' WHERE id = 3"))
+        conn.execute(text("UPDATE status_changes SET to_status = 'offer_accepted' WHERE application_id = 3 AND to_status = 'offer'"))
+
+    with engine.begin() as conn:
+        command.downgrade(alembic_config(conn), "0003")
+
+    assert version(engine) == "0003"
+    assert set(statuses(engine).values()) <= {"applied", "screening", "interview", "offer", "rejected", "withdrawn"}
+    assert statuses(engine)[1] == "rejected" and statuses(engine)[3] == "offer"
+    assert transitions(engine, 1)[-1] == ("offer", "rejected")

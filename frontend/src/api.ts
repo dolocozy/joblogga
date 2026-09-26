@@ -133,7 +133,9 @@ export const confirmPasswordReset = (token: string, password: string) =>
 
 // --- applications -----------------------------------------------------------
 
-export const STATUSES = ['applied', 'screening', 'interview', 'offer', 'rejected', 'withdrawn'] as const
+// In pipeline order. Offer accepted / Offer declined are the two endings that follow an offer
+// (declining is your decision, not a rejection); Rejected and Withdrawn end an application earlier.
+export const STATUSES = ['applied', 'screening', 'interview', 'offer', 'offer_accepted', 'offer_declined', 'rejected', 'withdrawn'] as const
 export type ApplicationStatus = (typeof STATUSES)[number]
 
 export interface Application {
@@ -225,6 +227,8 @@ export interface Stats {
     rate: number | null // 0..1, or null when nothing is eligible yet
   }
   per_week: { week_start: string; count: number }[] // week_start is a Monday
+  // Applications still at Applied `days` days after they were sent. "Ghosted" is worked out, not a status.
+  no_reply: { days: number; count: number }
 }
 
 // `weeks` limits every figure to the last N weeks; null means all time.

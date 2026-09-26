@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_user
 from app.models import Application, ApplicationStatus, StatusChange, User
-from app.schemas import ResponseRate, StatsOut, StatusCount, WeekCount
+from app.schemas import NoReply, ResponseRate, StatsOut, StatusCount, WeekCount
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -25,8 +25,15 @@ RESPONDED = (
     ApplicationStatus.SCREENING,
     ApplicationStatus.INTERVIEW,
     ApplicationStatus.OFFER,
+    ApplicationStatus.OFFER_ACCEPTED,
+    ApplicationStatus.OFFER_DECLINED,
     ApplicationStatus.REJECTED,
 )
+
+# "Ghosted" is deliberately not a status (see docs/status-audit.md): it is the absence of
+# an event, so it is worked out here. An application still at Applied this many days
+# after it was sent has had no reply.
+NO_REPLY_DAYS = 30
 
 
 def week_start(d: date) -> date:
@@ -80,6 +87,15 @@ def get_stats(
         or 0
     )
 
+    no_reply = (
+        db.scalar(
+            select(func.count())
+            .select_from(Application)
+            .where(*conditions, Application.status == ApplicationStatus.APPLIED, Application.date_applied <= date.today() - timedelta(days=NO_REPLY_DAYS))
+        )
+        or 0
+    )
+
     counts = {s: 0 for s in ApplicationStatus}
     for status, n in db.execute(select(Application.status, func.count()).where(*conditions).group_by(Application.status)):
         counts[status] = n
@@ -107,5 +123,6 @@ def get_stats(
         total=sum(counts.values()),
         by_status=[StatusCount(status=s, count=counts[s]) for s in ApplicationStatus],
         response=response_rate(responded, eligible),
+        no_reply=NoReply(days=NO_REPLY_DAYS, count=no_reply),
         per_week=per_week,
     )

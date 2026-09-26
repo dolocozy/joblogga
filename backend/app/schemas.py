@@ -246,6 +246,11 @@ class ResponseRate(BaseModel):
     rate: float | None
 
 
+class NoReply(BaseModel):
+    days: int
+    count: int  # applications still at Applied at least `days` days after their date applied
+
+
 class WeekCount(BaseModel):
     week_start: date  # the Monday that starts the week
     count: int
@@ -253,6 +258,7 @@ class WeekCount(BaseModel):
 
 class StatsOut(BaseModel):
     total: int
-    by_status: list[StatusCount]  # always all six statuses, in pipeline order
+    by_status: list[StatusCount]  # always every status, in pipeline order
     response: ResponseRate
     per_week: list[WeekCount]  # oldest first, empty weeks included as 0
+    no_reply: NoReply

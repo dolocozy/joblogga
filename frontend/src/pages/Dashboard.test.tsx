@@ -38,14 +38,14 @@ describe('response rate', () => {
   it('explains the definition: a later withdrawal keeps the response, an early one is left out', async () => {
     mockStats()
     renderApp('/dashboard')
-    const note = await screen.findByText(/reached screening, interview, offer or rejected/i)
+    const note = await screen.findByText(/reached screening, interview, offer/i)
     expect(note).toHaveTextContent(/even if you withdrew it afterwards/i)
     expect(note).toHaveTextContent(/withdrawn before any reply are left out entirely/i)
   })
 })
 
 describe('summary tiles', () => {
-  it('shows totals, open applications (applied + screening + interview), and offers', async () => {
+  it('shows totals, open applications (applied, screening, interview, and an offer awaiting an answer), and offers', async () => {
     mockStats(makeStats()) // total 10; applied 2, screening 3, interview 1, offer 1
     renderApp('/dashboard')
     await heroValue() // wait for the stats to load
@@ -54,8 +54,43 @@ describe('summary tiles', () => {
     const page = within(screen.getByRole('main'))
     const tile = (label: string) => page.getByText(label, { selector: 'p' }).nextElementSibling
     expect(tile('Applications')).toHaveTextContent('10')
-    expect(tile('Still open')).toHaveTextContent('6') // 2 + 3 + 1
+    expect(tile('Still open')).toHaveTextContent('7') // 2 + 3 + 1 + the offer still awaiting an answer
     expect(tile('Offers')).toHaveTextContent('1')
+  })
+
+  it('counts every offer stage as an offer, so accepting or declining one does not remove it', async () => {
+    const byStatus = makeStats().by_status.map((s) =>
+      s.status === 'offer' ? { ...s, count: 1 } : s.status === 'offer_accepted' ? { ...s, count: 2 } : s.status === 'offer_declined' ? { ...s, count: 3 } : s,
+    )
+    mockStats(makeStats({ by_status: byStatus }))
+    renderApp('/dashboard')
+    await heroValue()
+
+    const page = within(screen.getByRole('main'))
+    expect(page.getByText('Offers', { selector: 'p' }).nextElementSibling).toHaveTextContent('6') // 1 + 2 + 3
+    // Only the offer awaiting an answer is still open; decided ones are not.
+    expect(page.getByText('Still open', { selector: 'p' }).nextElementSibling).toHaveTextContent('7')
+  })
+})
+
+describe('applications with no reply', () => {
+  it('says how many are still at Applied after the wait, in plain words', async () => {
+    mockStats(makeStats({ no_reply: { days: 30, count: 4 } }))
+    renderApp('/dashboard')
+    expect(await screen.findByText('4 applications have had no reply in 30 days or more, and are still at Applied.')).toBeInTheDocument()
+  })
+
+  it('uses the singular for one', async () => {
+    mockStats(makeStats({ no_reply: { days: 30, count: 1 } }))
+    renderApp('/dashboard')
+    expect(await screen.findByText('1 application has had no reply in 30 days or more, and is still at Applied.')).toBeInTheDocument()
+  })
+
+  it('says nothing when there are none', async () => {
+    mockStats(makeStats({ no_reply: { days: 30, count: 0 } }))
+    renderApp('/dashboard')
+    await heroValue()
+    expect(screen.queryByText(/had no reply/)).not.toBeInTheDocument()
   })
 })
 

@@ -380,10 +380,12 @@ describe('follow-up column', () => {
     expect(screen.getByText('Nodate').closest('li')).toHaveTextContent('None')
   })
 
-  it('never calls a rejected or withdrawn application overdue', async () => {
+  it('never calls a closed application overdue: rejected, withdrawn, or an offer already decided', async () => {
     mockList([
       makeApplication({ id: 1, company: 'Nope', status: 'rejected', follow_up_date: '2000-01-01' }),
       makeApplication({ id: 2, company: 'Left', status: 'withdrawn', follow_up_date: '2000-01-01' }),
+      makeApplication({ id: 3, company: 'Took', status: 'offer_accepted', follow_up_date: '2000-01-01' }),
+      makeApplication({ id: 4, company: 'Passed', status: 'offer_declined', follow_up_date: '2000-01-01' }),
     ])
     renderApp('/applications')
     await screen.findByText('Nope')

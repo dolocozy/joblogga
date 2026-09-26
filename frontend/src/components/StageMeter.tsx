@@ -3,7 +3,7 @@ import { stageCount } from '../status'
 
 // Four small ticks showing how far along the pipeline an application is. It is
 // decorative (the status word beside it says the same thing), so it is hidden
-// from screen readers. Rejected and Withdrawn show empty ticks in their own color.
+// from screen readers. Declined, Rejected and Withdrawn show empty ticks (Rejected in its own color).
 export default function StageMeter({ status }: { status: ApplicationStatus }) {
   const filled = stageCount[status]
   const hollow = status === 'rejected' ? 'border-brick' : 'border-pencil'

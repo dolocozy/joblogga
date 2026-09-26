@@ -110,13 +110,22 @@ export default function Dashboard() {
               </p>
             </div>
             <StatTile label="Applications" value={stats.total} />
-            <StatTile label="Still open" value={count('applied') + count('screening') + count('interview')} />
-            <StatTile label="Offers" value={count('offer')} />
+            {/* An offer waiting on your answer is still open. */}
+            <StatTile label="Still open" value={count('applied') + count('screening') + count('interview') + count('offer')} />
+            {/* Every offer stage, so an offer you accepted or declined does not vanish from the count. */}
+            <StatTile label="Offers" value={count('offer') + count('offer_accepted') + count('offer_declined')} />
           </div>
 
+          {stats.no_reply.count > 0 && (
+            <p className="max-w-3xl text-sm">
+              {stats.no_reply.count === 1 ? '1 application has' : `${stats.no_reply.count} applications have`} had no reply in{' '}
+              {stats.no_reply.days} days or more, and {stats.no_reply.count === 1 ? 'is' : 'are'} still at Applied.
+            </p>
+          )}
+
           <p className="max-w-3xl text-sm text-ink-soft">
-            An application counts as a response once it has reached Screening, Interview, Offer or Rejected, even if you
-            withdrew it afterwards. Applications withdrawn before any reply are left out entirely, since withdrawing is
+            An application counts as a response once it has reached Screening, Interview, Offer (or an offer&apos;s
+            outcome) or Rejected, even if you withdrew it afterwards. Applications withdrawn before any reply are left out entirely, since withdrawing is
             your decision, not the employer&apos;s.
           </p>
 

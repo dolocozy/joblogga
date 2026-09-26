@@ -24,7 +24,12 @@ DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 # Once an application is closed there's nothing left to follow up on.
-CLOSED_STATUSES = (ApplicationStatus.REJECTED, ApplicationStatus.WITHDRAWN)
+CLOSED_STATUSES = (
+    ApplicationStatus.OFFER_ACCEPTED,
+    ApplicationStatus.OFFER_DECLINED,
+    ApplicationStatus.REJECTED,
+    ApplicationStatus.WITHDRAWN,
+)
 
 
 def get_owned_application(db: Session, user: User, application_id: int) -> Application:

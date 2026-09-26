@@ -51,6 +51,10 @@ class ApplicationStatus(enum.StrEnum):
     SCREENING = "screening"
     INTERVIEW = "interview"
     OFFER = "offer"
+    # Two endings that follow an offer. Declining is YOUR decision, not the employer's
+    # rejection, so it has its own status (see docs/status-audit.md).
+    OFFER_ACCEPTED = "offer_accepted"
+    OFFER_DECLINED = "offer_declined"
     REJECTED = "rejected"
     WITHDRAWN = "withdrawn"
 

@@ -91,6 +91,8 @@ export function makeStats(overrides: Partial<Stats> = {}): Stats {
       { status: 'screening', count: 3 },
       { status: 'interview', count: 1 },
       { status: 'offer', count: 1 },
+      { status: 'offer_accepted', count: 0 },
+      { status: 'offer_declined', count: 0 },
       { status: 'rejected', count: 1 },
       { status: 'withdrawn', count: 2 },
     ],
@@ -99,6 +101,7 @@ export function makeStats(overrides: Partial<Stats> = {}): Stats {
       { week_start: '2026-03-02', count: 3 },
       { week_start: '2026-03-09', count: 7 },
     ],
+    no_reply: { days: 30, count: 0 },
     ...overrides,
   }
 }

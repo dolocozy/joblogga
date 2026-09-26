@@ -62,7 +62,16 @@ def test_by_status_lists_every_status_in_pipeline_order(client, auth):
     add(client, auth, "interview", n=2)
     add(client, auth, "rejected")
     body = stats(client, auth)
-    assert [r["status"] for r in body["by_status"]] == ["applied", "screening", "interview", "offer", "rejected", "withdrawn"]
+    assert [r["status"] for r in body["by_status"]] == [
+        "applied",
+        "screening",
+        "interview",
+        "offer",
+        "offer_accepted",
+        "offer_declined",
+        "rejected",
+        "withdrawn",
+    ]
     assert counts_by_status(body)["interview"] == 2
     assert counts_by_status(body)["screening"] == 0  # zero rows are still present
     assert body["total"] == 3
@@ -221,3 +230,59 @@ def test_only_counts_the_logged_in_users_applications(client, auth, other_auth):
     assert body["total"] == 1
     assert sum(w["count"] for w in body["per_week"]) == 1
     assert stats(client, other_auth)["total"] == 5
+
+
+# --- the offer outcomes -------------------------------------------------------
+
+
+def test_accepting_or_declining_an_offer_counts_as_a_response_and_is_not_a_rejection(client, auth):
+    add(client, auth, "applied")
+    add(client, auth, "applied")
+    add(client, auth, "applied")
+    ids = [a["id"] for a in client.get("/applications", headers=auth).json()["items"]]
+    move(client, auth, ids[0], "interview", "offer", "offer_accepted")
+    move(client, auth, ids[1], "interview", "offer", "offer_declined")
+    body = stats(client, auth)
+    assert counts_by_status(body)["offer_accepted"] == 1
+    assert counts_by_status(body)["offer_declined"] == 1
+    assert counts_by_status(body)["rejected"] == 0  # declining is not the employer rejecting you
+    assert body["response"] == {"responded": 2, "eligible": 3, "rate": pytest.approx(2 / 3)}
+
+
+def test_an_offer_outcome_set_directly_still_counts_as_a_response(client, auth):
+    add(client, auth, "offer_accepted")
+    add(client, auth, "offer_declined")
+    assert stats(client, auth)["response"] == {"responded": 2, "eligible": 2, "rate": 1.0}
+
+
+# --- applications with no reply (the "ghosted" insight) -----------------------
+
+
+def test_no_reply_counts_applied_applications_thirty_days_old_or_more(client, auth):
+    today = date.today()
+    add(client, auth, "applied", applied=today - timedelta(days=30))  # exactly 30: counts
+    add(client, auth, "applied", applied=today - timedelta(days=90))
+    add(client, auth, "applied", applied=today - timedelta(days=29))  # not yet
+    add(client, auth, "interview", applied=today - timedelta(days=90))  # they did reply
+    add(client, auth, "withdrawn", applied=today - timedelta(days=90))
+    assert stats(client, auth)["no_reply"] == {"days": 30, "count": 2}
+
+
+def test_no_reply_stops_counting_once_the_status_moves(client, auth):
+    add(client, auth, "applied", applied=date.today() - timedelta(days=60))
+    assert stats(client, auth)["no_reply"]["count"] == 1
+    move(client, auth, first_id(client, auth), "screening")
+    assert stats(client, auth)["no_reply"]["count"] == 0
+
+
+def test_no_reply_follows_the_time_window_like_every_other_figure(client, auth):
+    add(client, auth, "applied", applied=date.today() - timedelta(weeks=20))
+    add(client, auth, "applied", applied=date.today() - timedelta(days=35))
+    assert stats(client, auth)["no_reply"]["count"] == 2
+    assert stats(client, auth, weeks=8)["no_reply"]["count"] == 1
+
+
+def test_no_reply_is_zero_on_an_empty_account_and_per_user(client, auth, other_auth):
+    assert stats(client, auth)["no_reply"] == {"days": 30, "count": 0}
+    add(client, other_auth, "applied", applied=date.today() - timedelta(days=60))
+    assert stats(client, auth)["no_reply"]["count"] == 0

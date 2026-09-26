@@ -292,7 +292,9 @@ def test_upcoming_days_parameter_widens_window(client, auth):
 def test_upcoming_excludes_closed_applications(client, auth):
     create(client, auth, company="Rejected", status="rejected", follow_up_date=days_from_now(1))
     create(client, auth, company="Withdrawn", status="withdrawn", follow_up_date=days_from_now(1))
-    create(client, auth, company="Offer", status="offer", follow_up_date=days_from_now(1))
+    create(client, auth, company="Accepted", status="offer_accepted", follow_up_date=days_from_now(1))
+    create(client, auth, company="Declined", status="offer_declined", follow_up_date=days_from_now(1))
+    create(client, auth, company="Offer", status="offer", follow_up_date=days_from_now(1))  # awaiting your answer: still open
     res = client.get("/applications/upcoming", headers=auth).json()
     assert [a["company"] for a in res] == ["Offer"]
 

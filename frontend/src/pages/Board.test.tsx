@@ -167,12 +167,24 @@ describe('the board', () => {
     expect(within(column('Applied')).queryByText('Globex')).not.toBeInTheDocument()
   })
 
-  it('shows all six columns, saying so when one is empty', async () => {
+  it('shows a column for every status, in pipeline order, saying so when one is empty', async () => {
     mockBackend(APPS)
     renderApp('/applications?view=board')
     await screen.findByRole('region', { name: /^Applied,/ })
 
-    expect(screen.getAllByRole('region')).toHaveLength(6)
+    const regions = screen.getAllByRole('region')
+    expect(regions).toHaveLength(8)
+    expect(regions.map((r) => r.getAttribute('aria-label')?.split(',')[0])).toEqual([
+      'Applied',
+      'Screening',
+      'Interview',
+      'Offer',
+      'Offer accepted',
+      'Offer declined',
+      'Rejected',
+      'Withdrawn',
+    ])
+    expect(within(column('Offer declined')).getByText('Nothing here.')).toBeInTheDocument()
     expect(within(column('Screening')).getByText('Nothing here.')).toBeInTheDocument()
     expect(within(column('Offer')).getByText('Nothing here.')).toBeInTheDocument()
   })
