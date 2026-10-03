@@ -530,3 +530,86 @@ describe('the duplicate warning when editing', () => {
     expect(checks).toHaveLength(0) // still the same company, as far as a duplicate is concerned
   })
 })
+
+describe('archiving from the detail page', () => {
+  function setup(detail = makeDetail({ id: 3, company: 'Acme', status: 'rejected' })) {
+    const patches: Record<string, unknown>[] = []
+    mockGet(detail)
+    server.use(
+      http.patch(url('/applications/3'), async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        patches.push(body)
+        const archived = body.archived as boolean
+        return HttpResponse.json({ ...detail, archived, archived_at: archived ? '2026-05-01T00:00:00Z' : null, updated_at: '2026-05-01T00:00:00Z' })
+      }),
+    )
+    return patches
+  }
+
+  it('has an Archive button beside Delete, and no archived banner for a live application', async () => {
+    setup()
+    renderApp('/applications/3')
+    expect(await screen.findByRole('button', { name: 'Archive' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete application' })).toBeInTheDocument()
+    expect(screen.queryByText('This application is archived.')).not.toBeInTheDocument()
+  })
+
+  it('archiving sends only archived: true, and shows the banner with what it means', async () => {
+    const user = userEvent.setup()
+    const patches = setup()
+    renderApp('/applications/3')
+    await user.click(await screen.findByRole('button', { name: 'Archive' }))
+
+    const banner = await screen.findByText('This application is archived.')
+    expect(patches).toEqual([{ archived: true }])
+    expect(banner.closest('div')).toHaveTextContent('still counted in your dashboard and export')
+    expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Unarchive' })).toBeInTheDocument()
+  })
+
+  it('an archived application opens with the banner, and Unarchive brings it back', async () => {
+    const user = userEvent.setup()
+    const patches = setup(makeDetail({ id: 3, status: 'rejected', archived: true, archived_at: '2026-04-01T00:00:00Z' }))
+    renderApp('/applications/3')
+    expect(await screen.findByText('This application is archived.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Unarchive' }))
+
+    await waitFor(() => expect(screen.queryByText('This application is archived.')).not.toBeInTheDocument())
+    expect(patches).toEqual([{ archived: false }])
+    expect(screen.getByRole('button', { name: 'Archive' })).toBeInTheDocument()
+  })
+
+  it('does not wipe what you are typing in the form', async () => {
+    const user = userEvent.setup()
+    setup()
+    renderApp('/applications/3')
+    await user.type(await screen.findByLabelText('Notes'), 'half-written thought')
+    await user.click(screen.getByRole('button', { name: 'Archive' }))
+    await screen.findByText('This application is archived.')
+    expect(screen.getByLabelText('Notes')).toHaveValue('half-written thought')
+  })
+
+  it('shows the server message if archiving fails', async () => {
+    const user = userEvent.setup()
+    mockGet(makeDetail({ id: 3, status: 'rejected' }))
+    server.use(http.patch(url('/applications/3'), () => HttpResponse.json({ detail: 'Could not save that' }, { status: 500 })))
+    renderApp('/applications/3')
+    await user.click(await screen.findByRole('button', { name: 'Archive' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not save that')
+    expect(screen.queryByText('This application is archived.')).not.toBeInTheDocument()
+  })
+
+  it('a normal save of an archived application does not send archived, so it cannot be unarchived by accident', async () => {
+    const user = userEvent.setup()
+    const bodies: Record<string, unknown>[] = []
+    mockGet(makeDetail({ id: 3, status: 'rejected', archived: true, archived_at: '2026-04-01T00:00:00Z' }))
+    server.use(http.patch(url('/applications/3'), async ({ request }) => (bodies.push((await request.json()) as Record<string, unknown>), HttpResponse.json(makeDetail({ id: 3, status: 'rejected', archived: true, archived_at: '2026-04-01T00:00:00Z' })))))
+    renderApp('/applications/3')
+    await user.type(await screen.findByLabelText('Notes'), 'a note')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).not.toHaveProperty('archived')
+    expect(await screen.findByText('This application is archived.')).toBeInTheDocument()
+  })
+})

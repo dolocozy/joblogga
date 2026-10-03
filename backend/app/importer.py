@@ -39,7 +39,7 @@ HEADERS: dict[str, str] = {
         ("country", "country"), ("state", "state"), ("city", "city"), ("work mode", "work_mode"),
         ("salary min", "salary_min"), ("salary max", "salary_max"), ("resume version", "resume_version"),
         ("interview round", "interview_round"), ("interview rounds total", "interview_rounds_total"),
-        ("notes", "notes"), ("status history", "history"),
+        ("notes", "notes"), ("status history", "history"), ("archived", "archived"),
     ]},
     # Friendly spellings other spreadsheets tend to use.
     "employer": "company", "organisation": "company", "organization": "company",
@@ -208,6 +208,18 @@ def _history(raw: str, status: ApplicationStatus) -> list[tuple[ApplicationStatu
     return entries if entries and entries[-1][0] == status else None
 
 
+def _archived_at(raw: str) -> datetime | None:
+    """The export's Archived column holds the day it was archived. A plain "yes"/"true" (a spreadsheet someone
+    filled in by hand) archives it as of now; blank, "no" and anything else leave it active."""
+    raw = raw.strip()
+    if not raw:
+        return None
+    day = parse_date(raw)
+    if day is not None:
+        return datetime(day.year, day.month, day.day, 12, tzinfo=UTC)
+    return datetime.now(UTC) if normalize(raw) in {"yes", "y", "true", "1", "archived"} else None
+
+
 def _is_blank(cells: dict[str, str]) -> bool:
     return not any(_clean(v) for v in cells.values())
 
@@ -367,6 +379,7 @@ def import_csv(db: Session, user_id: int, data: bytes, skip_duplicates: bool = T
             continue
 
         application = Application(**{**body.model_dump(), "country_id": country_id, "city_id": city_id}, user_id=user_id)
+        application.archived_at = _archived_at(cells.get("archived", ""))
         history = _history(cells.get("history", ""), body.status) if cells.get("history") else None
         if cells.get("history") and history is None:
             note("the status history could not be read or does not end at the status, so it starts from the status")

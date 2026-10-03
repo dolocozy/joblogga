@@ -24,6 +24,7 @@ import { dateLine } from '../appliedOn'
 import { placeLine, roleLine } from '../workMode'
 import { FollowUp } from './Ledger'
 import StageMeter from './StageMeter'
+import ArchivedNote from './ArchivedNote'
 import PostingLink from './PostingLink'
 import RoundsNote from './RoundsNote'
 import StatusSelect from './StatusSelect'
@@ -88,6 +89,7 @@ function BoardCard({ app, today, busy, onMove }: { app: Application; today: stri
       <div className="mt-3">
         <StatusSelect value={app.status} label={`Status for ${app.company}`} disabled={busy} onChange={(next) => onMove(app, next)} />
         <RoundsNote app={app} className="mt-1 block" />
+        <ArchivedNote app={app} className="mt-1 block" />
       </div>
     </li>
   )

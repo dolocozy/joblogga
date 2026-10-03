@@ -169,11 +169,19 @@ class Application(Base):
     status: Mapped[ApplicationStatus] = mapped_column(_status_enum(), index=True)
     follow_up_date: Mapped[date | None] = mapped_column(Date, index=True)
 
+    # When it was archived, or NULL if it is not. Archiving only hides an application from the default list and
+    # board and from reminders; it stays in the dashboard figures and the export, and nothing else clears it.
+    archived_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_now)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_now, onupdate=_now)
 
     country: Mapped[Country | None] = relationship(lazy="joined")
     city: Mapped[City | None] = relationship(lazy="joined")
+
+    @property
+    def archived(self) -> bool:
+        return self.archived_at is not None
 
     @property
     def location_display(self) -> str | None:

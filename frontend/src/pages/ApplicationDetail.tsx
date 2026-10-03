@@ -39,6 +39,9 @@ export default function ApplicationDetail() {
   const [missing, setMissing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  // Bumped to remount the form with fresh values after a save or applying. Not on archiving: that should not wipe what someone is typing.
+  const [formKey, setFormKey] = useState(0)
+  const [archiving, setArchiving] = useState(false)
 
   // A URL like /applications/abc is "not found" without asking the server.
   const appId = Number(id)
@@ -68,6 +71,19 @@ export default function ApplicationDetail() {
   if (error) return <p role="alert" className="text-brick">{error}</p>
   if (!app) return <p className="text-ink-soft">Loading…</p>
 
+  async function setArchived(archive: boolean) {
+    if (!app) return
+    setArchiving(true)
+    setError(null)
+    try {
+      setApp(await updateApplication(app.id, { archived: archive }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : archive ? 'Could not archive' : 'Could not unarchive')
+    } finally {
+      setArchiving(false)
+    }
+  }
+
   async function handleDelete() {
     if (!app || !window.confirm(`Delete your application to ${app.company}? This can't be undone.`)) return
     try {
@@ -94,11 +110,23 @@ export default function ApplicationDetail() {
         </div>
       </div>
 
+      {app.archived && (
+        <div className="sheet mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 border-l-2 border-l-pencil p-4">
+          <p className="text-sm">
+            <span className="font-semibold">This application is archived.</span> It is hidden from your list and board, and still counted in your dashboard and export.
+          </p>
+          <button type="button" onClick={() => setArchived(false)} disabled={archiving} className="btn btn-secondary btn-sm">
+            {archiving ? 'Unarchiving…' : 'Unarchive'}
+          </button>
+        </div>
+      )}
+
       {app.status === 'saved' && (
         <MarkApplied
           onApply={async (date) => {
             setSaved(false)
             setApp(await updateApplication(app.id, { status: 'applied', date_applied: date }))
+            setFormKey((k) => k + 1)
           }}
         />
       )}
@@ -112,7 +140,7 @@ export default function ApplicationDetail() {
           )}
           {/* key remounts the form with fresh values after each successful save */}
           <ApplicationForm
-            key={app.updated_at}
+            key={formKey}
             initial={toInput(app)}
             initialPlace={{
               country: app.country,
@@ -124,6 +152,7 @@ export default function ApplicationDetail() {
             onSubmit={async (input) => {
               setSaved(false)
               setApp(await updateApplication(app.id, input))
+              setFormKey((k) => k + 1)
               setSaved(true)
             }}
           />
@@ -147,9 +176,17 @@ export default function ApplicationDetail() {
           </section>
 
           {error && <p role="alert" className="text-brick">{error}</p>}
-          <button onClick={handleDelete} className="btn btn-danger">
-            Delete application
-          </button>
+          <div className="flex flex-wrap items-center gap-x-2">
+            {!app.archived && (
+              <button type="button" onClick={() => setArchived(true)} disabled={archiving} className="btn btn-secondary btn-sm" title="Hide it from your list and board. It stays in your dashboard and export.">
+                {archiving ? 'Archiving…' : 'Archive'}
+              </button>
+            )}
+            {/* Archiving hides; this really deletes. */}
+            <button onClick={handleDelete} className="btn btn-danger">
+              Delete application
+            </button>
+          </div>
         </aside>
       </div>
     </>

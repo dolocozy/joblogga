@@ -4,13 +4,14 @@ import { exportApplicationsCsv, fetchCountries, fetchStates, fetchUpcoming, list
 import type { Application, ApplicationStatus, Country, PlaceRef, WorkMode } from '../api'
 import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader, SAVED_LEDGER_COLUMNS } from '../components/Ledger'
 import PostingLink from '../components/PostingLink'
+import ArchivedNote from '../components/ArchivedNote'
 import RoundsNote from '../components/RoundsNote'
 import StatusSelect from '../components/StatusSelect'
 import { formatDate, formatIsoDate, localToday } from '../dates'
 import { saveFile } from '../download'
 import { useDebounced } from '../hooks'
 import { isOverdue } from '../overdue'
-import { APPLIED_STATUSES, statusLabel } from '../status'
+import { APPLIED_STATUSES, isClosed, statusLabel } from '../status'
 import { placeLine, roleLine, workModeLabel } from '../workMode'
 
 export const PAGE_SIZE = 20
@@ -27,11 +28,12 @@ interface Filters {
   workMode: WorkMode | ''
   countryId: number | '' // a country, and within it a state or province
   stateId: number | ''
+  archived: 'hide' | 'include' | 'only' // archiving hides an application from the default views, nothing more
   dateFrom: string
   dateTo: string
 }
 
-const NO_FILTERS: Filters = { q: '', company: '', status: '', workMode: '', countryId: '', stateId: '', dateFrom: '', dateTo: '' }
+const NO_FILTERS: Filters = { q: '', company: '', status: '', workMode: '', countryId: '', stateId: '', archived: 'hide', dateFrom: '', dateTo: '' }
 
 function UpcomingPanel({ reloadKey }: { reloadKey: number }) {
   const [items, setItems] = useState<Application[]>([])
@@ -89,7 +91,7 @@ export default function Applications() {
   // Text fields wait for a pause in typing; dropdowns and dates apply at once.
   const q = useDebounced(filters.q.trim(), 300)
   const company = useDebounced(filters.company.trim(), 300)
-  const { status, workMode, countryId, stateId, dateFrom, dateTo } = filters
+  const { status, workMode, countryId, stateId, archived, dateFrom, dateTo } = filters
 
   // The choices for the country and state filters. Both come from our own place data; if either cannot be
   // loaded the filter is simply not offered, and everything else still works.
@@ -129,6 +131,7 @@ export default function Applications() {
       work_mode: workMode || undefined,
       country_id: countryId || undefined,
       state_id: stateId || undefined,
+      archived: archived === 'hide' ? undefined : archived,
       // Saved jobs have no applied date, so a date range means nothing there.
       date_from: saved ? undefined : dateFrom,
       date_to: saved ? undefined : dateTo,
@@ -155,7 +158,7 @@ export default function Applications() {
     return () => {
       cancelled = true
     }
-  }, [q, company, status, workMode, countryId, stateId, dateFrom, dateTo, page, reloadKey, view])
+  }, [q, company, status, workMode, countryId, stateId, archived, dateFrom, dateTo, page, reloadKey, view])
 
   async function changeStatus(app: Application, next: ApplicationStatus) {
     if (next === app.status) return
@@ -166,6 +169,20 @@ export default function Applications() {
       setReloadKey((k) => k + 1)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not change status')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  // Hides an application from the default views, or brings it back. The list then reloads without or with it.
+  async function changeArchived(app: Application, archive: boolean) {
+    setBusyId(app.id)
+    setError(null)
+    try {
+      await updateApplication(app.id, { archived: archive })
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : archive ? 'Could not archive' : 'Could not unarchive')
     } finally {
       setBusyId(null)
     }
@@ -215,7 +232,7 @@ export default function Applications() {
   // The status filter only exists in the list; the board's columns are the statuses.
   const statusFiltering = view === 'list' && status !== ''
   const dateFiltering = view !== 'saved' && (dateFrom !== '' || dateTo !== '') // saved jobs have no applied date
-  const filtered = q !== '' || company !== '' || statusFiltering || workMode !== '' || countryId !== '' || dateFiltering
+  const filtered = q !== '' || company !== '' || statusFiltering || workMode !== '' || countryId !== '' || archived !== 'hide' || dateFiltering
   const badRange = view !== 'saved' && dateFrom !== '' && dateTo !== '' && dateFrom > dateTo
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const firstShown = total === 0 ? 0 : page * PAGE_SIZE + 1
@@ -332,6 +349,16 @@ export default function Applications() {
             ))}
           </select>
         )}
+        <select
+          value={filters.archived}
+          onChange={(e) => setFilter({ archived: e.target.value as Filters['archived'] })}
+          aria-label="Archived applications"
+          className="input"
+        >
+          <option value="hide">Hide archived</option>
+          <option value="include">Include archived</option>
+          <option value="only">Only archived</option>
+        </select>
         {view !== 'saved' && (
         <label className="flex items-center gap-2 text-sm text-ink-soft lg:col-span-2">
           Applied from
@@ -432,7 +459,21 @@ export default function Applications() {
                     <span className="block truncate text-sm text-ink-soft">{roleLine(a)}</span>
                     {placeLine(a) && <span className="block truncate text-sm text-ink-soft">{placeLine(a)}</span>}
                   </Link>
-                  <PostingLink url={a.job_url} company={a.company} className="shrink-0 whitespace-nowrap" />
+                  <div className="flex shrink-0 flex-col items-end gap-0.5">
+                    <PostingLink url={a.job_url} company={a.company} className="whitespace-nowrap" />
+                    {/* Closed applications can be put away in one click; an archived one can be brought back. */}
+                    {(a.archived || isClosed(a.status)) && (
+                      <button
+                        type="button"
+                        onClick={() => changeArchived(a, !a.archived)}
+                        disabled={busyId === a.id}
+                        aria-label={`${a.archived ? 'Unarchive' : 'Archive'} ${a.company}`}
+                        className="link whitespace-nowrap text-sm disabled:opacity-60"
+                      >
+                        {a.archived ? 'Unarchive' : 'Archive'}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {/* The status control sits beside the link (not inside it): a control nested in a link is invalid HTML. */}
                 <div>
@@ -443,6 +484,7 @@ export default function Applications() {
                     onChange={(next) => changeStatus(a, next)}
                   />
                   <RoundsNote app={a} className="block" />
+                  <ArchivedNote app={a} className="block" />
                 </div>
                 {view === 'saved' ? (
                   <DateCell label="Saved">{formatIsoDate(a.created_at)}</DateCell>

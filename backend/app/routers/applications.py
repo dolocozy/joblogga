@@ -1,4 +1,6 @@
 from datetime import date, timedelta
+import enum
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
@@ -25,6 +27,14 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/applications", tags=["applications"])
+
+
+class ArchivedFilter(enum.StrEnum):
+    """Which applications a list shows. Archiving is a view preference, so the default simply leaves them out."""
+
+    HIDE = "hide"  # the default: only applications that are not archived
+    INCLUDE = "include"  # both
+    ONLY = "only"  # just the archived ones
 
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
@@ -105,6 +115,7 @@ def list_applications(
     db: DbSession,
     user: CurrentUser,
     status_in: Annotated[list[ApplicationStatus] | None, Query(alias="status")] = None,
+    archived: Annotated[ArchivedFilter, Query(description="hide (default), include, or only archived applications")] = ArchivedFilter.HIDE,
     work_mode: Annotated[list[WorkMode] | None, Query(description="Only these work modes (repeat the parameter for several)")] = None,
     country_id: Annotated[int | None, Query(ge=1, description="Only this country (a picked city or country)")] = None,
     state_id: Annotated[int | None, Query(ge=1, description="Only places in this state or province")] = None,
@@ -117,6 +128,10 @@ def list_applications(
 ) -> ApplicationList:
     # Start from "this user's rows", then narrow with whichever filters were sent.
     conditions = [Application.user_id == user.id]
+    if archived == ArchivedFilter.HIDE:
+        conditions.append(Application.archived_at.is_(None))
+    elif archived == ArchivedFilter.ONLY:
+        conditions.append(Application.archived_at.is_not(None))
     if status_in:
         conditions.append(Application.status.in_(status_in))
     if work_mode:
@@ -241,6 +256,7 @@ def upcoming_follow_ups(
                 Application.follow_up_date.is_not(None),
                 Application.follow_up_date <= horizon,
                 Application.status.not_in(CLOSED_STATUSES),
+                Application.archived_at.is_(None),  # archived means "stop showing me this"
             )
             .order_by(Application.follow_up_date, Application.id)
         )
@@ -276,6 +292,14 @@ def update_application(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
     resolve_place(db, changes, app)
+
+    # Archiving is its own switch: only an `archived` in the request changes it, and archiving twice keeps the
+    # first time. Nothing else (a status change, an edit) touches it.
+    archive = changes.pop("archived", None)
+    if archive is True and app.archived_at is None:
+        app.archived_at = datetime.now(UTC)
+    elif archive is False:
+        app.archived_at = None
 
     new_status = changes.pop("status", None)
     resulting_status = new_status if new_status is not None else app.status

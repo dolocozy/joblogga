@@ -112,7 +112,7 @@ Interactive docs are at http://localhost:8000/docs when the backend is running.
 | POST | `/auth/password-reset/confirm` | Set a new password with a reset token |
 | GET | `/health` | Liveness check |
 | POST | `/applications` | Create (records the initial status) |
-| GET | `/applications` | List; filters `status`, `work_mode` (either can repeat), `country_id`, `state_id`, `company`, `q`, `date_from`, `date_to`; `limit`/`offset` |
+| GET | `/applications` | List; filters `status`, `work_mode` (either can repeat), `archived` (`hide` by default, `include`, `only`), `country_id`, `state_id`, `company`, `q`, `date_from`, `date_to`; `limit`/`offset` |
 | GET | `/geo/countries`, `/geo/states?country_id=`, `/geo/cities?country_id=&q=` | The place picker's lookups, read from our own database (login required) |
 | GET | `/applications/export.csv` | Every application as a CSV file (your backup); includes status history; ignores list filters |
 | POST | `/applications/import` | Import a CSV (sent as `text/csv`; `skip_duplicates`, default true). Adds what it can and returns what it added, skipped and changed |
@@ -130,7 +130,7 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 - `users`: email (unique), bcrypt hash, `email_verified_at` (empty until verified), `session_version` (random at signup; bumped by a password reset to end earlier sessions).
 - `countries`, `states`, `cities`: the place data (see Places), loaded once by a migration. Their ids are the dataset's own.
 - `password_reset_tokens`, `email_verification_tokens`: hash of each token, its expiry, and when it was used.
-- `applications`: belongs to a user; company, role, job link, date applied (empty while Saved), resume version, salary min/max, location (readable text) with `country_id` and `city_id` pointing at the place tables, work mode (remote, hybrid or in person; empty means not specified), interview round and total rounds (optional, e.g. round 2 of 3; kept as a record after the application moves on, and with no effect on status or any statistic), notes, current status, follow-up date.
+- `applications`: belongs to a user; company, role, job link, date applied (empty while Saved), resume version, salary min/max, location (readable text) with `country_id` and `city_id` pointing at the place tables, work mode (remote, hybrid or in person; empty means not specified), `archived_at` (empty unless archived), interview round and total rounds (optional, e.g. round 2 of 3; kept as a record after the application moves on, and with no effect on status or any statistic), notes, current status, follow-up date.
 - `status_changes`: append-only log (`from_status`, `to_status`, timestamp) written whenever an application's status changes, so the full timeline is kept.
 
 ## Places
@@ -147,6 +147,14 @@ The location field is a country and a city picked from real data, with a way to 
 - **Tests** run against a tiny stand-in dataset (with duplicate names on purpose) so the suite stays fast; one file checks the real files' checksums and row counts and loads them through the migration on both databases.
 
 Place data: countries-states-cities-database, ODbL v1.0, credited on the landing page. The data files stay under the ODbL; the rest of the repository is MIT.
+
+## Archive
+
+Archiving puts an application away without deleting it, so the active list stays focused on what is still going on. It is manual (a button; no automatic suggestions yet): **Archive** on the detail page for any application, and a one-click **Archive** on a list row once the application is closed (rejected, withdrawn, offer declined or accepted). **Unarchive** brings it back.
+
+- **A view preference, not a deletion.** Archived applications are hidden from the default list and board and from the follow-up reminders, and reachable with the "Archived applications" filter (hide, include, or only archived). They still count in every dashboard figure, so archiving never quietly changes your historical response rate or totals, and they are in the CSV export (with the day archived in an `Archived` column, which the import reads back) and in the duplicate check.
+- **Nothing else clears it.** Changing the status, editing any field, or moving a card leaves an archived application archived; only an explicit unarchive does. `archived_at` records when, and archiving twice keeps the first time.
+- **Delete is separate.** `DELETE /applications/{id}` is still the real, permanent delete.
 
 ## CSV import
 

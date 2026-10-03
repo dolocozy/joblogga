@@ -534,3 +534,42 @@ def test_downgrading_keeps_every_location_and_drops_only_the_places(engine):
     assert not {"countries", "states", "cities"} & tables(engine)
     columns = {c["name"] for c in inspect(engine).get_columns("applications")}
     assert not {"country_id", "city_id"} & columns
+
+
+# --- 0009: archive ------------------------------------------------------------------
+
+
+def test_existing_applications_are_not_archived_after_the_upgrade(engine):
+    migrate_to(engine, "0008")
+    seed_rows(engine)
+    upgrade_database(engine)
+    assert version(engine) == HEAD
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT archived_at FROM applications")).scalar() is None  # still in the default list
+        assert schema_differences(conn) == []
+    assert counts(engine) == (1, 1, 1)
+
+
+def test_old_code_can_still_add_applications_while_archived_at_is_live(engine):
+    migrate_to(engine, "0008")
+    seed_rows(engine)
+    upgrade_database(engine)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO applications (id, user_id, company, role, date_applied, status, created_at, updated_at) "
+                "VALUES (96, 1, 'Old code', 'Eng', '2026-03-02', 'applied', '2026-03-02 00:00:00', '2026-03-02 00:00:00')"
+            )
+        )
+        assert conn.execute(text("SELECT archived_at FROM applications WHERE id = 96")).scalar() is None
+
+
+def test_downgrading_drops_only_the_archive_column(engine):
+    upgrade_database(engine)
+    seed_rows(engine)
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE applications SET archived_at = '2026-04-01 00:00:00'"))
+    with engine.begin() as conn:
+        command.downgrade(alembic_config(conn), "0008")
+    assert "archived_at" not in {c["name"] for c in inspect(engine).get_columns("applications")}
+    assert counts(engine) == (1, 1, 1)

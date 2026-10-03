@@ -28,6 +28,8 @@ export function makeApplication(overrides: Partial<Application> = {}): Applicati
     notes: null,
     interview_round: null,
     interview_rounds_total: null,
+    archived: false,
+    archived_at: null,
     status: 'applied',
     follow_up_date: null,
     created_at: '2026-03-01T12:00:00Z',

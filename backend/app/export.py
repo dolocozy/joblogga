@@ -23,6 +23,7 @@ COLUMNS = [
     "Interview rounds total",
     "Notes",
     "Status history",
+    "Archived",
     "Created at",
     "Updated at",
 ]
@@ -77,6 +78,7 @@ def applications_to_csv(applications: Iterable[Application]) -> str:
                 "" if a.interview_rounds_total is None else a.interview_rounds_total,
                 safe_text(a.notes),
                 _history(a),
+                _iso(a.archived_at.date()) if a.archived_at else "",  # the day it was archived; archived applications are exported like any other
                 _iso(a.created_at),
                 _iso(a.updated_at),
             ]

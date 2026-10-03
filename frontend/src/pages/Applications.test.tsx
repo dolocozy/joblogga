@@ -810,3 +810,114 @@ describe('the country and state filters', () => {
     expect(screen.queryByRole('combobox', { name: 'Filter by country' })).not.toBeInTheDocument()
   })
 })
+
+describe('archiving', () => {
+  const archivedOf = (seen: URL[]) => seen.at(-1)!.searchParams.get('archived')
+
+  it('leaves archived applications out by default and says nothing about the filter', async () => {
+    const seen = mockList([])
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+    expect(archivedOf(seen)).toBeNull()
+    expect(screen.getByRole('combobox', { name: 'Archived applications' })).toHaveValue('hide')
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+  })
+
+  it('offers hide, include and only, and sends the choice', async () => {
+    const user = userEvent.setup()
+    const seen = mockList([])
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+    const select = screen.getByRole('combobox', { name: 'Archived applications' })
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Hide archived', 'Include archived', 'Only archived'])
+
+    await user.selectOptions(select, 'Include archived')
+    await waitFor(() => expect(archivedOf(seen)).toBe('include'))
+    await user.selectOptions(select, 'Only archived')
+    await waitFor(() => expect(archivedOf(seen)).toBe('only'))
+    await user.selectOptions(select, 'Hide archived')
+    await waitFor(() => expect(archivedOf(seen)).toBeNull())
+  })
+
+  it('counts as an active filter, Clear filters resets it, and it also applies on the board', async () => {
+    const user = userEvent.setup()
+    const seen = mockList([])
+    renderApp('/applications?view=board')
+    await screen.findByText(/no applications yet/i)
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Archived applications' }), 'Only archived')
+    await waitFor(() => expect(archivedOf(seen)).toBe('only'))
+
+    await user.click(await screen.findByRole('button', { name: 'Clear filters' }))
+
+    expect(screen.getByRole('combobox', { name: 'Archived applications' })).toHaveValue('hide')
+    await waitFor(() => expect(archivedOf(seen)).toBeNull())
+  })
+
+  it('marks an archived application when archived ones are shown', async () => {
+    mockList([makeApplication({ id: 1, company: 'Old Co', status: 'rejected', archived: true, archived_at: '2026-04-01T00:00:00Z' }), makeApplication({ id: 2, company: 'Live Co' })])
+    renderApp('/applications?view=list')
+    const old = (await screen.findByText('Old Co')).closest('li')!
+    expect(within(old).getByText('Archived')).toBeInTheDocument()
+    expect(within(screen.getByText('Live Co').closest('li')!).queryByText('Archived')).not.toBeInTheDocument()
+  })
+
+  it('offers a one-click Archive on a closed application only, and sends just archived: true', async () => {
+    const user = userEvent.setup()
+    const patches: unknown[] = []
+    server.use(http.patch(url('/applications/:id'), async ({ request }) => (patches.push(await request.json()), HttpResponse.json({ ...makeApplication(), history: [] }))))
+    mockList([
+      makeApplication({ id: 1, company: 'Closed Co', status: 'rejected' }),
+      makeApplication({ id: 2, company: 'Open Co', status: 'interview' }),
+      makeApplication({ id: 3, company: 'Declined Co', status: 'offer_declined' }),
+    ])
+    renderApp('/applications')
+    await screen.findByText('Closed Co')
+
+    expect(screen.getByRole('button', { name: 'Archive Closed Co' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Archive Declined Co' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Archive Open Co' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Archive Closed Co' }))
+    await waitFor(() => expect(patches).toEqual([{ archived: true }]))
+  })
+
+  it('reloads the list after archiving, so the row goes', async () => {
+    const user = userEvent.setup()
+    let archived = false
+    server.use(
+      http.get(url('/applications'), () => HttpResponse.json({ items: archived ? [] : [makeApplication({ id: 1, company: 'Closed Co', status: 'rejected' })], total: archived ? 0 : 1 })),
+      http.patch(url('/applications/1'), () => ((archived = true), HttpResponse.json({ ...makeApplication({ id: 1 }), history: [] }))),
+    )
+    renderApp('/applications')
+    await user.click(await screen.findByRole('button', { name: 'Archive Closed Co' }))
+    await waitFor(() => expect(screen.queryByText('Closed Co')).not.toBeInTheDocument())
+  })
+
+  it('offers Unarchive on an archived one, sending archived: false', async () => {
+    const user = userEvent.setup()
+    const patches: unknown[] = []
+    server.use(http.patch(url('/applications/1'), async ({ request }) => (patches.push(await request.json()), HttpResponse.json({ ...makeApplication({ id: 1 }), history: [] }))))
+    mockList([makeApplication({ id: 1, company: 'Old Co', status: 'withdrawn', archived: true, archived_at: '2026-04-01T00:00:00Z' })])
+    renderApp('/applications')
+    expect(screen.queryByRole('button', { name: 'Archive Old Co' })).not.toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'Unarchive Old Co' }))
+    await waitFor(() => expect(patches).toEqual([{ archived: false }]))
+  })
+
+  it('shows the server message if archiving fails, and leaves the row', async () => {
+    const user = userEvent.setup()
+    server.use(http.patch(url('/applications/1'), () => HttpResponse.json({ detail: 'Could not save that' }, { status: 500 })))
+    mockList([makeApplication({ id: 1, company: 'Closed Co', status: 'rejected' })])
+    renderApp('/applications')
+    await user.click(await screen.findByRole('button', { name: 'Archive Closed Co' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not save that')
+    expect(screen.getByText('Closed Co')).toBeInTheDocument()
+  })
+
+  it('marks an archived card on the board', async () => {
+    mockList([makeApplication({ id: 1, company: 'Old Co', status: 'rejected', archived: true, archived_at: '2026-04-01T00:00:00Z' })])
+    renderApp('/applications?view=board')
+    const card = (await screen.findByText('Old Co')).closest('li')!
+    expect(within(card).getByText('Archived')).toBeInTheDocument()
+  })
+})

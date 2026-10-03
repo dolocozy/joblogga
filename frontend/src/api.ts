@@ -170,6 +170,8 @@ export interface Application {
   notes: string | null
   interview_round: number | null // which round, if recorded
   interview_rounds_total: number | null // how many, if known
+  archived: boolean // hidden from the default list and board; still in the dashboard and the export
+  archived_at: string | null
   status: ApplicationStatus
   follow_up_date: string | null // YYYY-MM-DD
   created_at: string
@@ -214,6 +216,7 @@ export interface ApplicationFilters {
   work_mode?: WorkMode
   country_id?: number
   state_id?: number
+  archived?: 'include' | 'only' // omitted: archived applications are left out
   date_from?: string // YYYY-MM-DD
   date_to?: string
   limit?: number
@@ -279,7 +282,10 @@ export const createApplication = (input: ApplicationInput) =>
 
 // PATCH: send only the fields to change (the form sends all of them; the
 // quick status dropdown on the list sends just `status`).
-export const updateApplication = (id: number, input: Partial<ApplicationInput>) =>
+// `archived` is its own switch: true hides it from the default views, false brings it back. Nothing else changes it.
+export type ApplicationPatch = Partial<ApplicationInput> & { archived?: boolean }
+
+export const updateApplication = (id: number, input: ApplicationPatch) =>
   request<ApplicationDetail>(`/applications/${id}`, { method: 'PATCH', body: JSON.stringify(input) })
 
 export const deleteApplication = (id: number) =>

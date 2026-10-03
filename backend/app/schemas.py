@@ -7,6 +7,7 @@ from pydantic import (
     ConfigDict,
     EmailStr,
     Field,
+    StrictBool,
     field_validator,
     model_validator,
 )
@@ -196,6 +197,7 @@ class ApplicationUpdate(BaseModel):
     notes: optional_text(10000) = None
     interview_round: Round = None  # null clears it
     interview_rounds_total: Round = None
+    archived: StrictBool | None = None  # (a real JSON boolean: "yes" or 1 must not hide anything) true archives, false brings it back; absent leaves it as it is
     status: ApplicationStatus | None = None
     follow_up_date: date | None = None
 
@@ -210,7 +212,7 @@ class ApplicationUpdate(BaseModel):
         # must always have a value, explicitly sending null is an error.
         # date_applied may be null: a Saved job has none. Whether that is allowed for the
         # resulting status is decided in the router, which knows the stored status too.
-        for name in ("company", "role", "status"):
+        for name in ("company", "role", "status", "archived"):
             if name in self.model_fields_set and getattr(self, name) is None:
                 raise ValueError(f"{name} cannot be null")
         return self
@@ -319,6 +321,8 @@ class ApplicationOut(BaseModel):
     notes: str | None
     interview_round: int | None
     interview_rounds_total: int | None
+    archived: bool  # hidden from the default list and board; still counted in the dashboard and export
+    archived_at: datetime | None
     status: ApplicationStatus
     follow_up_date: date | None
     created_at: datetime
