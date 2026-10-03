@@ -90,6 +90,7 @@ export interface User {
   created_at: string
   // False until the owner opens the link we emailed. Only a banner depends on it.
   email_verified: boolean
+  reminder_emails: boolean // opted in to the daily email about follow-ups that are due (off until switched on)
 }
 
 export const fetchHealth = () => request<HealthResponse>('/health')
@@ -119,6 +120,14 @@ export const login = (email: string, password: string) =>
   })
 
 export const fetchMe = () => request<User>('/auth/me')
+
+// Opt in or out of the daily follow-up email. Off for everyone until they switch it on.
+export const setReminderEmails = (on: boolean) =>
+  request<User>('/auth/me', { method: 'PATCH', body: JSON.stringify({ reminder_emails: on }) })
+
+// From the link in a reminder email: needs no login, the signed token is the credential.
+export const unsubscribeReminders = (token: string) =>
+  request<{ detail: string }>('/auth/unsubscribe-reminders', { method: 'POST', body: JSON.stringify({ token }) })
 
 // Permanent. The password is asked for again so a borrowed session is not enough.
 export const deleteAccount = (password: string) =>

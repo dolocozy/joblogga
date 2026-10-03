@@ -1,10 +1,10 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { tokenStore } from '../api'
 import { server } from '../test/server'
-import { mockList, mockUpcoming, renderApp, signIn, url, USER } from '../test/helpers'
+import { makeApplication, mockList, mockUpcoming, renderApp, signIn, url, USER } from '../test/helpers'
 
 function watchDelete(reply: () => Response = () => new HttpResponse(null, { status: 204 })) {
   const bodies: unknown[] = []
@@ -288,5 +288,98 @@ describe('importing a CSV', () => {
     mockUpcoming()
     renderApp('/applications')
     expect(await screen.findByRole('link', { name: 'import a spreadsheet' })).toHaveAttribute('href', '/account')
+  })
+})
+
+describe('email reminders', () => {
+  const asUser = (over: Partial<typeof USER> = {}) => {
+    tokenStore.set('valid-token')
+    server.use(http.get(url('/auth/me'), () => HttpResponse.json({ ...USER, ...over })))
+  }
+  const box = () => screen.getByRole('checkbox', { name: 'Email me when follow-ups are due' })
+
+  it('is its own clearly labelled section, and says plainly that it is off until switched on', async () => {
+    asUser()
+    renderApp('/account')
+    expect(await screen.findByRole('heading', { name: 'Email reminders' })).toBeInTheDocument()
+    expect(box()).not.toBeChecked()
+    expect(screen.getByText('Reminders are off. Nothing is sent unless you turn them on.')).toBeInTheDocument()
+    expect(screen.getByText(/around 13:00 UTC/)).toBeInTheDocument() // what to expect, said up front
+    expect(screen.getByText(/archived and closed applications are left out/i)).toBeInTheDocument()
+  })
+
+  it('shows reminders as on for someone who opted in', async () => {
+    asUser({ reminder_emails: true })
+    renderApp('/account')
+    await screen.findByRole('heading', { name: 'Email reminders' })
+    expect(box()).toBeChecked()
+    expect(screen.getByText('Reminders are on.')).toBeInTheDocument()
+  })
+
+  it('switching it on sends a real boolean and shows the result from the server', async () => {
+    const user = userEvent.setup()
+    const bodies: unknown[] = []
+    asUser()
+    server.use(http.patch(url('/auth/me'), async ({ request }) => (bodies.push(await request.json()), HttpResponse.json({ ...USER, reminder_emails: true }))))
+    renderApp('/account')
+    await user.click(await screen.findByRole('checkbox', { name: 'Email me when follow-ups are due' }))
+
+    await waitFor(() => expect(box()).toBeChecked())
+    expect(bodies).toEqual([{ reminder_emails: true }])
+    expect(screen.getByText('Reminders are on.')).toBeInTheDocument()
+  })
+
+  it('switching it off works the same way', async () => {
+    const user = userEvent.setup()
+    const bodies: unknown[] = []
+    asUser({ reminder_emails: true })
+    server.use(http.patch(url('/auth/me'), async ({ request }) => (bodies.push(await request.json()), HttpResponse.json({ ...USER, reminder_emails: false }))))
+    renderApp('/account')
+    await user.click(await screen.findByRole('checkbox', { name: 'Email me when follow-ups are due' }))
+
+    await waitFor(() => expect(box()).not.toBeChecked())
+    expect(bodies).toEqual([{ reminder_emails: false }])
+  })
+
+  it('says a not-yet-verified address will not get any, once reminders are on', async () => {
+    asUser({ reminder_emails: true, email_verified: false })
+    renderApp('/account')
+    expect(await screen.findByText(/no reminders will be sent until it is/)).toBeInTheDocument()
+  })
+
+  it('does not nag a verified address, nor one that has reminders off', async () => {
+    asUser({ reminder_emails: true, email_verified: true })
+    renderApp('/account')
+    await screen.findByRole('heading', { name: 'Email reminders' })
+    expect(screen.queryByText(/no reminders will be sent until it is/)).not.toBeInTheDocument()
+  })
+
+  it('shows the server message and leaves the switch where it was if saving fails', async () => {
+    const user = userEvent.setup()
+    asUser()
+    server.use(http.patch(url('/auth/me'), () => HttpResponse.json({ detail: 'Could not save that' }, { status: 500 })))
+    renderApp('/account')
+    await user.click(await screen.findByRole('checkbox', { name: 'Email me when follow-ups are due' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not save that')
+    expect(box()).not.toBeChecked() // it never claims a setting that was not saved
+    expect(box()).toBeEnabled()
+  })
+
+  it('is reachable from the follow-ups panel while reminders are off, and the panel stops offering it once they are on', async () => {
+    asUser()
+    mockUpcoming([makeApplication({ id: 1, company: 'Acme', follow_up_date: '2000-01-01' })])
+    mockList([])
+    renderApp('/applications')
+    expect(await screen.findByRole('link', { name: 'Get these by email each day' })).toHaveAttribute('href', '/account#reminders')
+  })
+
+  it('does not suggest reminders in the panel to someone who already has them', async () => {
+    asUser({ reminder_emails: true })
+    mockUpcoming([makeApplication({ id: 1, company: 'Acme', follow_up_date: '2000-01-01' })])
+    mockList([])
+    renderApp('/applications')
+    await screen.findByText('Follow-ups due soon')
+    expect(screen.queryByRole('link', { name: 'Get these by email each day' })).not.toBeInTheDocument()
   })
 })

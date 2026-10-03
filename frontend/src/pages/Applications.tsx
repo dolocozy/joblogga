@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../auth'
 import { exportApplicationsCsv, fetchCountries, fetchStates, fetchUpcoming, listApplications, updateApplication, WORK_MODES } from '../api'
 import type { Application, ApplicationStatus, Country, PlaceRef, WorkMode } from '../api'
 import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader, SAVED_LEDGER_COLUMNS } from '../components/Ledger'
@@ -36,6 +37,7 @@ interface Filters {
 const NO_FILTERS: Filters = { q: '', company: '', status: '', workMode: '', countryId: '', stateId: '', archived: 'hide', dateFrom: '', dateTo: '' }
 
 function UpcomingPanel({ reloadKey }: { reloadKey: number }) {
+  const { user } = useAuth()
   const [items, setItems] = useState<Application[]>([])
   useEffect(() => {
     fetchUpcoming()
@@ -47,7 +49,15 @@ function UpcomingPanel({ reloadKey }: { reloadKey: number }) {
   const today = localToday()
   return (
     <section className="mb-8 border-y border-rule py-4">
-      <h2 className="mb-2 text-lg">Follow-ups due soon</h2>
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4">
+        <h2 className="text-lg">Follow-ups due soon</h2>
+        {/* Reminders are opt-in, so say they exist, until they are on. */}
+        {user && !user.reminder_emails && (
+          <Link to="/account#reminders" className="link text-sm">
+            Get these by email each day
+          </Link>
+        )}
+      </div>
       <ul className="space-y-1.5 text-sm">
         {items.map((a) => (
           <li key={a.id} className="flex flex-wrap items-baseline justify-between gap-x-4">

@@ -9,7 +9,7 @@ from app import __version__
 from app.config import settings
 from app.db import engine
 from app.migrations import upgrade_database
-from app.routers import applications, auth, geo, stats
+from app.routers import applications, auth, geo, internal, stats
 
 
 # Without this only warnings reach the host's log viewer. INFO adds the migration
@@ -43,6 +43,7 @@ app.include_router(auth.router)
 app.include_router(applications.router)
 app.include_router(stats.router)
 app.include_router(geo.router)
+app.include_router(internal.router)
 
 
 @app.get("/health")

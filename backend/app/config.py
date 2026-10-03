@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Resolve .env and the default SQLite file next to the backend folder, not the
@@ -66,10 +66,23 @@ class Settings(BaseSettings):
     # Verification mail may sit unread for a while, and a verification link cannot
     # take over an account, so it lives much longer than a reset link.
     email_verification_expire_hours: int = Field(default=24, ge=1, le=168)
+    # Shared secret for POST /internal/send-follow-up-reminders, which a daily GitHub Actions workflow calls (Render's
+    # free plan has no cron). It must match the REMINDER_SECRET repository secret. Unset, the endpoint is switched
+    # off (503), so reminders can never be triggered by accident or by guesswork.
+    reminder_secret: str | None = None
     # Development only: print the reset link in the log when no email key is set,
     # so the flow can be tried without sending real mail. Leave off in production:
     # a link in a log is a working password reset.
     log_reset_links: bool = False
+
+    @field_validator("reminder_secret")
+    @classmethod
+    def reminder_secret_is_long_enough(cls, value: str | None) -> str | None:
+        if not value:
+            return None  # an empty variable means "not set"
+        if len(value) < 32:
+            raise ValueError("REMINDER_SECRET must be at least 32 characters (try: openssl rand -hex 32)")
+        return value
 
     @property
     def frontend_base(self) -> str:

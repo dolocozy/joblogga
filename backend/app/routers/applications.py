@@ -13,7 +13,7 @@ from app.export import applications_to_csv
 from app.deps import get_current_user
 from app.geo import place_label
 from app.importer import ImportFileError, import_csv
-from app.models import Application, ApplicationStatus, City, Country, StatusChange, User, WorkMode
+from app.models import CLOSED_STATUSES, Application, ApplicationStatus, City, Country, StatusChange, User, WorkMode
 from app.schemas import (
     ApplicationCreate,
     ApplicationDetail,
@@ -39,13 +39,6 @@ class ArchivedFilter(enum.StrEnum):
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
-# Once an application is closed there's nothing left to follow up on.
-CLOSED_STATUSES = (
-    ApplicationStatus.OFFER_ACCEPTED,
-    ApplicationStatus.OFFER_DECLINED,
-    ApplicationStatus.REJECTED,
-    ApplicationStatus.WITHDRAWN,
-)
 
 
 def resolve_place(db: Session, changes: dict, current: Application | None) -> None:

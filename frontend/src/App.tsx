@@ -12,6 +12,7 @@ import Login from './pages/Login'
 import NewApplication from './pages/NewApplication'
 import ResetPassword from './pages/ResetPassword'
 import Signup from './pages/Signup'
+import Unsubscribe from './pages/Unsubscribe'
 import VerifyEmail from './pages/VerifyEmail'
 
 // Loaded on demand: the dashboard pulls in the charting library, which is most of
@@ -29,6 +30,8 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
+        {/* Open to everyone: the link in a reminder email must work whether or not anyone is logged in. */}
+        <Route path="/unsubscribe" element={<Unsubscribe />} />
         <Route element={<GuestRoute />}>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />

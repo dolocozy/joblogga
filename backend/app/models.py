@@ -2,7 +2,7 @@ import enum
 import secrets
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Date, Enum, ForeignKey, Index, String, Text
+from sqlalchemy import Date, Enum, ForeignKey, Index, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base, UtcDateTime
@@ -39,6 +39,12 @@ class User(Base):
     # NULL means not yet. Accounts that existed before verification was added were
     # marked verified by the migration.
     email_verified_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    # Opt-in: a daily email of follow-ups that are due or overdue. Off for everyone until they switch it on
+    # (existing accounts included), and only ever sent to a verified address.
+    reminder_emails: Mapped[bool] = mapped_column(default=False, server_default=false())
+    # The day (UTC) this user's last digest went out. Claimed atomically before sending, so a retried or
+    # doubly-triggered run cannot send the same day's digest twice.
+    reminder_last_sent_on: Mapped[date | None] = mapped_column(Date)
 
     @property
     def email_verified(self) -> bool:
@@ -121,6 +127,15 @@ class WorkMode(enum.StrEnum):
 def _work_mode_enum() -> Enum:
     # A plain string like the status, so a new value later is a code change, not a migration.
     return Enum(WorkMode, native_enum=False, length=20, values_callable=lambda e: [m.value for m in e])
+
+
+# Once an application is closed there is nothing left to follow up on.
+CLOSED_STATUSES = (
+    ApplicationStatus.OFFER_ACCEPTED,
+    ApplicationStatus.OFFER_DECLINED,
+    ApplicationStatus.REJECTED,
+    ApplicationStatus.WITHDRAWN,
+)
 
 
 def _status_enum() -> Enum:

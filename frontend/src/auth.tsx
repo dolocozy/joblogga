@@ -20,6 +20,8 @@ interface AuthContextValue {
   deleteAccount: (password: string) => Promise<void>
   // Re-reads the logged-in user, e.g. after their address was just verified.
   refreshUser: () => Promise<void>
+  // Switches the daily follow-up email on or off for this account.
+  setReminderEmails: (on: boolean) => Promise<void>
   logout: () => void
 }
 
@@ -69,6 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await api.signup(email, password)
   }, [])
 
+  const setReminderEmails = useCallback(async (on: boolean) => {
+    setUser(await api.setReminderEmails(on))
+  }, [])
+
   const refreshUser = useCallback(async () => {
     if (api.tokenStore.get()) setUser(await api.fetchMe())
   }, [])
@@ -89,8 +95,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, loading, sessionExpired, accountDeleted, login, signup, refreshUser, deleteAccount, logout }),
-    [user, loading, sessionExpired, accountDeleted, login, signup, refreshUser, deleteAccount, logout],
+    () => ({ user, loading, sessionExpired, accountDeleted, login, signup, refreshUser, setReminderEmails, deleteAccount, logout }),
+    [user, loading, sessionExpired, accountDeleted, login, signup, refreshUser, setReminderEmails, deleteAccount, logout],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

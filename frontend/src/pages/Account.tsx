@@ -11,7 +11,7 @@ import { useFieldErrors } from '../hooks'
 import { loginPasswordRule } from '../validation'
 
 export default function Account() {
-  const { user, deleteAccount } = useAuth()
+  const { user, deleteAccount, setReminderEmails } = useAuth()
   const base = useId()
 
   const [confirming, setConfirming] = useState(false)
@@ -20,6 +20,9 @@ export default function Account() {
   const [deleting, setDeleting] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+
+  const [savingReminders, setSavingReminders] = useState(false)
+  const [remindersError, setRemindersError] = useState<string | null>(null)
 
   const [file, setFile] = useState<File | null>(null)
   const [skipDuplicates, setSkipDuplicates] = useState(true)
@@ -38,6 +41,18 @@ export default function Account() {
       setExportError(err instanceof Error ? err.message : 'Could not export')
     } finally {
       setExporting(false)
+    }
+  }
+
+  async function toggleReminders(on: boolean) {
+    setSavingReminders(true)
+    setRemindersError(null)
+    try {
+      await setReminderEmails(on)
+    } catch (err) {
+      setRemindersError(err instanceof Error ? err.message : 'Could not change that setting')
+    } finally {
+      setSavingReminders(false)
     }
   }
 
@@ -86,6 +101,39 @@ export default function Account() {
         </h2>
         <p className="break-all">{user?.email}</p>
         <p className="text-sm text-ink-soft">{user?.email_verified ? 'Email address verified.' : 'Email address not verified yet.'}</p>
+      </section>
+
+      <section aria-labelledby={`${base}-reminders`} id="reminders" className="space-y-3">
+        <h2 id={`${base}-reminders`} className="text-xl">
+          Email reminders
+        </h2>
+        <p className="text-sm text-ink-soft">
+          Get one email a day, around 13:00 UTC, listing your open applications whose follow-up date is today or has passed. It is only sent when something is
+          due, it keeps coming each day until you change that date or close the application, and archived and closed applications are left out.
+        </p>
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={user?.reminder_emails ?? false}
+            disabled={savingReminders}
+            onChange={(e) => toggleReminders(e.target.checked)}
+            className="mt-1"
+          />
+          <span className="font-semibold">Email me when follow-ups are due</span>
+        </label>
+        <p role="status" className="text-sm">
+          {user?.reminder_emails ? 'Reminders are on.' : 'Reminders are off. Nothing is sent unless you turn them on.'}
+        </p>
+        {user?.reminder_emails && !user.email_verified && (
+          <p className="border-l-2 border-marker bg-marker/20 px-3 py-2 text-sm">
+            Your email address is not verified yet, so no reminders will be sent until it is. Use the link in the verification email, or the banner at the top of the page to send it again.
+          </p>
+        )}
+        {remindersError && (
+          <p role="alert" className="text-sm text-brick">
+            {remindersError}
+          </p>
+        )}
       </section>
 
       <section aria-labelledby={`${base}-data`} className="space-y-3">

@@ -104,6 +104,11 @@ class RateLimits:
         # Wrong passwords on "delete my account", per account. A stolen session must not
         # become a way to guess the password that guards the irreversible action.
         self.delete_account_user = SlidingWindowLimiter(5, 15 * 60, clock)
+        # Wrong secrets on the internal reminder endpoint. Guessing a 256-bit secret is hopeless, but nothing should be
+        # allowed to hammer an endpoint that sends email.
+        self.internal_secret_ip = SlidingWindowLimiter(10, 15 * 60, clock)
+        # Bad unsubscribe tokens, per address, like bad reset and verification tokens.
+        self.unsubscribe_ip = SlidingWindowLimiter(20, 15 * 60, clock)
         # Only bad verification tokens count, as with reset tokens.
         self.verify_confirm_ip = SlidingWindowLimiter(20, 15 * 60, clock)
 
@@ -172,6 +177,20 @@ class RateLimits:
     def record_delete_account_failure(self, user_id: int) -> None:
         self.delete_account_user.record(str(user_id))
 
+    def check_internal_secret(self, ip: str) -> tuple[str, int] | None:
+        wait = self.internal_secret_ip.retry_after(ip)
+        return ("internal_secret_ip", wait) if wait > 0 else None
+
+    def record_internal_secret_failure(self, ip: str) -> None:
+        self.internal_secret_ip.record(ip)
+
+    def check_unsubscribe(self, ip: str) -> tuple[str, int] | None:
+        wait = self.unsubscribe_ip.retry_after(ip)
+        return ("unsubscribe_ip", wait) if wait > 0 else None
+
+    def record_unsubscribe_failure(self, ip: str) -> None:
+        self.unsubscribe_ip.record(ip)
+
     def check_verify_confirm(self, ip: str) -> tuple[str, int] | None:
         wait = self.verify_confirm_ip.retry_after(ip)
         return ("verify_confirm_ip", wait) if wait > 0 else None
@@ -191,6 +210,8 @@ class RateLimits:
             self.signup_email,
             self.verify_resend_user,
             self.delete_account_user,
+            self.internal_secret_ip,
+            self.unsubscribe_ip,
             self.verify_confirm_ip,
         ):
             limiter.clear()

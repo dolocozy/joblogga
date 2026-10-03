@@ -6,12 +6,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app import email_verification, password_reset, ratelimit
+from app import email_verification, password_reset, ratelimit, reminders
 from app.config import settings
 from app.deps import client_ip, get_current_user, get_email_sender, get_session_factory
 from app.mailer import EmailSender
 from app.models import PasswordResetToken, User
 from app.schemas import (
+    AccountSettingsUpdate,
     DeleteAccountRequest,
     EmailVerificationConfirm,
     LoginRequest,
@@ -20,6 +21,7 @@ from app.schemas import (
     PasswordResetRequest,
     SignupRequest,
     TokenResponse,
+    UnsubscribeRequest,
     UserOut,
 )
 from app.security import DUMMY_HASH, create_access_token, hash_password, verify_password
@@ -167,6 +169,32 @@ def confirm_password_reset(body: PasswordResetConfirm, db: DbSession, request: R
     db.execute(delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None)))
     db.commit()  # the token is spent and the password changed together, or neither
     return MessageResponse(detail="Your password has been updated. You can log in with it now.")
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(body: AccountSettingsUpdate, user: Annotated[User, Depends(get_current_user)], db: DbSession) -> User:
+    """Change the logged-in user's own settings. Today that is the follow-up reminder emails (off until switched on)."""
+    user.reminder_emails = body.reminder_emails
+    db.commit()
+    return user
+
+
+@router.post("/unsubscribe-reminders", response_model=MessageResponse)
+def unsubscribe_reminders(body: UnsubscribeRequest, db: DbSession, request: Request, ip: ClientIp) -> MessageResponse:
+    """Switch off one account's reminder emails from the link in the email. The signed token is the credential, so no
+    login is needed (the person is usually reading the email, not signed in). Switching off twice is fine."""
+    blocked = ratelimit.limits.check_unsubscribe(ip)
+    if blocked:
+        raise too_many_attempts(request, blocked[0], ip, blocked[1])
+    user_id = reminders.user_id_from_unsubscribe_token(body.token)
+    user = db.get(User, user_id) if user_id is not None else None
+    if user is None:
+        # One answer for a forged token and for an account that has since been deleted.
+        ratelimit.limits.record_unsubscribe_failure(ip)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="This unsubscribe link is not valid.")
+    user.reminder_emails = False
+    db.commit()
+    return MessageResponse(detail="You will not get follow-up reminder emails any more. You can turn them back on in your account.")
 
 
 INVALID_VERIFICATION_LINK = "This verification link is invalid or has expired. Log in to request a new one."

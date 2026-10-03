@@ -52,3 +52,8 @@ services:
       # service add it under Environment in the dashboard.
       - key: RESEND_API_KEY
         sync: false
+      # Shared secret for the daily follow-up reminder job (a GitHub Actions workflow calls the API with it).
+      # At least 32 characters, for example `openssl rand -hex 32`, and the SAME value as the REMINDER_SECRET
+      # repository secret on GitHub. Unset, the reminder endpoint is switched off.
+      - key: REMINDER_SECRET
+        sync: false

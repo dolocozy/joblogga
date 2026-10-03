@@ -4,7 +4,7 @@ import html
 import logging
 import secrets
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 import httpx
@@ -22,6 +22,7 @@ class EmailMessage:
     subject: str
     text: str  # plain-text version, for clients that don't show HTML
     html: str
+    headers: dict[str, str] = field(default_factory=dict)  # extra mail headers, e.g. List-Unsubscribe
 
 
 class EmailSendError(RuntimeError):
@@ -43,6 +44,8 @@ class ResendSender:
 
     def send(self, message: EmailMessage) -> None:
         payload = {"from": self._from, "to": [message.to], "subject": message.subject, "html": message.html, "text": message.text}
+        if message.headers:
+            payload["headers"] = message.headers
         # One key per email, reused if we retry: if the first attempt did reach Resend
         # and only the reply was lost, the retry cannot send a second copy.
         headers = {"Authorization": f"Bearer {self._api_key}", "Idempotency-Key": secrets.token_hex(16)}
@@ -164,3 +167,68 @@ def already_registered_message(to: str, login_link: str, reset_link: str) -> Ema
         "If it wasn't you, you can ignore this email. Nothing has changed.",
     )
     return EmailMessage(to=to, subject="You already have a Joblogga account", text=text, html=body)
+
+
+@dataclass(frozen=True)
+class DigestItem:
+    company: str
+    role: str
+    status: str  # as shown to people: "Interview", "Offer accepted"
+    days_overdue: int  # 0 means due today
+
+
+def _due_phrase(days: int) -> str:
+    return "due today" if days <= 0 else f"{days} day{'s' if days != 1 else ''} overdue"
+
+
+def follow_up_digest_message(
+    to: str, items: list[DigestItem], total: int, applications_url: str, account_url: str, unsubscribe_url: str
+) -> EmailMessage:
+    """One email listing everything due today or overdue, however many there are.
+
+    `items` is what is listed (the caller caps it); `total` is how many are due. Company and role are typed by
+    the user, so they are escaped in the HTML, and the subject carries only a count, never their text.
+    """
+    count = f"{total} follow-up{'s' if total != 1 else ''}"
+    lines = [f"- {i.company}, {i.role} ({i.status}): {_due_phrase(i.days_overdue)}" for i in items]
+    more = total - len(items)
+    if more > 0:
+        lines.append(f"...and {more} more. Open your applications to see them all.")
+    text = (
+        f"{count} due\n\n"
+        f"You have {count} due today or overdue:\n\n" + "\n".join(lines) + "\n\n"
+        f"Open your applications: {applications_url}\n\n"
+        "You get this because you turned on follow-up reminders. It is sent once a day while something is due.\n"
+        f"Turn it off in your account: {account_url}\n"
+        f"Or stop it right now, no login needed: {unsubscribe_url}\n"
+    )
+    rows = "".join(
+        f'<li style="margin:0 0 8px;line-height:1.4;"><strong>{html.escape(i.company)}</strong>, {html.escape(i.role)} '
+        f'<span style="color:#565c57;">({html.escape(i.status)})</span><br>'
+        f'<span style="font-size:14px;color:{"#8f3218" if i.days_overdue > 0 else "#1f2622"};">{_due_phrase(i.days_overdue)}</span></li>'
+        for i in items
+    )
+    if more > 0:
+        rows += f'<li style="margin:0 0 8px;color:#565c57;list-style:none;">...and {more} more.</li>'
+    body = f"""<!doctype html>
+<html>
+  <body style="margin:0;padding:24px;background:#f4efe5;color:#1f2622;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;">
+    <div style="max-width:480px;margin:0 auto;background:#fffcf6;border:1px solid #d6ccb8;border-radius:2px;padding:28px;">
+      <h1 style="margin:0 0 16px;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:600;">{count} due</h1>
+      <p style="margin:0 0 16px;line-height:1.5;">You have {count} due today or overdue:</p>
+      <ul style="margin:0 0 24px;padding-left:20px;">{rows}</ul>
+      <p style="margin:0 0 24px;"><a href="{html.escape(applications_url, quote=True)}" style="display:inline-block;background:#2d5b4c;color:#fffcf6;padding:10px 18px;border-radius:4px;text-decoration:none;font-weight:600;">Open your applications</a></p>
+      <p style="margin:0;line-height:1.5;color:#565c57;font-size:13px;">You get this because you turned on follow-up reminders. It is sent once a day while something is due.
+        <a href="{html.escape(account_url, quote=True)}" style="color:#2d5b4c;">Turn it off in your account</a>, or
+        <a href="{html.escape(unsubscribe_url, quote=True)}" style="color:#2d5b4c;">stop it right now</a> (no login needed).</p>
+    </div>
+  </body>
+</html>"""
+    return EmailMessage(
+        to=to,
+        subject=f"Joblogga: {count} due",
+        text=text,
+        html=body,
+        # Mail clients show their own "Unsubscribe" from this header, opening the same no-login page as the link.
+        headers={"List-Unsubscribe": f"<{unsubscribe_url}>"},
+    )

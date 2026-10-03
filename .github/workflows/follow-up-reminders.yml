@@ -1,0 +1,32 @@
+name: Follow-up reminders
+
+# Sends each opted-in user their daily digest of follow-ups that are due or overdue.
+# Render's free plan has no cron jobs or background workers, so this scheduled workflow calls the API instead.
+# See "Follow-up reminders" in the README for what must be configured (the REMINDER_SECRET secret).
+on:
+  schedule:
+    - cron: "7 13 * * *" # 13:07 UTC every day, off the hour because the top of the hour is when GitHub delays schedules most
+  workflow_dispatch: # run it by hand from the Actions tab to test
+
+# Two overlapping runs would be harmless (the API sends at most one digest a day), but there is no reason to allow them.
+concurrency:
+  group: follow-up-reminders
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  send:
+    name: Send today's digests
+    # Forks have no secret, and a fork's schedule should not run against someone else's API.
+    if: github.repository == 'dolocozy/joblogga'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Ask the API to send them
+        env:
+          REMINDER_SECRET: ${{ secrets.REMINDER_SECRET }}
+          API_URL: ${{ vars.API_URL }} # optional; the script defaults to the production API
+        run: .github/scripts/send-follow-up-reminders.sh

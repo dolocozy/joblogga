@@ -104,9 +104,12 @@ Interactive docs are at http://localhost:8000/docs when the backend is running.
 | --- | --- | --- |
 | POST | `/auth/signup` | Start an account: the same `202` reply for every address; a verification email follows |
 | POST | `/auth/login` | Get a token (unverified accounts can log in) |
-| GET | `/auth/me` | Current user, including `email_verified` |
+| GET | `/auth/me` | Current user, including `email_verified` and `reminder_emails` |
+| PATCH | `/auth/me` | Change your settings: `reminder_emails` (a real boolean) switches the daily follow-up email on or off |
+| POST | `/auth/unsubscribe-reminders` | Switch reminders off from the link in an email (a signed token; no login) |
 | POST | `/auth/verify-email/confirm` | Redeem a verification token (no login needed) |
 | POST | `/auth/verify-email/resend` | Email the logged-in user a fresh verification link |
+| POST | `/internal/send-follow-up-reminders` | Not for people, and hidden from the docs: the daily job's trigger, authenticated by the `X-Reminder-Secret` header |
 | POST | `/auth/delete-account` | Permanently delete the account and all its data; needs the password again |
 | POST | `/auth/password-reset/request` | Email a reset link (same `202` reply for every address) |
 | POST | `/auth/password-reset/confirm` | Set a new password with a reset token |
@@ -127,7 +130,7 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 
 ## Data model
 
-- `users`: email (unique), bcrypt hash, `email_verified_at` (empty until verified), `session_version` (random at signup; bumped by a password reset to end earlier sessions).
+- `users`: email (unique), bcrypt hash, `email_verified_at` (empty until verified), `reminder_emails` (off until switched on) and `reminder_last_sent_on`, `session_version` (random at signup; bumped by a password reset to end earlier sessions).
 - `countries`, `states`, `cities`: the place data (see Places), loaded once by a migration. Their ids are the dataset's own.
 - `password_reset_tokens`, `email_verification_tokens`: hash of each token, its expiry, and when it was used.
 - `applications`: belongs to a user; company, role, job link, date applied (empty while Saved), resume version, salary min/max, location (readable text) with `country_id` and `city_id` pointing at the place tables, work mode (remote, hybrid or in person; empty means not specified), `archived_at` (empty unless archived), interview round and total rounds (optional, e.g. round 2 of 3; kept as a record after the application moves on, and with no effect on status or any statistic), notes, current status, follow-up date.
@@ -147,6 +150,26 @@ The location field is a country and a city picked from real data, with a way to 
 - **Tests** run against a tiny stand-in dataset (with duplicate names on purpose) so the suite stays fast; one file checks the real files' checksums and row counts and loads them through the migration on both databases.
 
 Place data: countries-states-cities-database, ODbL v1.0, credited on the landing page. The data files stay under the ODbL; the rest of the repository is MIT.
+
+## Follow-up reminders
+
+An opt-in email, once a day, listing your open applications whose follow-up date is today or has passed. **It is off for everyone until switched on** (Account page, "Email reminders"; the follow-ups panel links there while it is off). Existing accounts were not switched on by the deploy.
+
+- **What is sent:** one digest per person per day, however many things are due (up to 20 listed, the rest counted), only when something is due. Overdue ones keep appearing each day until the date is changed or the application is closed, which is what a reminder is for. Closed and archived applications are left out; a saved job's follow-up date counts as its "apply by" date. Each email has an unsubscribe link that works without logging in, and a `List-Unsubscribe` header so mail programs can show their own button.
+- **Only verified addresses.** An opted-in but unverified address is counted in the run's report and never emailed.
+- **Exactly once a day.** Each person's day is claimed in one `UPDATE` before the email is sent, so a retry or a double-fired run cannot send twice (tested against concurrent runs on Postgres). If sending fails the claim is released, so the next run tries again.
+- **"Today" is the UTC date** at send time; there are no per-user time zones yet.
+
+**How it is triggered.** Render's free plan has no cron jobs or background workers, and the free web service sleeps, so nothing inside the API can wake up on a schedule. A GitHub Actions workflow (`.github/workflows/follow-up-reminders.yml`, daily at 13:07 UTC, also runnable by hand from the Actions tab) runs `.github/scripts/send-follow-up-reminders.sh`, which POSTs to `/internal/send-follow-up-reminders` with a shared secret. The script waits for a sleeping API to wake (it retries the errors a waking service gives), calls again while people remain, and exits non-zero if anything failed, so GitHub marks the run failed and emails the repository owner. The endpoint compares the secret in constant time, rate limits wrong guesses, refuses to run if no secret or no email key is configured (so a missing key can never use up a day's digests), and is a no-op when called twice.
+
+**Setting it up** (once):
+
+1. Generate a secret of at least 32 characters: `openssl rand -hex 32`.
+2. Put it in Render as `REMINDER_SECRET` (service, Environment). Until it is set, the endpoint answers 503.
+3. Put the same value in GitHub as a repository secret named `REMINDER_SECRET` (Settings, Secrets and variables, Actions). If the API is not at `https://joblogga-api.onrender.com`, also set a repository variable `API_URL`.
+4. Run the workflow once by hand from the Actions tab to check it ("Send today's digests"). Its log shows `sent`, `failed`, `skipped_unverified` and `remaining`.
+
+**Limits to know about.** GitHub disables scheduled workflows in a public repository after 60 days with no repository activity, with no warning, so if development stops the reminders silently stop (re-enable the workflow from the Actions tab). Scheduled runs can also be delayed, and occasionally dropped, when GitHub is busy; the schedule is deliberately off the hour for that reason.
 
 ## Archive
 

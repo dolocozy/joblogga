@@ -69,6 +69,26 @@ class DeleteAccountRequest(BaseModel):
     password: str = Field(max_length=200)
 
 
+class AccountSettingsUpdate(BaseModel):
+    """PATCH /auth/me: the settings a person can change on their own account."""
+
+    reminder_emails: StrictBool  # a real boolean: "yes" or 1 must not switch emails on
+
+
+class UnsubscribeRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=300)
+
+
+class ReminderRunOut(BaseModel):
+    """What one run of the reminder job did, for the workflow's log."""
+
+    date: date
+    sent: int  # digests emailed
+    failed: int  # digests that could not be sent (they are retried by the next run the same day)
+    skipped_unverified: int  # opted in, but their address is not verified, so nothing is sent
+    remaining: int  # eligible digests left over because this run hit its limit; call again
+
+
 class EmailVerificationConfirm(BaseModel):
     token: str = Field(min_length=20, max_length=200)
 
@@ -92,6 +112,7 @@ class UserOut(BaseModel):
     created_at: datetime
     # Lets the UI show "please verify your email" without a second request.
     email_verified: bool
+    reminder_emails: bool  # opted in to the daily follow-up digest
 
 
 

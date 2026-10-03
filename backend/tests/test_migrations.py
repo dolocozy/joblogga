@@ -573,3 +573,42 @@ def test_downgrading_drops_only_the_archive_column(engine):
         command.downgrade(alembic_config(conn), "0008")
     assert "archived_at" not in {c["name"] for c in inspect(engine).get_columns("applications")}
     assert counts(engine) == (1, 1, 1)
+
+
+# --- 0010: follow-up reminder emails -----------------------------------------------------
+
+
+def test_every_existing_account_is_off_for_reminders_after_the_upgrade(engine):
+    migrate_to(engine, "0009")
+    seed_rows(engine)
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO users (id, email, hashed_password, created_at) VALUES (2, 'two@example.com', 'x', '2026-01-02 00:00:00')"))
+
+    upgrade_database(engine)
+
+    assert version(engine) == HEAD
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT reminder_emails, reminder_last_sent_on FROM users ORDER BY id")).all()
+        assert [bool(r[0]) for r in rows] == [False, False]  # opt-in only: nobody starts receiving mail because of a deploy
+        assert [r[1] for r in rows] == [None, None]
+        assert schema_differences(conn) == []
+
+
+def test_old_code_can_still_add_users_while_the_reminder_columns_are_live(engine):
+    migrate_to(engine, "0009")
+    upgrade_database(engine)
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO users (email, hashed_password, created_at) VALUES ('old@example.com', 'x', '2026-01-01 00:00:00')"))
+        assert bool(conn.execute(text("SELECT reminder_emails FROM users")).scalar()) is False
+
+
+def test_downgrading_drops_only_the_reminder_columns(engine):
+    upgrade_database(engine)
+    seed_rows(engine)
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE users SET reminder_emails = :on"), {"on": True})
+    with engine.begin() as conn:
+        command.downgrade(alembic_config(conn), "0009")
+    columns = {c["name"] for c in inspect(engine).get_columns("users")}
+    assert not {"reminder_emails", "reminder_last_sent_on"} & columns
+    assert counts(engine) == (1, 1, 1)
