@@ -13,7 +13,8 @@ from app.export import applications_to_csv
 from app.deps import get_current_user
 from app.geo import place_label
 from app.importer import ImportFileError, import_csv
-from app.models import CLOSED_STATUSES, Application, ApplicationStatus, City, Country, StatusChange, User, WorkMode
+from app.models import CLOSED_STATUSES, Application, ApplicationStatus, ApplicationTag, City, Country, StatusChange, User, WorkMode
+from app.tags import normalize_tag
 from app.schemas import (
     ApplicationCreate,
     ApplicationDetail,
@@ -22,6 +23,7 @@ from app.schemas import (
     ApplicationUpdate,
     DuplicateOut,
     ImportResultOut,
+    TagCount,
     check_rounds,
     check_salary_range,
 )
@@ -95,7 +97,9 @@ def get_owned_application(db: Session, user: User, application_id: int) -> Appli
 def create_application(body: ApplicationCreate, db: DbSession, user: CurrentUser) -> Application:
     data = body.model_dump()
     resolve_place(db, data, None)
+    tags = data.pop("tags")
     app = Application(**data, user_id=user.id)
+    app.set_tags(tags)
     # The first history row records where the application started (from = None).
     app.history.append(StatusChange(from_status=None, to_status=app.status))
     db.add(app)
@@ -108,12 +112,13 @@ def list_applications(
     db: DbSession,
     user: CurrentUser,
     status_in: Annotated[list[ApplicationStatus] | None, Query(alias="status")] = None,
+    tag: Annotated[list[str] | None, Query(description="Only applications with this tag (repeat the parameter to require several)")] = None,
     archived: Annotated[ArchivedFilter, Query(description="hide (default), include, or only archived applications")] = ArchivedFilter.HIDE,
     work_mode: Annotated[list[WorkMode] | None, Query(description="Only these work modes (repeat the parameter for several)")] = None,
     country_id: Annotated[int | None, Query(ge=1, description="Only this country (a picked city or country)")] = None,
     state_id: Annotated[int | None, Query(ge=1, description="Only places in this state or province")] = None,
     company: Annotated[str | None, Query(max_length=200, description="Company contains…")] = None,
-    q: Annotated[str | None, Query(max_length=200, description="Keyword in company, role, location (city, state or country) or notes")] = None,
+    q: Annotated[str | None, Query(max_length=200, description="Keyword in company, role, location (city, state or country), tags or notes")] = None,
     date_from: date | None = None,
     date_to: date | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
@@ -125,6 +130,9 @@ def list_applications(
         conditions.append(Application.archived_at.is_(None))
     elif archived == ArchivedFilter.ONLY:
         conditions.append(Application.archived_at.is_not(None))
+    for wanted in {normalize_tag(t) for t in tag or []} - {""}:
+        # An application must carry every tag asked for. (Matched on the normalised form, so "Dream Job" finds "dream job".)
+        conditions.append(Application.tag_links.any(ApplicationTag.tag == wanted))
     if status_in:
         conditions.append(Application.status.in_(status_in))
     if work_mode:
@@ -147,6 +155,7 @@ def list_applications(
                 # A typed place with a picked country ("Somewhere" + Canada) is still found by "canada".
                 Application.country.has(Country.name.icontains(q, autoescape=True)),
                 Application.notes.icontains(q, autoescape=True),
+                Application.tag_links.any(ApplicationTag.tag.icontains(q, autoescape=True)),
             )
         )
     if date_from:
@@ -214,6 +223,20 @@ def import_applications(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error))
     db.commit()
     return ImportResultOut.model_validate(result, from_attributes=True)
+
+
+# Declared BEFORE "/{application_id}" so "tags" isn't parsed as an id.
+@router.get("/tags", response_model=list[TagCount])
+def my_tags(db: DbSession, user: CurrentUser) -> list[TagCount]:
+    """Every tag this user has used, with how many applications carry it: for the tag filter and for suggestions."""
+    rows = db.execute(
+        select(ApplicationTag.tag, func.count())
+        .join(Application, Application.id == ApplicationTag.application_id)
+        .where(Application.user_id == user.id)
+        .group_by(ApplicationTag.tag)
+        .order_by(ApplicationTag.tag)
+    )
+    return [TagCount(tag=tag, count=count) for tag, count in rows]
 
 
 # Declared BEFORE "/{application_id}" so "duplicates" isn't parsed as an id.
@@ -285,6 +308,10 @@ def update_application(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
     resolve_place(db, changes, app)
+
+    tags = changes.pop("tags", None)
+    if tags is not None:
+        app.set_tags(tags)
 
     # Archiving is its own switch: only an `archived` in the request changes it, and archiving twice keeps the
     # first time. Nothing else (a status change, an edit) touches it.

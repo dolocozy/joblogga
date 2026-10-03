@@ -21,6 +21,7 @@ COLUMNS = [
     "Resume version",
     "Interview round",
     "Interview rounds total",
+    "Tags",
     "Notes",
     "Status history",
     "Archived",
@@ -76,6 +77,7 @@ def applications_to_csv(applications: Iterable[Application]) -> str:
                 safe_text(a.resume_version),
                 "" if a.interview_round is None else a.interview_round,
                 "" if a.interview_rounds_total is None else a.interview_rounds_total,
+                safe_text("; ".join(a.tags)),  # a tag cannot contain ';', so this reads back exactly
                 safe_text(a.notes),
                 _history(a),
                 _iso(a.archived_at.date()) if a.archived_at else "",  # the day it was archived; archived applications are exported like any other

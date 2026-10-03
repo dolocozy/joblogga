@@ -13,6 +13,7 @@ from pydantic import (
 )
 
 from app.models import ApplicationStatus, WorkMode
+from app.tags import normalize_tags
 
 
 def validate_new_password(v: str) -> str:
@@ -146,6 +147,10 @@ def optional_text(max_length: int):
 
 # Far more rounds than any real process; the cap only stops nonsense.
 MAX_ROUNDS = 50
+# Tags as the API takes them: normalised, de-duplicated and checked (see app/tags.py), so every route that
+# accepts tags stores the same thing.
+Tags = Annotated[list[str], BeforeValidator(lambda v: normalize_tags(v) if isinstance(v, list) and all(isinstance(i, str) for i in v) else v)]
+
 # A dataset id: a whole number, strictly (JSON true would otherwise pass for 1).
 PlaceId = Annotated[int, Field(strict=True, ge=1)] | None
 # A whole number, and strictly so: JSON true would otherwise pass for 1.
@@ -175,6 +180,7 @@ class ApplicationFields(BaseModel):
     country_id: PlaceId = None  # a row of the countries table
     city_id: PlaceId = None  # a row of the cities table; fixes the state and country too
     work_mode: WorkMode | None = None  # None = not specified
+    tags: Tags = []  # free-form labels, normalised to lower case
     notes: optional_text(10000) = None
     interview_round: Round = None  # which round you are in
     interview_rounds_total: Round = None  # how many there will be, if known
@@ -218,6 +224,7 @@ class ApplicationUpdate(BaseModel):
     notes: optional_text(10000) = None
     interview_round: Round = None  # null clears it
     interview_rounds_total: Round = None
+    tags: Tags | None = None  # the complete new set (an empty list clears them); absent leaves them alone
     archived: StrictBool | None = None  # (a real JSON boolean: "yes" or 1 must not hide anything) true archives, false brings it back; absent leaves it as it is
     status: ApplicationStatus | None = None
     follow_up_date: date | None = None
@@ -233,7 +240,7 @@ class ApplicationUpdate(BaseModel):
         # must always have a value, explicitly sending null is an error.
         # date_applied may be null: a Saved job has none. Whether that is allowed for the
         # resulting status is decided in the router, which knows the stored status too.
-        for name in ("company", "role", "status", "archived"):
+        for name in ("company", "role", "status", "archived", "tags"):
             if name in self.model_fields_set and getattr(self, name) is None:
                 raise ValueError(f"{name} cannot be null")
         return self
@@ -298,6 +305,11 @@ class DuplicateOut(BaseModel):
     created_at: datetime
 
 
+class TagCount(BaseModel):
+    tag: str
+    count: int  # how many of the user's applications carry it
+
+
 class ImportRowNote(BaseModel):
     row: int  # as a spreadsheet numbers it: the header is row 1
     reason: str
@@ -342,6 +354,7 @@ class ApplicationOut(BaseModel):
     notes: str | None
     interview_round: int | None
     interview_rounds_total: int | None
+    tags: list[str]  # lower case, sorted
     archived: bool  # hidden from the default list and board; still counted in the dashboard and export
     archived_at: datetime | None
     status: ApplicationStatus

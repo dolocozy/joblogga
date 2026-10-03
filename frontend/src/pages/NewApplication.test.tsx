@@ -50,6 +50,7 @@ describe('add application form', () => {
       country_id: null,
       city_id: null,
       work_mode: null, // left unset unless chosen: nothing is guessed
+      tags: [],
       notes: null,
       interview_round: null, // nothing recorded until entered
       interview_rounds_total: null,
@@ -902,5 +903,38 @@ describe('the duplicate warning', () => {
     await add(user)
     const warning = await screen.findByRole('group', { name: 'Possible duplicate' })
     await waitFor(() => expect(within(warning).getByText(/You already have an application/)).toHaveFocus())
+  })
+})
+
+describe('tags on the form', () => {
+  it('suggests tags you have used before, and sends the tags that were added', async () => {
+    const user = userEvent.setup()
+    let body: Record<string, unknown> | null = null
+    server.use(
+      http.get(url('/applications/tags'), () => HttpResponse.json([{ tag: 'dream job', count: 2 }, { tag: 'referral', count: 1 }])),
+      http.post(url('/applications'), async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(makeDetail({ id: 40 }), { status: 201 })
+      }),
+      http.get(url('/applications/40'), () => HttpResponse.json(makeDetail({ id: 40 }))),
+    )
+    renderApp('/applications/new')
+    await user.type(await screen.findByLabelText('Company'), 'Acme')
+    await user.type(screen.getByLabelText('Role'), 'Engineer')
+    await waitFor(() => expect(document.querySelectorAll('datalist option')).toHaveLength(2))
+    await user.type(screen.getByRole('combobox', { name: 'Tags' }), 'Dream Job{Enter}Backup Option,')
+    await user.click(screen.getByRole('button', { name: 'Add application' }))
+
+    await screen.findByRole('heading', { name: /Acme/ })
+    expect(body).toMatchObject({ tags: ['backup option', 'dream job'] })
+  })
+
+  it('still works, with no suggestions, if the tag list cannot be fetched', async () => {
+    const user = userEvent.setup()
+    server.use(http.get(url('/applications/tags'), () => HttpResponse.json({ detail: 'down' }, { status: 500 })))
+    renderApp('/applications/new')
+    await user.type(await screen.findByRole('combobox', { name: 'Tags' }), 'hot{Enter}')
+    expect(screen.getByRole('list', { name: 'Chosen tags' })).toHaveTextContent('hot')
+    expect(document.querySelectorAll('datalist option')).toHaveLength(0)
   })
 })

@@ -14,7 +14,7 @@ from tests.conftest import TEST_DATABASE_URL, reset_database
 ON_POSTGRES = not TEST_DATABASE_URL.startswith("sqlite")
 BASELINE = "0001"
 HEAD = ScriptDirectory(str(BACKEND_DIR / "alembic")).get_current_head()  # moves with every new migration
-TABLES = {"users", "applications", "status_changes", "password_reset_tokens", "email_verification_tokens", "countries", "states", "cities"}
+TABLES = {"users", "applications", "status_changes", "password_reset_tokens", "email_verification_tokens", "countries", "states", "cities", "application_tags"}
 
 
 @pytest.fixture
@@ -611,6 +611,45 @@ def test_downgrading_drops_only_the_reminder_columns(engine):
         command.downgrade(alembic_config(conn), "0009")
     columns = {c["name"] for c in inspect(engine).get_columns("users")}
     assert not {"reminder_emails", "reminder_last_sent_on"} & columns
+    assert counts(engine) == (1, 1, 1)
+
+
+# --- 0011: tags ----------------------------------------------------------------------------
+
+
+def test_the_tags_table_is_created_and_existing_applications_simply_have_none(engine):
+    migrate_to(engine, "0010")
+    seed_rows(engine)
+    upgrade_database(engine)
+    assert version(engine) == HEAD
+    assert "application_tags" in tables(engine)
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT COUNT(*) FROM application_tags")).scalar() == 0
+        assert schema_differences(conn) == []
+    assert counts(engine) == (1, 1, 1)
+
+
+def test_a_tag_cannot_repeat_on_one_application_and_goes_with_it(engine):
+    upgrade_database(engine)
+    seed_rows(engine)
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO application_tags (application_id, tag) VALUES (1, 'x')"))
+    with pytest.raises(Exception):
+        with engine.begin() as conn:
+            conn.execute(text("INSERT INTO application_tags (application_id, tag) VALUES (1, 'x')"))
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM applications WHERE id = 1"))
+        assert conn.execute(text("SELECT COUNT(*) FROM application_tags")).scalar() == 0  # cascade
+
+
+def test_downgrading_drops_only_the_tags_table(engine):
+    upgrade_database(engine)
+    seed_rows(engine)
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO application_tags (application_id, tag) VALUES (1, 'x')"))
+    with engine.begin() as conn:
+        command.downgrade(alembic_config(conn), "0010")
+    assert "application_tags" not in tables(engine)
     assert counts(engine) == (1, 1, 1)
 
 

@@ -17,4 +17,6 @@ export const server = setupServer(
   http.get(`${API_URL}/geo/countries`, () => HttpResponse.json(COUNTRIES)),
   // Saving an application first asks whether it duplicates one; by default nothing does. Tests that care override it.
   http.get(`${API_URL}/applications/duplicates`, () => HttpResponse.json([])),
+  // The form suggests tags you have used, and the list can filter by them; by default there are none.
+  http.get(`${API_URL}/applications/tags`, () => HttpResponse.json([])),
 )

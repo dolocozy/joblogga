@@ -921,3 +921,95 @@ describe('archiving', () => {
     expect(within(card).getByText('Archived')).toBeInTheDocument()
   })
 })
+
+describe('tags on the list and board', () => {
+  const TAGGED = () => [
+    makeApplication({ id: 1, company: 'Acme', tags: ['dream job', 'referral'] }),
+    makeApplication({ id: 2, company: 'Globex', tags: [] }),
+    makeApplication({ id: 3, company: 'Initech', tags: ['a', 'b', 'c', 'd', 'e'] }),
+  ]
+
+  it('shows tags as small labels on a row, and nothing for an untagged one', async () => {
+    mockList(TAGGED())
+    renderApp('/applications')
+    await screen.findByText('Acme')
+    const row = (c: string) => screen.getByText(c).closest('li')!
+    expect(row('Acme')).toHaveTextContent('dream job')
+    expect(row('Acme')).toHaveTextContent('referral')
+    expect(within(row('Globex')).queryByText(/dream job|referral/)).not.toBeInTheDocument()
+  })
+
+  it('shows the first few and counts the rest, so a long list cannot take over a row', async () => {
+    mockList(TAGGED())
+    renderApp('/applications')
+    const row = (await screen.findByText('Initech')).closest('li')!
+    expect(row).toHaveTextContent('a')
+    expect(within(row).queryByText('d')).not.toBeInTheDocument()
+    expect(within(row).getByText('+2')).toBeInTheDocument()
+  })
+
+  it('shows them on board cards too', async () => {
+    mockList(TAGGED())
+    renderApp('/applications?view=board')
+    const card = (await screen.findByText('Acme')).closest('li')!
+    expect(card).toHaveTextContent('dream job')
+  })
+})
+
+describe('the tag filter', () => {
+  const TAGS = [{ tag: 'dream job', count: 3 }, { tag: 'referral', count: 1 }]
+
+  it('is not offered when you have no tags', async () => {
+    mockList([])
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+    expect(screen.queryByRole('combobox', { name: 'Filter by tag' })).not.toBeInTheDocument()
+  })
+
+  it('lists your tags with how many applications carry each, and sends the chosen one', async () => {
+    const user = userEvent.setup()
+    server.use(http.get(url('/applications/tags'), () => HttpResponse.json(TAGS)))
+    const seen = mockList([])
+    renderApp('/applications')
+    const select = await screen.findByRole('combobox', { name: 'Filter by tag' })
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['All tags', 'dream job (3)', 'referral (1)'])
+
+    await user.selectOptions(select, 'referral (1)')
+
+    await waitFor(() => expect(lastParams(seen).tag).toBe('referral'))
+  })
+
+  it('goes back to the first page, counts as an active filter, and Clear filters resets it', async () => {
+    const user = userEvent.setup()
+    server.use(http.get(url('/applications/tags'), () => HttpResponse.json(TAGS)))
+    const seen = mockList(manyApplications(45))
+    renderApp('/applications')
+    await screen.findByText('Company 1')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() => expect(lastParams(seen).offset).toBe('20'))
+
+    await user.selectOptions(await screen.findByRole('combobox', { name: 'Filter by tag' }), 'dream job (3)')
+    await waitFor(() => expect(lastParams(seen)).toMatchObject({ tag: 'dream job', offset: '0' }))
+
+    await user.click(await screen.findByRole('button', { name: 'Clear filters' }))
+    expect(screen.getByRole('combobox', { name: 'Filter by tag' })).toHaveValue('')
+    await waitFor(() => expect(lastParams(seen)).not.toHaveProperty('tag'))
+  })
+
+  it('also applies on the board and in the saved view', async () => {
+    const user = userEvent.setup()
+    server.use(http.get(url('/applications/tags'), () => HttpResponse.json(TAGS)))
+    const seen = mockList([])
+    renderApp('/applications?view=saved')
+    await user.selectOptions(await screen.findByRole('combobox', { name: 'Filter by tag' }), 'referral (1)')
+    await waitFor(() => expect(lastParams(seen)).toMatchObject({ tag: 'referral', status: 'saved' }))
+  })
+
+  it('is simply not offered if the tags cannot be loaded, and the list still works', async () => {
+    server.use(http.get(url('/applications/tags'), () => HttpResponse.json({ detail: 'down' }, { status: 500 })))
+    mockList([makeApplication({ company: 'Acme' })])
+    renderApp('/applications')
+    expect(await screen.findByText('Acme')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Filter by tag' })).not.toBeInTheDocument()
+  })
+})

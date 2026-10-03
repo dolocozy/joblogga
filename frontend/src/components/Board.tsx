@@ -26,6 +26,7 @@ import { FollowUp } from './Ledger'
 import StageMeter from './StageMeter'
 import ArchivedNote from './ArchivedNote'
 import PostingLink from './PostingLink'
+import TagList from './TagList'
 import RoundsNote from './RoundsNote'
 import StatusSelect from './StatusSelect'
 
@@ -51,6 +52,7 @@ function CardSummary({ app, today }: { app: Application; today: string }) {
       <p className="truncate font-semibold">{app.company}</p>
       <p className="truncate text-sm text-ink-soft">{roleLine(app)}</p>
       {placeLine(app) && <p className="truncate text-sm text-ink-soft">{placeLine(app)}</p>}
+      <TagList tags={app.tags} className="mt-1" />
       <p className="figure mt-2 text-ink-soft">{dateLine(app)}</p>
       {app.follow_up_date && (
         <p className="figure mt-1">

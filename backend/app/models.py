@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base, UtcDateTime
 from app.geo import place_label
+from app.tags import MAX_TAG_LENGTH
 
 
 def _now() -> datetime:
@@ -194,6 +195,25 @@ class Application(Base):
     country: Mapped[Country | None] = relationship(lazy="joined")
     city: Mapped[City | None] = relationship(lazy="joined")
 
+    # Free-form labels (see app/tags.py). Loaded with the application in one extra query, so a page of them costs one.
+    tag_links: Mapped[list["ApplicationTag"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", order_by="ApplicationTag.tag"
+    )
+
+    @property
+    def tags(self) -> list[str]:
+        return [link.tag for link in self.tag_links]
+
+    def set_tags(self, tags: list[str]) -> None:
+        """Make the tags exactly `tags` (already normalised), touching only the rows that differ."""
+        wanted = set(tags)
+        for link in list(self.tag_links):
+            if link.tag not in wanted:
+                self.tag_links.remove(link)
+        have = {link.tag for link in self.tag_links}
+        for tag in sorted(wanted - have):
+            self.tag_links.append(ApplicationTag(tag=tag))
+
     @property
     def archived(self) -> bool:
         return self.archived_at is not None
@@ -275,3 +295,12 @@ class EmailVerificationToken(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_now)
     expires_at: Mapped[datetime] = mapped_column(UtcDateTime)
     used_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+
+
+class ApplicationTag(Base):
+    """One tag on one application. The tag is stored normalised: lower case, single spaces."""
+
+    __tablename__ = "application_tags"
+
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), primary_key=True)
+    tag: Mapped[str] = mapped_column(String(MAX_TAG_LENGTH), primary_key=True)

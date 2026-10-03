@@ -25,6 +25,7 @@ export function makeApplication(overrides: Partial<Application> = {}): Applicati
     country: null,
     city: null,
     work_mode: null,
+    tags: [],
     notes: null,
     interview_round: null,
     interview_rounds_total: null,

@@ -7,6 +7,8 @@ import MarkApplied from '../components/MarkApplied'
 import PostingLink from '../components/PostingLink'
 import RoundsNote from '../components/RoundsNote'
 import StatusBadge from '../components/StatusBadge'
+import TagList from '../components/TagList'
+import { MAX_TAGS } from '../tags'
 import { formatDateTime } from '../dates'
 import { statusLabel } from '../status'
 import { placeLine, roleLine } from '../workMode'
@@ -24,6 +26,7 @@ function toInput(a: Detail): ApplicationInput {
     country_id: a.country?.id ?? null,
     city_id: a.city?.id ?? null,
     work_mode: a.work_mode,
+    tags: a.tags,
     notes: a.notes,
     interview_round: a.interview_round,
     interview_rounds_total: a.interview_rounds_total,
@@ -108,6 +111,7 @@ export default function ApplicationDetail() {
           <RoundsNote app={app} className="text-sm" />
           <PostingLink url={app.job_url} />
         </div>
+        <TagList tags={app.tags} max={MAX_TAGS} className="mt-2" />
       </div>
 
       {app.archived && (

@@ -1,12 +1,13 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { exportApplicationsCsv, fetchCountries, fetchStates, fetchUpcoming, listApplications, updateApplication, WORK_MODES } from '../api'
-import type { Application, ApplicationStatus, Country, PlaceRef, WorkMode } from '../api'
+import { exportApplicationsCsv, fetchCountries, fetchStates, fetchTags, fetchUpcoming, listApplications, updateApplication, WORK_MODES } from '../api'
+import type { Application, ApplicationStatus, Country, PlaceRef, TagCount, WorkMode } from '../api'
 import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader, SAVED_LEDGER_COLUMNS } from '../components/Ledger'
 import PostingLink from '../components/PostingLink'
 import ArchivedNote from '../components/ArchivedNote'
 import RoundsNote from '../components/RoundsNote'
+import TagList from '../components/TagList'
 import StatusSelect from '../components/StatusSelect'
 import { formatDate, formatIsoDate, localToday } from '../dates'
 import { saveFile } from '../download'
@@ -29,12 +30,13 @@ interface Filters {
   workMode: WorkMode | ''
   countryId: number | '' // a country, and within it a state or province
   stateId: number | ''
+  tag: string // one of your tags, or empty for all
   archived: 'hide' | 'include' | 'only' // archiving hides an application from the default views, nothing more
   dateFrom: string
   dateTo: string
 }
 
-const NO_FILTERS: Filters = { q: '', company: '', status: '', workMode: '', countryId: '', stateId: '', archived: 'hide', dateFrom: '', dateTo: '' }
+const NO_FILTERS: Filters = { q: '', company: '', status: '', workMode: '', countryId: '', stateId: '', tag: '', archived: 'hide', dateFrom: '', dateTo: '' }
 
 function UpcomingPanel({ reloadKey }: { reloadKey: number }) {
   const { user } = useAuth()
@@ -101,7 +103,15 @@ export default function Applications() {
   // Text fields wait for a pause in typing; dropdowns and dates apply at once.
   const q = useDebounced(filters.q.trim(), 300)
   const company = useDebounced(filters.company.trim(), 300)
-  const { status, workMode, countryId, stateId, archived, dateFrom, dateTo } = filters
+  const { status, workMode, countryId, stateId, tag, archived, dateFrom, dateTo } = filters
+
+  // The tags you have used, for the filter. Not offered if there are none (or they cannot be loaded).
+  const [tags, setTags] = useState<TagCount[]>([])
+  useEffect(() => {
+    fetchTags()
+      .then(setTags)
+      .catch(() => setTags([]))
+  }, [])
 
   // The choices for the country and state filters. Both come from our own place data; if either cannot be
   // loaded the filter is simply not offered, and everything else still works.
@@ -141,6 +151,7 @@ export default function Applications() {
       work_mode: workMode || undefined,
       country_id: countryId || undefined,
       state_id: stateId || undefined,
+      tag: tag || undefined,
       archived: archived === 'hide' ? undefined : archived,
       // Saved jobs have no applied date, so a date range means nothing there.
       date_from: saved ? undefined : dateFrom,
@@ -168,7 +179,7 @@ export default function Applications() {
     return () => {
       cancelled = true
     }
-  }, [q, company, status, workMode, countryId, stateId, archived, dateFrom, dateTo, page, reloadKey, view])
+  }, [q, company, status, workMode, countryId, stateId, tag, archived, dateFrom, dateTo, page, reloadKey, view])
 
   async function changeStatus(app: Application, next: ApplicationStatus) {
     if (next === app.status) return
@@ -242,7 +253,7 @@ export default function Applications() {
   // The status filter only exists in the list; the board's columns are the statuses.
   const statusFiltering = view === 'list' && status !== ''
   const dateFiltering = view !== 'saved' && (dateFrom !== '' || dateTo !== '') // saved jobs have no applied date
-  const filtered = q !== '' || company !== '' || statusFiltering || workMode !== '' || countryId !== '' || archived !== 'hide' || dateFiltering
+  const filtered = q !== '' || company !== '' || statusFiltering || workMode !== '' || countryId !== '' || tag !== '' || archived !== 'hide' || dateFiltering
   const badRange = view !== 'saved' && dateFrom !== '' && dateTo !== '' && dateFrom > dateTo
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const firstShown = total === 0 ? 0 : page * PAGE_SIZE + 1
@@ -359,6 +370,16 @@ export default function Applications() {
             ))}
           </select>
         )}
+        {tags.length > 0 && (
+          <select value={filters.tag} onChange={(e) => setFilter({ tag: e.target.value })} aria-label="Filter by tag" className="input">
+            <option value="">All tags</option>
+            {tags.map((t) => (
+              <option key={t.tag} value={t.tag}>
+                {t.tag} ({t.count})
+              </option>
+            ))}
+          </select>
+        )}
         <select
           value={filters.archived}
           onChange={(e) => setFilter({ archived: e.target.value as Filters['archived'] })}
@@ -468,6 +489,7 @@ export default function Applications() {
                     <span className="block truncate font-semibold group-hover:underline">{a.company}</span>
                     <span className="block truncate text-sm text-ink-soft">{roleLine(a)}</span>
                     {placeLine(a) && <span className="block truncate text-sm text-ink-soft">{placeLine(a)}</span>}
+                    <TagList tags={a.tags} className="mt-1" />
                   </Link>
                   <div className="flex shrink-0 flex-col items-end gap-0.5">
                     <PostingLink url={a.job_url} company={a.company} className="whitespace-nowrap" />

@@ -613,3 +613,53 @@ describe('archiving from the detail page', () => {
     expect(await screen.findByText('This application is archived.')).toBeInTheDocument()
   })
 })
+
+describe('tags on the detail page', () => {
+  it('shows an application\'s tags under its heading and in the form', async () => {
+    mockGet(makeDetail({ id: 3, tags: ['dream job', 'referral'] }))
+    renderApp('/applications/3')
+    expect(await screen.findByRole('heading', { name: /Acme/ })).toBeInTheDocument()
+    const chips = screen.getAllByText('dream job')
+    expect(chips.length).toBeGreaterThanOrEqual(2) // the label under the heading, and the chip in the form
+    expect(screen.getByRole('list', { name: 'Chosen tags' })).toHaveTextContent('referral')
+  })
+
+  it('shows nothing extra for an application with no tags', async () => {
+    mockGet(makeDetail({ id: 3, tags: [] }))
+    renderApp('/applications/3')
+    await screen.findByLabelText('Company')
+    expect(screen.queryByRole('list', { name: 'Chosen tags' })).not.toBeInTheDocument()
+  })
+
+  it('saves added and removed tags as the full new set', async () => {
+    const user = userEvent.setup()
+    const bodies: Record<string, unknown>[] = []
+    mockGet(makeDetail({ id: 3, tags: ['a', 'b'] }))
+    server.use(
+      http.patch(url('/applications/3'), async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        bodies.push(body)
+        return HttpResponse.json(makeDetail({ id: 3, tags: body.tags as string[], updated_at: '2026-06-01T00:00:00Z' }))
+      }),
+    )
+    renderApp('/applications/3')
+    await user.click(await screen.findByRole('button', { name: 'Remove tag a' }))
+    await user.type(screen.getByRole('combobox', { name: 'Tags' }), 'New One{Enter}')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0].tags).toEqual(['b', 'new one'])
+  })
+
+  it('clearing every tag sends an empty list, which clears them', async () => {
+    const user = userEvent.setup()
+    const bodies: Record<string, unknown>[] = []
+    mockGet(makeDetail({ id: 3, tags: ['only'] }))
+    server.use(http.patch(url('/applications/3'), async ({ request }) => (bodies.push((await request.json()) as Record<string, unknown>), HttpResponse.json(makeDetail({ id: 3, tags: [], updated_at: '2026-06-01T00:00:00Z' })))))
+    renderApp('/applications/3')
+    await user.click(await screen.findByRole('button', { name: 'Remove tag only' }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0].tags).toEqual([])
+  })
+})

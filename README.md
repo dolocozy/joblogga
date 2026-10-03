@@ -115,10 +115,11 @@ Interactive docs are at http://localhost:8000/docs when the backend is running.
 | POST | `/auth/password-reset/confirm` | Set a new password with a reset token |
 | GET | `/health` | Liveness check |
 | POST | `/applications` | Create (records the initial status) |
-| GET | `/applications` | List; filters `status`, `work_mode` (either can repeat), `archived` (`hide` by default, `include`, `only`), `country_id`, `state_id`, `company`, `q`, `date_from`, `date_to`; `limit`/`offset` |
+| GET | `/applications` | List; filters `status`, `work_mode` (either can repeat), `archived` (`hide` by default, `include`, `only`), `tag` (repeat to require several), `country_id`, `state_id`, `company`, `q`, `date_from`, `date_to`; `limit`/`offset` |
 | GET | `/geo/countries`, `/geo/states?country_id=`, `/geo/cities?country_id=&q=` | The place picker's lookups, read from our own database (login required) |
 | GET | `/applications/export.csv` | Every application as a CSV file (your backup); includes status history; ignores list filters |
 | POST | `/applications/import` | Import a CSV (sent as `text/csv`; `skip_duplicates`, default true). Adds what it can and returns what it added, skipped and changed |
+| GET | `/applications/tags` | Every tag you have used, with how many applications carry it |
 | GET | `/applications/duplicates` | Other applications with the same company and role (`company`, `role`, optional `exclude_id`), for the duplicate warning |
 | GET | `/applications/upcoming` | Open applications with a follow-up overdue or due within `days` (default 7) |
 | GET / PATCH / DELETE | `/applications/{id}` | Read (with status history) / partial update / delete |
@@ -132,6 +133,7 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 
 - `users`: email (unique), bcrypt hash, `email_verified_at` (empty until verified), `reminder_emails` (off until switched on) and `reminder_last_sent_on`, `session_version` (random at signup; bumped by a password reset to end earlier sessions).
 - `countries`, `states`, `cities`: the place data (see Places), loaded once by a migration. Their ids are the dataset's own.
+- `application_tags`: one row per application and tag, tags stored normalised (see Tags). Removed with the application.
 - `password_reset_tokens`, `email_verification_tokens`: hash of each token, its expiry, and when it was used.
 - `applications`: belongs to a user; company, role, job link, date applied (empty while Saved), resume version, salary min/max, location (readable text) with `country_id` and `city_id` pointing at the place tables, work mode (remote, hybrid or in person; empty means not specified), `archived_at` (empty unless archived), interview round and total rounds (optional, e.g. round 2 of 3; kept as a record after the application moves on, and with no effect on status or any statistic), notes, current status, follow-up date.
 - `status_changes`: append-only log (`from_status`, `to_status`, timestamp) written whenever an application's status changes, so the full timeline is kept.
@@ -150,6 +152,16 @@ The location field is a country and a city picked from real data, with a way to 
 - **Tests** run against a tiny stand-in dataset (with duplicate names on purpose) so the suite stays fast; one file checks the real files' checksums and row counts and loads them through the migration on both databases.
 
 Place data: countries-states-cities-database, ODbL v1.0, credited on the landing page. The data files stay under the ODbL; the rest of the repository is MIT.
+
+## Tags
+
+Free-form labels for your own prioritising ("referral", "dream job", "backup option"), separate from status. An application can have up to 10, each up to 30 characters.
+
+- **Free-form, but normalised so they cannot fragment.** Tags are saved in lower case with runs of spaces collapsed, so "Dream Job", "dream  job" and " dream job " are one tag. That gets the consistency of a fixed list with the freedom of free text; the price is that tags display in lower case. A tag cannot contain a comma or semicolon (those separate tags when typing, and in the CSV). The same normalising is done in the browser, the API, the CSV import and the filter, in one place each, so the box never shows something the server then changes.
+- **In the app.** Small quiet labels on list rows, board cards and the detail page (the first three, then "+2"); on the edit form, chips with a box that adds on Enter or a comma, removes the last on Backspace, adds a half-typed tag when you click away, and suggests tags you have used before. The list and board have a tag filter (with counts), and keyword search matches tags too.
+- **Filtering** is by whole tag, and several tags in the API must all be present. Matching is case- and spacing-insensitive.
+- **Stored in their own table**, one row per application and tag, rather than an array or JSON column, because that works the same on SQLite and Postgres and filters and counts with plain SQL.
+- **CSV:** a `Tags` column, `a; b; c`, which the import reads back (it also accepts commas, and a `Labels` header).
 
 ## Follow-up reminders
 

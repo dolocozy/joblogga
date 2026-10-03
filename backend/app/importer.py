@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.duplicates import duplicate_key, existing_applications, normalize
 from app.geo import place_label, search_key
 from app.models import Application, ApplicationStatus, City, Country, State, StatusChange, WorkMode
+from app.tags import parse_tag_cell
 from app.schemas import MAX_ROUNDS, ApplicationCreate, check_rounds, check_salary_range
 
 MAX_BYTES = 2_000_000
@@ -39,7 +40,7 @@ HEADERS: dict[str, str] = {
         ("country", "country"), ("state", "state"), ("city", "city"), ("work mode", "work_mode"),
         ("salary min", "salary_min"), ("salary max", "salary_max"), ("resume version", "resume_version"),
         ("interview round", "interview_round"), ("interview rounds total", "interview_rounds_total"),
-        ("notes", "notes"), ("status history", "history"), ("archived", "archived"),
+        ("notes", "notes"), ("status history", "history"), ("archived", "archived"), ("tags", "tags"),
     ]},
     # Friendly spellings other spreadsheets tend to use.
     "employer": "company", "organisation": "company", "organization": "company",
@@ -50,7 +51,7 @@ HEADERS: dict[str, str] = {
     "resume": "resume_version", "cv": "resume_version", "cv version": "resume_version",
     "min salary": "salary_min", "salary from": "salary_min", "max salary": "salary_max", "salary to": "salary_max",
     "remote": "work_mode", "on-site": "work_mode", "arrangement": "work_mode",
-    "note": "notes", "comments": "notes",
+    "note": "notes", "comments": "notes", "labels": "tags", "tag": "tags",
 }
 
 # Columns the export writes that an import deliberately does not read: the new rows get their own timestamps.
@@ -366,6 +367,9 @@ def import_csv(db: Session, user_id: int, data: bytes, skip_duplicates: bool = T
             "interview_rounds_total": total,
             "notes": _text(cells.get("notes")),
         }
+        tags, tag_problems = parse_tag_cell(cells.get("tags", ""))
+        for problem in tag_problems:
+            note(problem)
         if date_applied is None and status != ApplicationStatus.SAVED:
             # Same as adding one by hand without a date: today. Said out loud, because it will count as applied today.
             note("no usable applied date, so it was dated today")
@@ -378,7 +382,8 @@ def import_csv(db: Session, user_id: int, data: bytes, skip_duplicates: bool = T
             result.adjusted = [n for n in result.adjusted if n.row != number]  # a skipped row is not also "adjusted"
             continue
 
-        application = Application(**{**body.model_dump(), "country_id": country_id, "city_id": city_id}, user_id=user_id)
+        application = Application(**{**body.model_dump(exclude={"tags"}), "country_id": country_id, "city_id": city_id}, user_id=user_id)
+        application.set_tags(tags)
         application.archived_at = _archived_at(cells.get("archived", ""))
         history = _history(cells.get("history", ""), body.status) if cells.get("history") else None
         if cells.get("history") and history is None:

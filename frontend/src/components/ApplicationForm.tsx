@@ -1,6 +1,6 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import type { FormEvent } from 'react'
-import { findDuplicates, STATUSES, WORK_MODES } from '../api'
+import { fetchTags, findDuplicates, STATUSES, WORK_MODES } from '../api'
 import type { ApplicationInput, ApplicationStatus, DuplicateMatch, WorkMode } from '../api'
 import { blankApplication } from '../applicationDefaults'
 import { localToday } from '../dates'
@@ -13,6 +13,7 @@ import { httpUrlRule, required, roundRule, wholeNumberRule } from '../validation
 import DuplicateWarning from './DuplicateWarning'
 import Field from './Field'
 import PlacePicker from './PlacePicker'
+import TagsInput from './TagsInput'
 import type { InitialPlace, PlaceValue } from './PlacePicker'
 
 interface Props {
@@ -43,6 +44,14 @@ export default function ApplicationForm({ initial = blankApplication(), initialP
   // The picker reports what to send; until it does, what the application already has.
   const [place, setPlace] = useState<PlaceValue>({ country_id: initial.country_id, city_id: initial.city_id, location: initial.location })
   const [workMode, setWorkMode] = useState<WorkMode | ''>(initial.work_mode ?? '')
+  const [tags, setTags] = useState<string[]>(initial.tags)
+  // Tags used before, offered as suggestions. A courtesy: if they cannot be fetched, typing a tag still works.
+  const [knownTags, setKnownTags] = useState<string[]>([])
+  useEffect(() => {
+    fetchTags()
+      .then((list) => setKnownTags(list.map((t) => t.tag)))
+      .catch(() => {})
+  }, [])
   const [notes, setNotes] = useState(initial.notes ?? '')
   const [round, setRound] = useState(initial.interview_round?.toString() ?? '')
   const [roundsTotal, setRoundsTotal] = useState(initial.interview_rounds_total?.toString() ?? '')
@@ -146,6 +155,7 @@ export default function ApplicationForm({ initial = blankApplication(), initialP
         salary_max: numOrNull(salaryMax),
         ...place,
         work_mode: workMode || null,
+        tags,
         notes: orNull(notes),
         interview_round: numOrNull(round),
         interview_rounds_total: numOrNull(roundsTotal),
@@ -235,6 +245,10 @@ export default function ApplicationForm({ initial = blankApplication(), initialP
           </>
         )}
       </div>
+
+      <Field id={id('tags')} label="Tags" hint="Your own labels, like referral or dream job. Press Enter or a comma to add one.">
+        {(c) => <TagsInput control={c} value={tags} onChange={setTags} suggestions={knownTags} />}
+      </Field>
 
       <Field id={id('notes')} label="Notes">
         {(c) => <textarea {...c} rows={4} maxLength={10000} value={notes} onChange={(e) => setNotes(e.target.value)} className="input" />}

@@ -176,6 +176,7 @@ export interface Application {
   country: PlaceRef | null
   city: CityRef | null // with its state
   work_mode: WorkMode | null // null = not specified
+  tags: string[] // free-form labels, lower case, sorted
   notes: string | null
   interview_round: number | null // which round, if recorded
   interview_rounds_total: number | null // how many, if known
@@ -211,6 +212,7 @@ export interface ApplicationInput {
   country_id: number | null
   city_id: number | null // a city fixes the state and country too
   work_mode: WorkMode | null
+  tags: string[]
   notes: string | null
   interview_round: number | null
   interview_rounds_total: number | null
@@ -225,6 +227,7 @@ export interface ApplicationFilters {
   work_mode?: WorkMode
   country_id?: number
   state_id?: number
+  tag?: string // only applications carrying this tag
   archived?: 'include' | 'only' // omitted: archived applications are left out
   date_from?: string // YYYY-MM-DD
   date_to?: string
@@ -242,6 +245,13 @@ export function listApplications(filters: ApplicationFilters = {}) {
   const qs = params.toString()
   return request<{ items: Application[]; total: number }>(`/applications${qs ? `?${qs}` : ''}`)
 }
+
+// The tags this user has used, with how many applications carry each: for the tag filter and for suggestions.
+export interface TagCount {
+  tag: string
+  count: number
+}
+export const fetchTags = () => request<TagCount[]>('/applications/tags')
 
 // An existing application with the same company and role (ignoring case and extra spaces), for the
 // "you already have this" warning. It only informs: saving never depends on it.
