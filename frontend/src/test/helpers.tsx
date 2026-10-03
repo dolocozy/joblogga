@@ -113,6 +113,12 @@ export function makeStats(overrides: Partial<Stats> = {}): Stats {
       { week_start: '2026-03-09', count: 7 },
     ],
     no_reply: { days: 30, count: 0 },
+    stages: [
+      { status: 'applied', finished: 6, mean_days: 7.5, median_days: 6, in_progress: 2, in_progress_mean_days: 12 },
+      { status: 'screening', finished: 3, mean_days: 4, median_days: 3, in_progress: 1, in_progress_mean_days: 2 },
+      { status: 'interview', finished: 0, mean_days: null, median_days: null, in_progress: 1, in_progress_mean_days: 20 },
+      { status: 'offer', finished: 0, mean_days: null, median_days: null, in_progress: 0, in_progress_mean_days: null },
+    ],
     ...overrides,
   }
 }

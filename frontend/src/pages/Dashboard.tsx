@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchStats } from '../api'
 import type { Stats } from '../api'
+import StageTimeChart from '../components/charts/StageTimeChart'
 import StatusChart from '../components/charts/StatusChart'
 import WeeklyChart from '../components/charts/WeeklyChart'
 
@@ -132,6 +133,14 @@ export default function Dashboard() {
           <div className="grid gap-6 lg:grid-cols-2">
             <WeeklyChart perWeek={stats.per_week} />
             <StatusChart byStatus={stats.by_status} />
+          </div>
+
+          <div className="space-y-2">
+            <StageTimeChart stages={stats.stages} />
+            <p className="max-w-3xl text-sm text-ink-soft">
+              Worked out from your status history, so it is as accurate as your updates: it measures when you recorded each change. Only stays that have ended are in the
+              average; applications still waiting in a stage are counted separately under &ldquo;Still here&rdquo; (view as table), with how long they have waited so far.
+            </p>
           </div>
         </div>
       )}

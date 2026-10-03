@@ -1,5 +1,5 @@
 from collections import Counter
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_user
 from app.models import Application, ApplicationStatus, StatusChange, User
-from app.schemas import NoReply, ResponseRate, StatsOut, StatusCount, WeekCount
+from app.schemas import NoReply, ResponseRate, StageTime, StatsOut, StatusCount, WeekCount
+from app.stage_times import Step, stage_stats
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -34,6 +35,11 @@ RESPONDED = (
 # an event, so it is worked out here. An application still at Applied this many days
 # after it was sent has had no reply.
 NO_REPLY_DAYS = 30
+
+
+def now() -> datetime:
+    """The current moment. A function so tests can move the clock."""
+    return datetime.now(UTC)
 
 
 def week_start(d: date) -> date:
@@ -125,10 +131,23 @@ def get_stats(
             per_week.append(WeekCount(week_start=week, count=per_week_counts[week]))
             week += timedelta(weeks=1)
 
+    # Time in each stage, from the status history of the same applications every other figure here covers.
+    history_rows = db.execute(
+        select(StatusChange.application_id, StatusChange.to_status, StatusChange.changed_at, Application.date_applied)
+        .join(Application, Application.id == StatusChange.application_id)
+        .where(*conditions)
+        .order_by(StatusChange.application_id, StatusChange.id)
+    )
+    histories: dict[int, tuple[date | None, list[Step]]] = {}
+    for application_id, to_status, changed_at, applied_on in history_rows:
+        histories.setdefault(application_id, (applied_on, []))[1].append(Step(to_status, changed_at))
+    stages = stage_stats(list(histories.values()), now())
+
     return StatsOut(
         total=sum(counts.values()),
         by_status=[StatusCount(status=s, count=counts[s]) for s in ApplicationStatus if s != ApplicationStatus.SAVED],
         response=response_rate(responded, eligible),
         no_reply=NoReply(days=NO_REPLY_DAYS, count=no_reply),
+        stages=[StageTime(**vars(s)) for s in stages],
         per_week=per_week,
     )

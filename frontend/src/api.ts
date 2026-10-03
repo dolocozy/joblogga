@@ -344,6 +344,17 @@ export const searchCities = (countryId: number, q: string) =>
 
 // --- dashboard stats --------------------------------------------------------
 
+// How long applications spend in one pipeline stage. The average and median are over stays that have ended; applications
+// still in the stage are reported separately (in_progress), because their wait is not finished.
+export interface StageTime {
+  status: ApplicationStatus
+  finished: number
+  mean_days: number | null
+  median_days: number | null
+  in_progress: number
+  in_progress_mean_days: number | null
+}
+
 export interface Stats {
   total: number
   by_status: { status: ApplicationStatus; count: number }[]
@@ -355,6 +366,7 @@ export interface Stats {
   per_week: { week_start: string; count: number }[] // week_start is a Monday
   // Applications still at Applied `days` days after they were sent. "Ghosted" is worked out, not a status.
   no_reply: { days: number; count: number }
+  stages: StageTime[] // Applied, Screening, Interview, Offer: always all four, in order
 }
 
 // `weeks` limits every figure to the last N weeks; null means all time.

@@ -398,9 +398,21 @@ class WeekCount(BaseModel):
     count: int
 
 
+class StageTime(BaseModel):
+    """How long applications spend in one pipeline stage (see app/stage_times.py)."""
+
+    status: ApplicationStatus
+    finished: int  # stays that ended: the average and median are over these only
+    mean_days: float | None  # None until a stay has ended
+    median_days: float | None
+    in_progress: int  # applications in this stage right now (not in the average: they have not finished)
+    in_progress_mean_days: float | None  # how long those have waited so far, on average
+
+
 class StatsOut(BaseModel):
     total: int
     by_status: list[StatusCount]  # every status except Saved, in pipeline order (Saved is not an application yet)
     response: ResponseRate
     per_week: list[WeekCount]  # oldest first, empty weeks included as 0
     no_reply: NoReply
+    stages: list[StageTime]  # Applied, Screening, Interview, Offer: always all four, in order

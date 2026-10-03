@@ -293,3 +293,81 @@ describe('navigation', () => {
     expect(await screen.findByRole('heading', { name: 'Log in' })).toBeInTheDocument()
   })
 })
+
+describe('time in each stage', () => {
+  const section = async () => (await screen.findByRole('heading', { name: 'Time in each stage' })).closest('section')!
+
+  it('has its own card, in the same style as the other charts, with the explanation of what it measures', async () => {
+    mockStats()
+    renderApp('/dashboard')
+    const card = await section()
+    expect(card).toHaveTextContent('Average days before an application moved on')
+    expect(within(card).getByRole('button', { name: 'View as table' })).toBeInTheDocument()
+    expect(screen.getByText(/as accurate as your updates/)).toBeInTheDocument()
+    expect(screen.getByText(/Only stays that have ended are in the average/)).toBeInTheDocument()
+  })
+
+  it('lists all four stages in the table, with finished stays, average, median and who is still waiting', async () => {
+    const user = userEvent.setup()
+    mockStats()
+    renderApp('/dashboard')
+    const card = await section()
+    await user.click(within(card).getByRole('button', { name: 'View as table' }))
+
+    const table = within(card).getByRole('table')
+    const rows = within(table).getAllByRole('row').map((r) => within(r).queryAllByRole('cell').map((c) => c.textContent))
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Stage', 'Moved on', 'Average', 'Median', 'Still here'])
+    expect(rows.filter((r) => r.length).map((r) => r[0])).toEqual(['Applied', 'Screening', 'Interview', 'Offer'])
+    const applied = rows.find((r) => r[0] === 'Applied')!
+    expect(applied).toEqual(['Applied', '6', '7.5 days', '6 days', '2 (12 days so far)'])
+  })
+
+  it('shows a dash, not zero, for a stage nothing has moved on from, and still shows who is waiting there', async () => {
+    const user = userEvent.setup()
+    mockStats()
+    renderApp('/dashboard')
+    const card = await section()
+    await user.click(within(card).getByRole('button', { name: 'View as table' }))
+    const interview = within(within(card).getByRole('table')).getByText('Interview').closest('tr')!
+    expect(within(interview).getAllByRole('cell').map((c) => c.textContent)).toEqual(['Interview', '0', '—', '—', '1 (20 days so far)'])
+    const offer = within(within(card).getByRole('table')).getByText('Offer').closest('tr')!
+    expect(within(offer).getAllByRole('cell').map((c) => c.textContent)).toEqual(['Offer', '0', '—', '—', 'none'])
+  })
+
+  it('describes the chart for screen readers, naming only the stages that have a measured average', async () => {
+    mockStats()
+    renderApp('/dashboard')
+    const card = await section()
+    const chart = within(card).getByRole('img')
+    expect(chart).toHaveAccessibleName('Bar chart of average days in each stage. Applied: 7.5 days, Screening: 4 days.')
+  })
+
+  it('says there is nothing to measure yet when no stay has ended, with the table still available', async () => {
+    const user = userEvent.setup()
+    mockStats(
+      makeStats({
+        stages: [
+          { status: 'applied', finished: 0, mean_days: null, median_days: null, in_progress: 4, in_progress_mean_days: 9 },
+          { status: 'screening', finished: 0, mean_days: null, median_days: null, in_progress: 0, in_progress_mean_days: null },
+          { status: 'interview', finished: 0, mean_days: null, median_days: null, in_progress: 0, in_progress_mean_days: null },
+          { status: 'offer', finished: 0, mean_days: null, median_days: null, in_progress: 0, in_progress_mean_days: null },
+        ],
+      }),
+    )
+    renderApp('/dashboard')
+    const card = await section()
+    expect(card).toHaveTextContent('Nothing to measure yet')
+    expect(within(card).queryByRole('img')).not.toBeInTheDocument()
+    await user.click(within(card).getByRole('button', { name: 'View as table' }))
+    expect(within(card).getByText('4 (9 days so far)')).toBeInTheDocument() // the waiting ones are still visible
+  })
+
+  it('follows the time range like every other figure on the page', async () => {
+    const user = userEvent.setup()
+    const seen = mockStats()
+    renderApp('/dashboard')
+    await section()
+    await user.click(screen.getByRole('button', { name: '4 weeks' }))
+    await waitFor(() => expect(seen.at(-1)!.searchParams.get('weeks')).toBe('4'))
+  })
+})
