@@ -6,7 +6,7 @@ A multi-user job application tracker: log applications, move them through a stat
 
 ![The Joblogga applications list: a ruled ledger with a stage meter per status and an overdue follow-up highlighted](docs/screenshots/applications-list.png)
 
-> **Status: v0.1.2, feature-complete for personal use.** Accounts with email verification, password reset and account deletion, application tracking with status history, saved jobs and interview rounds, follow-up reminders, search and filters, a dashboard, a Kanban board, CSV export and login rate limiting are all built, tested and deployed. See [Known limitations](#known-limitations).
+> **Status: v0.1.3, feature-complete for personal use.** Accounts with email verification, password reset and account deletion, application tracking with status history, saved jobs, interview rounds, tags and archiving, real country and city locations, duplicate warnings, CSV export and import, opt-in follow-up reminder emails, search and filters, a dashboard with response rate and time in each stage, a Kanban board and login rate limiting are all built, tested and deployed. See [Known limitations](#known-limitations).
 
 *Screenshots use fictional demo data.*
 
@@ -299,9 +299,10 @@ Rules that keep production data safe:
 | Piece | Where | Config |
 | --- | --- | --- |
 | Frontend | Vercel (root directory `frontend`) | `frontend/vercel.json`, env `VITE_API_URL` |
-| API | Render web service | `render.yaml` (Blueprint). Secrets set in the dashboard: `DATABASE_URL`, `CORS_ORIGINS`, `RESEND_API_KEY`. `SECRET_KEY` is generated; `FRONTEND_URL`, `EMAIL_FROM` and the proxy settings are in the file |
+| API | Render web service | `render.yaml` (Blueprint). Secrets set in the dashboard: `DATABASE_URL`, `CORS_ORIGINS`, `RESEND_API_KEY`, `REMINDER_SECRET` (see [Follow-up reminders](#follow-up-reminders)). `SECRET_KEY` is generated; `FRONTEND_URL`, `EMAIL_FROM` and the proxy settings are in the file |
 | Database | Neon Postgres | connection string goes in Render's `DATABASE_URL` |
 | Email | Resend | verified sending domain; key in Render's `RESEND_API_KEY` |
+| Daily reminder job | GitHub Actions | `.github/workflows/follow-up-reminders.yml`, 13:07 UTC; needs the `REMINDER_SECRET` repository secret, with the same value as on Render |
 
 Notes:
 - The database is on Neon, not Render, because Render's free Postgres expires after 30 days.
@@ -316,6 +317,7 @@ Notes:
 - **The free hosting tiers sleep.** The first request after a quiet spell can take up to a minute; the landing page pings the API to wake it early.
 - **Touch dragging is untested.** The board is configured for touch (a brief press starts a drag, so swiping still scrolls) but has not been tried on a real touch device. Mouse and keyboard dragging were tested in a browser.
 - **The place data is community-maintained and uneven.** It lists administrative divisions as well as cities (the same place can appear as both a district and a city), some countries have no cities and a few have no states, and "state" means whatever the first division of a country is (counties in the UK, municipalities in Slovenia). Where the same name appears twice in one state, the autocomplete offers the biggest and both rows stay in the table. A place missing from the data can be typed.
+- **Follow-up reminders depend on a GitHub Actions schedule.** GitHub disables scheduled workflows in a public repository after 60 days with no repository activity, without warning, and can delay or occasionally drop a scheduled run. A run that fails is marked failed and emailed to the owner; a disabled schedule is not. "Due today" is judged on the UTC date, since there are no per-user time zones yet. See [Follow-up reminders](#follow-up-reminders).
 - **Login tokens live in `localStorage`** (see Auth design for the trade-off).
 
 ## License

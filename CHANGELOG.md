@@ -2,6 +2,35 @@
 
 Versions follow [semantic versioning](https://semver.org). Details of the reasoning behind each change are in the README and in `docs/`.
 
+## v0.1.3
+
+### Added
+
+- **Real countries and cities for location.** Location is now a country and a city picked from real data: 250 countries and territories, 5,308 states and provinces and 152,970 cities from the [countries-states-cities database](https://github.com/dr5hn/countries-states-cities-database) (ODbL, credited in the app and the README). It is bundled with the app and loaded once by a migration, so there is no live service, API key or cost. The city list shows each match with its state ("Springfield, Illinois"), and choosing one stores that exact city, so the twenty Springfields in the US stay different places everywhere they are shown, including the CSV. The state and country come with the city, so there is no state box. Typing a place that is missing is still possible, and the form says a typed place has no structure. You can filter by country and state, and keyword search matches cities, states and countries. Existing locations were not touched or parsed: they keep their text, and you can re-pick a place if you want the structure.
+- **Duplicate-application warning.** Saving a company and role that match an application you already have (ignoring case and extra spaces, and nothing fuzzier) shows a dismissible warning with a link to the existing one and asks "Add anyway?". It never blocks the save. When editing, it only asks if the company or role was changed.
+- **CSV import.** The Account page can import a CSV, and a file exported from Joblogga imports back as it was: fields, picked places and status history. Other spreadsheets work if the first row names the columns (a Company and a Role column are required). It imports what it can and reports the rest: rows that were skipped and why, with their row numbers as a spreadsheet shows them, and values that were left empty (a date like `3/4/2026` is never guessed at, since it could be March or April). Each row goes through the same duplicate check as the warning, and duplicates are summarised in the result rather than raised one by one, so importing the same file twice adds nothing.
+- **Archive.** Put away closed applications without deleting them. Archived applications are hidden from the default list and board and from reminders, and reachable with the new "Archived applications" filter; they still count in every dashboard figure and in the CSV export, so archiving never changes your historical response rate or totals. Archive and Unarchive are one click from the detail page, and from a list row once an application is closed. Nothing else (a status change, an edit) unarchives one, and the permanent delete is unchanged.
+- **Email reminders for follow-ups.** An opt-in daily email listing your open applications whose follow-up date is today or overdue, **off for everyone, existing accounts included**, switched on from the Account page. It is sent at 13:07 UTC, to verified addresses only, as one digest per person however many things are due, with an unsubscribe link that works without logging in. Each person's day is claimed atomically before sending, so a retry or a double run cannot send twice. Because Render's free plan has no cron, a scheduled GitHub Actions workflow calls a secret-protected API endpoint once a day; the README has the setup.
+- **Tags.** Free-form labels for your own prioritising ("referral", "dream job"), up to 10 per application. They are normalised to lower case with spaces collapsed, so "Dream Job" and "dream  job" are one tag (the catch is that tags display in lower case). They show as small quiet labels on the list, board and detail page, are edited as chips on the form with suggestions from tags you have used, and can be filtered (with counts). Keyword search finds them, and they are in the CSV export and import.
+- **Time in each pipeline stage.** The dashboard shows the average and median days applications spend in Applied, Screening, Interview and Offer, worked out from the status history, as a chart with a table view. Applications still waiting in a stage are reported separately ("Still here", with how long they have waited so far) instead of being mixed into the average, which would make a stage look quicker or slower than it is. A skipped stage simply has no stay, and the numbers are only as accurate as your updates.
+
+### Fixed
+
+- SQLite foreign keys were left switched off after the migration runner had been through a connection, so `ON DELETE CASCADE` stopped firing on it. This affected local development on SQLite only; production uses Postgres.
+
+### Setting up reminders
+
+Reminders do nothing until `REMINDER_SECRET` is set, with the same value in two places: on Render (service, Environment) and as a GitHub repository secret. Then run the "Follow-up reminders" workflow once by hand from the Actions tab to check it. Until then the endpoint answers 503 and no email is sent. GitHub disables scheduled workflows in a public repository after 60 days with no repository activity; see [the README](README.md#follow-up-reminders).
+
+### Database migrations
+
+Applied automatically on the next start. All are backward compatible with the previous release running during the deploy.
+
+- `0008`: the place tables (loaded once from the bundled data, 158,528 rows in about 15 MB) and nullable `applications.country_id` and `city_id`. No existing location is rewritten. Downgrading drops the new tables and columns and leaves every location's text in place.
+- `0009`: nullable `applications.archived_at`. Every existing application stays in the default list.
+- `0010`: `users.reminder_emails` (default off, so no existing account starts receiving mail) and `users.reminder_last_sent_on`.
+- `0011`: the `application_tags` table, empty at first.
+
 ## v0.1.2
 
 ### Added
