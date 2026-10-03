@@ -612,3 +612,16 @@ def test_downgrading_drops_only_the_reminder_columns(engine):
     columns = {c["name"] for c in inspect(engine).get_columns("users")}
     assert not {"reminder_emails", "reminder_last_sent_on"} & columns
     assert counts(engine) == (1, 1, 1)
+
+
+@pytest.mark.skipif(ON_POSTGRES, reason="SQLite's foreign-key switch")
+def test_sqlite_enforces_foreign_keys_on_a_connection_that_has_just_run_the_migrations(engine):
+    """The migration runner switches enforcement off, and its attempt to restore it is ignored inside a
+    transaction. A connection handed out afterwards must still enforce, or cascades silently stop working."""
+    upgrade_database(engine)
+    seed_rows(engine)
+    with engine.connect() as conn:
+        assert conn.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM users WHERE id = 1"))
+        assert conn.execute(text("SELECT COUNT(*) FROM applications")).scalar() == 0  # the cascade fired

@@ -22,11 +22,17 @@ engine = create_engine(settings.sqlalchemy_url, connect_args=_connect_args, **_p
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
-@event.listens_for(Engine, "connect")
-def _enforce_foreign_keys_on_sqlite(dbapi_connection, _record) -> None:
-    """SQLite ignores foreign keys (and so ON DELETE CASCADE) unless told otherwise,
-    once per connection. Postgres always enforces them, so without this the local
-    database would quietly allow orphaned rows that production would never hold."""
+@event.listens_for(Engine, "checkout")
+def _enforce_foreign_keys_on_sqlite(dbapi_connection, _record, _proxy) -> None:
+    """SQLite ignores foreign keys (and so ON DELETE CASCADE) unless told otherwise.
+    Postgres always enforces them, so without this the local database would quietly
+    allow orphaned rows that production would never hold.
+
+    Done on every checkout from the pool, not once per connection: the migration
+    runner switches enforcement off while it rebuilds tables, and its attempt to switch
+    it back on is silently ignored (SQLite ignores that pragma inside a transaction),
+    which left the pooled connection permanently unenforced. A fresh checkout is never
+    inside a transaction, so this always takes effect."""
     if isinstance(dbapi_connection, sqlite3.Connection):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
