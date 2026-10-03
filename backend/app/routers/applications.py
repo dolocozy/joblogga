@@ -6,6 +6,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
+from app.duplicates import find_duplicates
 from app.export import applications_to_csv
 from app.deps import get_current_user
 from app.geo import place_label
@@ -16,6 +17,7 @@ from app.schemas import (
     ApplicationList,
     ApplicationOut,
     ApplicationUpdate,
+    DuplicateOut,
     check_rounds,
     check_salary_range,
 )
@@ -180,6 +182,22 @@ def export_applications(db: DbSession, user: CurrentUser) -> Response:
             "Cache-Control": "no-store",
         },
     )
+
+
+# Declared BEFORE "/{application_id}" so "duplicates" isn't parsed as an id.
+@router.get("/duplicates", response_model=list[DuplicateOut])
+def duplicate_applications(
+    db: DbSession,
+    user: CurrentUser,
+    company: Annotated[str, Query(min_length=1, max_length=200)],
+    role: Annotated[str, Query(min_length=1, max_length=200)],
+    exclude_id: Annotated[int | None, Query(ge=1, description="The application being edited, so it does not match itself")] = None,
+) -> list[DuplicateOut]:
+    """The user's other applications for this company and role, for the "you already have this" warning.
+
+    Case and extra spaces are ignored; nothing fuzzier. This only informs: saving never depends on it.
+    """
+    return [DuplicateOut.model_validate(d) for d in find_duplicates(db, user.id, company, role, exclude_id)[:5]]
 
 
 # Declared BEFORE "/{application_id}" so "upcoming" isn't parsed as an id.

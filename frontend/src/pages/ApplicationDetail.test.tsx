@@ -468,3 +468,65 @@ describe('a picked place on the detail page', () => {
     expect(screen.getByRole('combobox', { name: 'Country' })).toHaveValue('Canada')
   })
 })
+
+describe('the duplicate warning when editing', () => {
+  const MATCH = { id: 9, company: 'Globex', role: 'Analyst', status: 'applied', date_applied: '2026-03-01', created_at: '2026-03-02T12:00:00Z' }
+
+  function setup(matches: unknown[]) {
+    const checks: URL[] = []
+    const patches: Record<string, unknown>[] = []
+    mockGet(makeDetail({ id: 3, company: 'Acme', role: 'Engineer' }))
+    server.use(
+      http.get(url('/applications/duplicates'), ({ request }) => (checks.push(new URL(request.url)), HttpResponse.json(matches))),
+      http.patch(url('/applications/3'), async ({ request }) => {
+        patches.push((await request.json()) as Record<string, unknown>)
+        return HttpResponse.json(makeDetail({ id: 3, company: 'Globex', role: 'Analyst', updated_at: '2026-04-01T00:00:00Z' }))
+      }),
+    )
+    return { checks, patches }
+  }
+
+  it('does not check, or warn, when the company and role are left alone, even if another application is a twin', async () => {
+    const user = userEvent.setup()
+    const { checks, patches } = setup([MATCH])
+    renderApp('/applications/3')
+    await user.type(await screen.findByLabelText('Notes'), 'called back')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(patches).toHaveLength(1))
+    expect(checks).toHaveLength(0)
+  })
+
+  it('warns when the company or role is changed to match another application, excluding itself from the check', async () => {
+    const user = userEvent.setup()
+    const { checks, patches } = setup([MATCH])
+    renderApp('/applications/3')
+    const company = await screen.findByLabelText('Company')
+    await user.clear(company)
+    await user.type(company, 'Globex')
+    const role = screen.getByLabelText('Role')
+    await user.clear(role)
+    await user.type(role, 'Analyst')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(await screen.findByRole('group', { name: 'Possible duplicate' })).toHaveTextContent('You already have an application for Globex, Analyst.')
+    expect(checks[0].searchParams.get('exclude_id')).toBe('3')
+    expect(patches).toHaveLength(0)
+
+    await user.click(screen.getByRole('button', { name: 'Save anyway' }))
+    await waitFor(() => expect(patches).toHaveLength(1))
+    expect(patches[0]).toMatchObject({ company: 'Globex', role: 'Analyst' })
+  })
+
+  it('ignores case and spacing when deciding whether the company or role changed', async () => {
+    const user = userEvent.setup()
+    const { checks, patches } = setup([MATCH])
+    renderApp('/applications/3')
+    const company = await screen.findByLabelText('Company')
+    await user.clear(company)
+    await user.type(company, '  ACME ')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(patches).toHaveLength(1))
+    expect(checks).toHaveLength(0) // still the same company, as far as a duplicate is concerned
+  })
+})

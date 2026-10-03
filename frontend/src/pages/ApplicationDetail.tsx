@@ -120,6 +120,7 @@ export default function ApplicationDetail() {
               location: app.location,
             }}
             submitLabel="Save changes"
+            editingId={app.id}
             onSubmit={async (input) => {
               setSaved(false)
               setApp(await updateApplication(app.id, input))

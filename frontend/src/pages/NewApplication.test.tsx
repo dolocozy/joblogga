@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { localToday } from '../dates'
+import { formatDate, localToday } from '../dates'
 import { SETTLE_MS } from '../hooks'
 import { server } from '../test/server'
 import { makeDetail, mockCities, renderApp, signIn, url } from '../test/helpers'
@@ -735,5 +735,172 @@ describe('picking a place', () => {
       await user.type(city(), 'toronto')
       expect(await screen.findByText('Could not search cities right now. You can type the place instead.')).toBeInTheDocument()
     })
+  })
+})
+
+describe('the duplicate warning', () => {
+  const MATCH = { id: 4, company: 'Acme', role: 'Engineer', status: 'interview', date_applied: '2026-03-01', created_at: '2026-03-02T12:00:00Z' }
+  const posts: Record<string, unknown>[] = []
+  const checks: URL[] = []
+
+  function setup(matches: unknown[] | 'fail' = [MATCH]) {
+    posts.length = 0
+    checks.length = 0
+    server.use(
+      http.get(url('/applications/duplicates'), ({ request }) => {
+        checks.push(new URL(request.url))
+        return matches === 'fail' ? HttpResponse.error() : HttpResponse.json(matches)
+      }),
+      http.post(url('/applications'), async ({ request }) => {
+        posts.push((await request.json()) as Record<string, unknown>)
+        return HttpResponse.json(makeDetail({ id: 30 }), { status: 201 })
+      }),
+      http.get(url('/applications/30'), () => HttpResponse.json(makeDetail({ id: 30 }))),
+    )
+  }
+  const fill = async (user: ReturnType<typeof userEvent.setup>, company = 'Acme', role = 'Engineer') => {
+    await user.type(await screen.findByLabelText('Company'), company)
+    await user.type(screen.getByLabelText('Role'), role)
+  }
+  const add = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: 'Add application' }))
+
+  it('asks before saving when the company and role match one you already have, and saves nothing yet', async () => {
+    const user = userEvent.setup()
+    setup()
+    renderApp('/applications/new')
+    await fill(user)
+    await add(user)
+
+    const warning = await screen.findByRole('group', { name: 'Possible duplicate' })
+    expect(warning).toHaveTextContent('You already have an application for Acme, Engineer.')
+    expect(warning).toHaveTextContent(`Interview, applied ${formatDate('2026-03-01')}`)
+    expect(within(warning).getByRole('link', { name: 'Acme — Engineer' })).toHaveAttribute('href', '/applications/4')
+    expect(posts).toHaveLength(0)
+    expect(checks[0].searchParams.get('company')).toBe('Acme')
+    expect(checks[0].searchParams.get('role')).toBe('Engineer')
+    expect(checks[0].searchParams.has('exclude_id')).toBe(false)
+  })
+
+  it('opens the existing application in a new tab, so the form is not lost', async () => {
+    const user = userEvent.setup()
+    setup()
+    renderApp('/applications/new')
+    await fill(user)
+    await add(user)
+    const link = within(await screen.findByRole('group', { name: 'Possible duplicate' })).getByRole('link')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
+  it('"Add anyway" saves it: the warning never blocks', async () => {
+    const user = userEvent.setup()
+    setup()
+    renderApp('/applications/new')
+    await fill(user)
+    await add(user)
+    await user.click(await screen.findByRole('button', { name: 'Add anyway' }))
+
+    await screen.findByRole('heading', { name: /Acme/ })
+    expect(posts).toHaveLength(1)
+    expect(posts[0]).toMatchObject({ company: 'Acme', role: 'Engineer' })
+  })
+
+  it('"Go back and edit" dismisses it without saving, and the form keeps what was typed', async () => {
+    const user = userEvent.setup()
+    setup()
+    renderApp('/applications/new')
+    await fill(user)
+    await add(user)
+    await user.click(await screen.findByRole('button', { name: 'Go back and edit' }))
+
+    expect(screen.queryByRole('group', { name: 'Possible duplicate' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Company')).toHaveValue('Acme')
+    expect(screen.getByRole('button', { name: 'Add application' })).toBeEnabled()
+    expect(posts).toHaveLength(0)
+  })
+
+  it('does not ask again for the same company and role once you have said anyway', async () => {
+    const user = userEvent.setup()
+    setup()
+    server.use(http.post(url('/applications'), () => HttpResponse.json({ detail: 'Try again' }, { status: 500 }))) // the save fails once
+    renderApp('/applications/new')
+    await fill(user)
+    await add(user)
+    await user.click(await screen.findByRole('button', { name: 'Add anyway' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Try again')
+
+    await add(user)
+
+    expect(checks).toHaveLength(1) // asked once; the second attempt goes straight to saving
+    expect(screen.queryByRole('group', { name: 'Possible duplicate' })).not.toBeInTheDocument()
+  })
+
+  it('changing the company or role withdraws the warning, and a new combination is checked afresh', async () => {
+    const user = userEvent.setup()
+    setup()
+    renderApp('/applications/new')
+    await fill(user)
+    await add(user)
+    await screen.findByRole('group', { name: 'Possible duplicate' })
+
+    await user.type(screen.getByLabelText('Role'), ' II')
+
+    expect(screen.queryByRole('group', { name: 'Possible duplicate' })).not.toBeInTheDocument()
+    setup([]) // "Engineer II" matches nothing
+    await add(user)
+    await screen.findByRole('heading', { name: /Acme/ })
+    expect(posts[0]).toMatchObject({ role: 'Engineer II' })
+  })
+
+  it('says how many when there are several', async () => {
+    const user = userEvent.setup()
+    setup([MATCH, { ...MATCH, id: 5, status: 'saved', date_applied: null }])
+    renderApp('/applications/new')
+    await fill(user)
+    await add(user)
+    const warning = await screen.findByRole('group', { name: 'Possible duplicate' })
+    expect(warning).toHaveTextContent('You already have 2 applications for Acme, Engineer.')
+    expect(within(warning).getAllByRole('link')).toHaveLength(2)
+    expect(warning).toHaveTextContent('Saved, saved')
+  })
+
+  it('saves straight away when nothing matches, with no warning', async () => {
+    const user = userEvent.setup()
+    setup([])
+    renderApp('/applications/new')
+    await fill(user)
+    await add(user)
+    await screen.findByRole('heading', { name: /Acme/ })
+    expect(posts).toHaveLength(1)
+  })
+
+  it('saves anyway if the check itself cannot be made: a courtesy never holds up the save', async () => {
+    const user = userEvent.setup()
+    setup('fail')
+    renderApp('/applications/new')
+    await fill(user)
+    await add(user)
+    await screen.findByRole('heading', { name: /Acme/ })
+    expect(posts).toHaveLength(1)
+  })
+
+  it('does not check at all when the form is invalid', async () => {
+    const user = userEvent.setup()
+    setup()
+    renderApp('/applications/new')
+    await screen.findByLabelText('Company')
+    await add(user)
+    expect(await screen.findByText('Enter the company name')).toBeInTheDocument()
+    expect(checks).toHaveLength(0)
+  })
+
+  it('moves focus to the warning so it is not missed', async () => {
+    const user = userEvent.setup()
+    setup()
+    renderApp('/applications/new')
+    await fill(user)
+    await add(user)
+    const warning = await screen.findByRole('group', { name: 'Possible duplicate' })
+    await waitFor(() => expect(within(warning).getByText(/You already have an application/)).toHaveFocus())
   })
 })

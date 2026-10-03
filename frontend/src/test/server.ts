@@ -15,4 +15,6 @@ export const COUNTRIES = [
 export const server = setupServer(
   http.get(`${API_URL}/health`, () => HttpResponse.json({ status: 'ok' })),
   http.get(`${API_URL}/geo/countries`, () => HttpResponse.json(COUNTRIES)),
+  // Saving an application first asks whether it duplicates one; by default nothing does. Tests that care override it.
+  http.get(`${API_URL}/applications/duplicates`, () => HttpResponse.json([])),
 )

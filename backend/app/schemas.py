@@ -262,6 +262,19 @@ class CityRef(PlaceRef):
     state: PlaceRef
 
 
+class DuplicateOut(BaseModel):
+    """An existing application that matches the company and role being entered."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    company: str
+    role: str
+    status: ApplicationStatus
+    date_applied: date | None
+    created_at: datetime
+
+
 class StatusChangeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

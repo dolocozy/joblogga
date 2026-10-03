@@ -115,6 +115,7 @@ Interactive docs are at http://localhost:8000/docs when the backend is running.
 | GET | `/applications` | List; filters `status`, `work_mode` (either can repeat), `country_id`, `state_id`, `company`, `q`, `date_from`, `date_to`; `limit`/`offset` |
 | GET | `/geo/countries`, `/geo/states?country_id=`, `/geo/cities?country_id=&q=` | The place picker's lookups, read from our own database (login required) |
 | GET | `/applications/export.csv` | Every application as a CSV file (your backup); includes status history; ignores list filters |
+| GET | `/applications/duplicates` | Other applications with the same company and role (`company`, `role`, optional `exclude_id`), for the duplicate warning |
 | GET | `/applications/upcoming` | Open applications with a follow-up overdue or due within `days` (default 7) |
 | GET / PATCH / DELETE | `/applications/{id}` | Read (with status history) / partial update / delete |
 | GET | `/stats` | Dashboard numbers: totals, per-status counts, response rate, weekly series; `weeks=N` limits everything to the last N weeks (omit for all time) |
@@ -145,6 +146,10 @@ The location field is a country and a city picked from real data, with a way to 
 - **Tests** run against a tiny stand-in dataset (with duplicate names on purpose) so the suite stays fast; one file checks the real files' checksums and row counts and loads them through the migration on both databases.
 
 Place data: countries-states-cities-database, ODbL v1.0, credited on the landing page. The data files stay under the ODbL; the rest of the repository is MIT.
+
+## Duplicate warning
+
+Saving an application whose company and role match one you already have (ignoring case and extra spaces, nothing fuzzier, so "Data Analyst" and "Senior Data Analyst" are different) shows a warning with a link to the existing one and asks "Add anyway?". It never blocks: applying twice can be legitimate. When editing, it only asks if the company or role was actually changed, so saving notes on an application that has a twin does not nag. If the check cannot be made, the save goes ahead. Saved jobs and closed applications count as matches. The comparison is done in Python, because SQL's `lower()` only understands ASCII on SQLite.
 
 ## Dashboard
 

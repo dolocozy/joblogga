@@ -230,6 +230,23 @@ export function listApplications(filters: ApplicationFilters = {}) {
   return request<{ items: Application[]; total: number }>(`/applications${qs ? `?${qs}` : ''}`)
 }
 
+// An existing application with the same company and role (ignoring case and extra spaces), for the
+// "you already have this" warning. It only informs: saving never depends on it.
+export interface DuplicateMatch {
+  id: number
+  company: string
+  role: string
+  status: ApplicationStatus
+  date_applied: string | null
+  created_at: string
+}
+
+export function findDuplicates(company: string, role: string, excludeId?: number) {
+  const params = new URLSearchParams({ company, role })
+  if (excludeId !== undefined) params.set('exclude_id', String(excludeId))
+  return request<DuplicateMatch[]>(`/applications/duplicates?${params}`)
+}
+
 export const fetchUpcoming = () => request<Application[]>('/applications/upcoming')
 
 export const getApplication = (id: number) => request<ApplicationDetail>(`/applications/${id}`)

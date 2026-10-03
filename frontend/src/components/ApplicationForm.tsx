@@ -1,14 +1,16 @@
 import { useId, useState } from 'react'
 import type { FormEvent } from 'react'
-import { STATUSES, WORK_MODES } from '../api'
-import type { ApplicationInput, ApplicationStatus, WorkMode } from '../api'
+import { findDuplicates, STATUSES, WORK_MODES } from '../api'
+import type { ApplicationInput, ApplicationStatus, DuplicateMatch, WorkMode } from '../api'
 import { blankApplication } from '../applicationDefaults'
 import { localToday } from '../dates'
 import { useFieldErrors } from '../hooks'
 import { statusLabel } from '../status'
 import { workModeLabel } from '../workMode'
+import { duplicateKey } from '../duplicates'
 import { showsRoundFields } from '../rounds'
 import { httpUrlRule, required, roundRule, wholeNumberRule } from '../validation'
+import DuplicateWarning from './DuplicateWarning'
 import Field from './Field'
 import PlacePicker from './PlacePicker'
 import type { InitialPlace, PlaceValue } from './PlacePicker'
@@ -18,6 +20,8 @@ interface Props {
   // The names behind the ids in `initial` (which country and city), for showing them. Blank for a new application.
   initialPlace?: InitialPlace
   submitLabel: string
+  // Set when editing: the application's own id, so it never counts as a duplicate of itself.
+  editingId?: number
   onSubmit: (input: ApplicationInput) => Promise<void>
 }
 
@@ -25,7 +29,7 @@ interface Props {
 const orNull = (v: string) => (v.trim() === '' ? null : v.trim())
 const numOrNull = (v: string) => (v.trim() === '' ? null : Number(v))
 
-export default function ApplicationForm({ initial = blankApplication(), initialPlace, submitLabel, onSubmit }: Props) {
+export default function ApplicationForm({ initial = blankApplication(), initialPlace, submitLabel, editingId, onSubmit }: Props) {
   const base = useId()
   const id = (name: string) => `${base}-${name}`
 
@@ -46,6 +50,11 @@ export default function ApplicationForm({ initial = blankApplication(), initialP
   const [followUp, setFollowUp] = useState(initial.follow_up_date ?? '')
   const [serverError, setServerError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // Existing applications with this company and role, once found. Shown as a warning; never blocks the save.
+  const [duplicates, setDuplicates] = useState<DuplicateMatch[] | null>(null)
+  const [checking, setChecking] = useState(false)
+  // The company and role the person has already said "anyway" to, so they are not asked twice.
+  const [confirmedKey, setConfirmedKey] = useState<string | null>(null)
 
   // The max is checked against the min only once each is a valid number by itself.
   const salaryMaxError =
@@ -98,10 +107,33 @@ export default function ApplicationForm({ initial = blankApplication(), initialP
     if (next !== 'saved' && dateApplied === '') setDateApplied(localToday())
   }
 
+  // Editing only asks again if the company or role was actually changed: saving notes on an application that
+  // legitimately has a twin should not nag every time.
+  const currentKey = duplicateKey(company, role)
+  const changedFromSaved = editingId === undefined || currentKey !== duplicateKey(initial.company, initial.role)
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setServerError(null)
     if (!fields.validateAll()) return
+    if (changedFromSaved && confirmedKey !== currentKey) {
+      setChecking(true)
+      try {
+        const found = await findDuplicates(company.trim(), role.trim(), editingId)
+        if (found.length > 0) {
+          setDuplicates(found)
+          return
+        }
+      } catch {
+        // The check is a courtesy: if it cannot be made, saving goes ahead rather than being held up by it.
+      } finally {
+        setChecking(false)
+      }
+    }
+    await save()
+  }
+
+  async function save() {
     setSaving(true)
     try {
       await onSubmit({
@@ -138,10 +170,10 @@ export default function ApplicationForm({ initial = blankApplication(), initialP
 
       <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
         <Field id={id('company')} label="Company" required error={fields.error('company')}>
-          {(c) => <input {...c} maxLength={200} value={company} {...bind('company', setCompany)} className="input" />}
+          {(c) => <input {...c} maxLength={200} value={company} {...bind('company', (v) => (setDuplicates(null), setCompany(v)))} className="input" />}
         </Field>
         <Field id={id('role')} label="Role" required error={fields.error('role')}>
-          {(c) => <input {...c} maxLength={200} value={role} {...bind('role', setRole)} className="input" />}
+          {(c) => <input {...c} maxLength={200} value={role} {...bind('role', (v) => (setDuplicates(null), setRole(v)))} className="input" />}
         </Field>
         <div className="sm:col-span-2">
           <Field id={id('job_url')} label="Job posting link" error={fields.error('job_url')}>
@@ -208,9 +240,25 @@ export default function ApplicationForm({ initial = blankApplication(), initialP
         {(c) => <textarea {...c} rows={4} maxLength={10000} value={notes} onChange={(e) => setNotes(e.target.value)} className="input" />}
       </Field>
 
-      <button type="submit" disabled={saving} className="btn btn-primary">
-        {saving ? 'Saving…' : submitLabel}
-      </button>
+      {duplicates && (
+        <DuplicateWarning
+          matches={duplicates}
+          confirmLabel={editingId === undefined ? 'Add anyway' : 'Save anyway'}
+          busy={saving}
+          onConfirm={() => {
+            setConfirmedKey(currentKey)
+            setDuplicates(null)
+            void save()
+          }}
+          onDismiss={() => setDuplicates(null)}
+        />
+      )}
+
+      {!duplicates && (
+        <button type="submit" disabled={saving || checking} className="btn btn-primary">
+          {saving ? 'Saving…' : checking ? 'Checking…' : submitLabel}
+        </button>
+      )}
     </form>
   )
 }
