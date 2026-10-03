@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -10,6 +10,7 @@ from app.duplicates import find_duplicates
 from app.export import applications_to_csv
 from app.deps import get_current_user
 from app.geo import place_label
+from app.importer import ImportFileError, import_csv
 from app.models import Application, ApplicationStatus, City, Country, StatusChange, User, WorkMode
 from app.schemas import (
     ApplicationCreate,
@@ -18,6 +19,7 @@ from app.schemas import (
     ApplicationOut,
     ApplicationUpdate,
     DuplicateOut,
+    ImportResultOut,
     check_rounds,
     check_salary_range,
 )
@@ -182,6 +184,28 @@ def export_applications(db: DbSession, user: CurrentUser) -> Response:
             "Cache-Control": "no-store",
         },
     )
+
+
+@router.post("/import", response_model=ImportResultOut)
+def import_applications(
+    db: DbSession,
+    user: CurrentUser,
+    # Optional so an empty upload reaches the importer, which says "The file is empty." in plain words.
+    data: Annotated[bytes, Body(media_type="text/csv", description="The CSV file's bytes, sent as text/csv")] = b"",
+    skip_duplicates: Annotated[bool, Query(description="Leave out rows that repeat an application you already have (or an earlier row)")] = True,
+) -> ImportResultOut:
+    """Add the applications in a CSV file (the export's layout round-trips). Imports what it can and reports the rest.
+
+    One transaction: either every importable row is added or, if something goes wrong, none is. A file that cannot be
+    read at all (empty, no Company or Role column, too many rows) is refused with a message and nothing is added.
+    """
+    try:
+        result = import_csv(db, user.id, data, skip_duplicates=skip_duplicates)
+    except ImportFileError as error:
+        db.rollback()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error))
+    db.commit()
+    return ImportResultOut.model_validate(result, from_attributes=True)
 
 
 # Declared BEFORE "/{application_id}" so "duplicates" isn't parsed as an id.

@@ -1,8 +1,10 @@
 import { useId, useState } from 'react'
 import type { FormEvent } from 'react'
-import { exportApplicationsCsv } from '../api'
+import { exportApplicationsCsv, importApplications } from '../api'
+import type { ImportResult } from '../api'
 import { useAuth } from '../auth'
 import Field from '../components/Field'
+import ImportSummary from '../components/ImportSummary'
 import { localToday } from '../dates'
 import { saveFile } from '../download'
 import { useFieldErrors } from '../hooks'
@@ -19,6 +21,12 @@ export default function Account() {
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
+  const [file, setFile] = useState<File | null>(null)
+  const [skipDuplicates, setSkipDuplicates] = useState(true)
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [imported, setImported] = useState<ImportResult | null>(null)
+
   const fields = useFieldErrors({ password: loginPasswordRule(password) }, (n) => `${base}-${n}`)
 
   async function exportCsv() {
@@ -30,6 +38,21 @@ export default function Account() {
       setExportError(err instanceof Error ? err.message : 'Could not export')
     } finally {
       setExporting(false)
+    }
+  }
+
+  async function runImport(e: FormEvent) {
+    e.preventDefault()
+    if (!file) return
+    setImporting(true)
+    setImportError(null)
+    setImported(null)
+    try {
+      setImported(await importApplications(file, skipDuplicates))
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Could not import that file')
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -78,6 +101,46 @@ export default function Account() {
             {exportError}
           </p>
         )}
+      </section>
+
+      <section aria-labelledby={`${base}-import`} className="space-y-3">
+        <h2 id={`${base}-import`} className="text-xl">
+          Import from a CSV
+        </h2>
+        <p className="text-sm text-ink-soft">
+          Add applications from a spreadsheet saved as CSV. A file exported from Joblogga imports back as it was. Any file needs a Company and a Role
+          column; everything else is optional, and dates should be written YYYY-MM-DD. Rows that cannot be imported are skipped and listed, never silently dropped.
+        </p>
+        <form onSubmit={runImport} className="space-y-3">
+          <Field id={`${base}-file`} label="CSV file">
+            {(c) => (
+              <input
+                {...c}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(e) => {
+                  setFile(e.target.files?.[0] ?? null)
+                  setImported(null)
+                  setImportError(null)
+                }}
+                className="block w-full text-sm file:mr-3 file:rounded-button file:border file:border-ink file:bg-transparent file:px-3 file:py-1 file:text-sm file:font-semibold"
+              />
+            )}
+          </Field>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" checked={skipDuplicates} onChange={(e) => setSkipDuplicates(e.target.checked)} className="mt-1" />
+            <span>Skip rows that match an application I already have (same company and role). Recommended: importing the same file twice then adds nothing.</span>
+          </label>
+          <button type="submit" disabled={!file || importing} className="btn btn-secondary">
+            {importing ? 'Importing…' : 'Import'}
+          </button>
+        </form>
+        {importError && (
+          <p role="alert" className="border-l-2 border-brick bg-brick/5 px-3 py-2 text-sm text-brick-deep">
+            {importError}
+          </p>
+        )}
+        {imported && <ImportSummary result={imported} />}
       </section>
 
       <section aria-labelledby={`${base}-delete`} className="space-y-3 border-t border-rule pt-8">

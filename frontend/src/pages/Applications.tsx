@@ -392,6 +392,10 @@ export default function Applications() {
               <Link to="/applications/new" className="link">
                 Add your first one
               </Link>
+              , or{' '}
+              <Link to="/account" className="link">
+                import a spreadsheet
+              </Link>
               .
             </>
           )}

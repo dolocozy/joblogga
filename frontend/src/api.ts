@@ -47,7 +47,8 @@ function errorMessage(detail: unknown, fallback: string): string {
 // handled in one place. Returns the raw response for the caller to read.
 async function send(path: string, options: RequestInit = {}): Promise<Response> {
   const headers = new Headers(options.headers)
-  if (options.body) headers.set('Content-Type', 'application/json')
+  // JSON unless the caller said otherwise (the CSV upload sends the file's own bytes as text/csv).
+  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   const token = tokenStore.get()
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
@@ -245,6 +246,28 @@ export function findDuplicates(company: string, role: string, excludeId?: number
   const params = new URLSearchParams({ company, role })
   if (excludeId !== undefined) params.set('exclude_id', String(excludeId))
   return request<DuplicateMatch[]>(`/applications/duplicates?${params}`)
+}
+
+// --- CSV import ---------------------------------------------------------------
+
+export interface ImportRowNote {
+  row: number // as a spreadsheet numbers it: the header is row 1
+  reason: string
+}
+export interface ImportResult {
+  total_rows: number
+  blank_rows: number
+  added: number
+  skipped: ImportRowNote[] // could not be imported (for instance no company)
+  duplicates: ImportRowNote[] // left out because they repeat an application you have, or an earlier row
+  adjusted: ImportRowNote[] // imported, but a value was left empty or defaulted
+}
+
+// The file goes up as it is (raw bytes, text/csv), so the server can read UTF-8 or Excel's Windows-1252 itself.
+// Sent as bytes rather than as the File object so it is the same thing in every environment.
+export async function importApplications(file: File, skipDuplicates: boolean) {
+  const bytes = await file.arrayBuffer()
+  return request<ImportResult>(`/applications/import?skip_duplicates=${skipDuplicates}`, { method: 'POST', body: bytes, headers: { 'Content-Type': 'text/csv' } })
 }
 
 export const fetchUpcoming = () => request<Application[]>('/applications/upcoming')

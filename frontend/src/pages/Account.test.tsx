@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
@@ -137,5 +137,156 @@ describe('exporting from the account page', () => {
     signIn()
     renderApp('/account')
     expect(await screen.findByRole('button', { name: 'Export CSV' })).toBeInTheDocument()
+  })
+})
+
+describe('importing a CSV', () => {
+  const EMPTY = { total_rows: 0, blank_rows: 0, added: 0, skipped: [], duplicates: [], adjusted: [] }
+  const csv = (name = 'jobs.csv') => new File(['Company,Role\r\nAcme,Engineer\r\n'], name, { type: 'text/csv' })
+
+  function watchImport(reply: () => Response = () => HttpResponse.json({ ...EMPTY, total_rows: 1, added: 1 })) {
+    const calls: { url: URL; type: string | null; body: string }[] = []
+    server.use(
+      http.post(url('/applications/import'), async ({ request }) => {
+        calls.push({ url: new URL(request.url), type: request.headers.get('content-type'), body: await request.text() })
+        return reply()
+      }),
+    )
+    return calls
+  }
+  const importButton = () => screen.getByRole('button', { name: 'Import' })
+
+  it('has an import section, with Import off until a file is chosen', async () => {
+    signIn()
+    renderApp('/account')
+    expect(await screen.findByRole('heading', { name: 'Import from a CSV' })).toBeInTheDocument()
+    expect(importButton()).toBeDisabled()
+    expect(screen.getByLabelText('CSV file')).toBeInTheDocument()
+  })
+
+  it('uploads the file as it is, as text/csv, skipping duplicates unless told otherwise', async () => {
+    const user = userEvent.setup()
+    signIn()
+    const calls = watchImport()
+    renderApp('/account')
+    await user.upload(await screen.findByLabelText('CSV file'), csv())
+    expect(importButton()).toBeEnabled()
+    await user.click(importButton())
+
+    expect(await screen.findByRole('region', { name: 'Import result' })).toBeInTheDocument()
+    expect(calls).toHaveLength(1)
+    expect(calls[0].type).toContain('text/csv') // not application/json
+    expect(calls[0].body).toBe('Company,Role\r\nAcme,Engineer\r\n')
+    expect(calls[0].url.searchParams.get('skip_duplicates')).toBe('true')
+  })
+
+  it('keeps duplicates when the box is unticked', async () => {
+    const user = userEvent.setup()
+    signIn()
+    const calls = watchImport()
+    renderApp('/account')
+    await user.upload(await screen.findByLabelText('CSV file'), csv())
+    await user.click(screen.getByRole('checkbox', { name: /Skip rows that match an application/ }))
+    await user.click(importButton())
+    await screen.findByRole('region', { name: 'Import result' })
+    expect(calls[0].url.searchParams.get('skip_duplicates')).toBe('false')
+  })
+
+  it('says how many were added, with a link to them', async () => {
+    const user = userEvent.setup()
+    signIn()
+    watchImport(() => HttpResponse.json({ ...EMPTY, total_rows: 37, added: 37 }))
+    renderApp('/account')
+    await user.upload(await screen.findByLabelText('CSV file'), csv())
+    await user.click(importButton())
+
+    const result = await screen.findByRole('region', { name: 'Import result' })
+    expect(within(result).getByRole('status')).toHaveTextContent('Imported 37 applications.')
+    expect(within(result).getByRole('link', { name: 'View your applications' })).toHaveAttribute('href', '/applications')
+    expect(within(result).queryByText(/skipped/)).not.toBeInTheDocument()
+  })
+
+  it('says what was skipped and why, grouped by reason, with the row numbers', async () => {
+    const user = userEvent.setup()
+    signIn()
+    watchImport(() =>
+      HttpResponse.json({
+        ...EMPTY,
+        total_rows: 8,
+        added: 4,
+        blank_rows: 1,
+        skipped: [
+          { row: 3, reason: 'missing company name' },
+          { row: 7, reason: 'missing company name' },
+          { row: 5, reason: 'missing role' },
+        ],
+        duplicates: [{ row: 2, reason: 'Acme, Engineer is already in your applications' }],
+        adjusted: [{ row: 4, reason: "date applied 'soon' could not be read (use YYYY-MM-DD), so it was left empty" }],
+      }),
+    )
+    renderApp('/account')
+    await user.upload(await screen.findByLabelText('CSV file'), csv())
+    await user.click(importButton())
+
+    const result = await screen.findByRole('region', { name: 'Import result' })
+    expect(within(result).getByRole('status')).toHaveTextContent('Imported 4 applications.')
+    expect(result).toHaveTextContent('3 rows skipped because they could not be imported.')
+    expect(result).toHaveTextContent('1 row left out as duplicates of applications you already have.')
+    expect(result).toHaveTextContent('1 note about values that were left empty or filled in.')
+    expect(result).toHaveTextContent('1 blank row ignored.')
+    const skipped = within(within(result).getByRole('region', { name: 'Skipped rows' }))
+    expect(skipped.getByText(/missing company name/)).toHaveTextContent('(rows 3 and 7)')
+    expect(skipped.getByText(/missing role/)).toHaveTextContent('(row 5)')
+    // the less urgent lists are there, folded away until opened
+    expect(within(result).getByText('Left out as duplicates').closest('details')).not.toHaveAttribute('open')
+    expect(within(result).getByText('Adjusted values').closest('details')).toContainElement(within(result).getByText(/could not be read/))
+  })
+
+  it('says plainly when nothing was imported', async () => {
+    const user = userEvent.setup()
+    signIn()
+    watchImport(() => HttpResponse.json({ ...EMPTY, total_rows: 2, duplicates: [{ row: 2, reason: 'A, B is already in your applications' }, { row: 3, reason: 'C, D is already in your applications' }] }))
+    renderApp('/account')
+    await user.upload(await screen.findByLabelText('CSV file'), csv())
+    await user.click(importButton())
+    const result = await screen.findByRole('region', { name: 'Import result' })
+    expect(within(result).getByRole('status')).toHaveTextContent('Nothing was imported.')
+    expect(within(result).queryByRole('link', { name: 'View your applications' })).not.toBeInTheDocument()
+  })
+
+  it('shows the server message for a file it cannot use, and no result', async () => {
+    const user = userEvent.setup()
+    signIn()
+    watchImport(() => HttpResponse.json({ detail: 'The first row must name the columns, and the file needs a Role column.' }, { status: 422 }))
+    renderApp('/account')
+    await user.upload(await screen.findByLabelText('CSV file'), csv())
+    await user.click(importButton())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('needs a Role column')
+    expect(screen.queryByRole('region', { name: 'Import result' })).not.toBeInTheDocument()
+    expect(importButton()).toBeEnabled() // a corrected file can be tried straight away
+  })
+
+  it('clears an old result when a different file is chosen', async () => {
+    const user = userEvent.setup()
+    signIn()
+    watchImport()
+    renderApp('/account')
+    const input = await screen.findByLabelText('CSV file')
+    await user.upload(input, csv('one.csv'))
+    await user.click(importButton())
+    await screen.findByRole('region', { name: 'Import result' })
+
+    await user.upload(input, csv('two.csv'))
+
+    expect(screen.queryByRole('region', { name: 'Import result' })).not.toBeInTheDocument()
+  })
+
+  it('is reachable from an empty applications list', async () => {
+    signIn()
+    mockList([])
+    mockUpcoming()
+    renderApp('/applications')
+    expect(await screen.findByRole('link', { name: 'import a spreadsheet' })).toHaveAttribute('href', '/account')
   })
 })

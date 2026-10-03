@@ -275,6 +275,22 @@ class DuplicateOut(BaseModel):
     created_at: datetime
 
 
+class ImportRowNote(BaseModel):
+    row: int  # as a spreadsheet numbers it: the header is row 1
+    reason: str
+
+
+class ImportResultOut(BaseModel):
+    """What an import did, so nothing happens silently."""
+
+    total_rows: int  # rows below the header, blank ones included
+    blank_rows: int  # ignored without comment
+    added: int
+    skipped: list[ImportRowNote]  # could not be imported (for instance no company)
+    duplicates: list[ImportRowNote]  # left out because they repeat an application you have, or an earlier row
+    adjusted: list[ImportRowNote]  # imported, but a value was left empty or defaulted
+
+
 class StatusChangeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

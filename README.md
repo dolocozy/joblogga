@@ -115,6 +115,7 @@ Interactive docs are at http://localhost:8000/docs when the backend is running.
 | GET | `/applications` | List; filters `status`, `work_mode` (either can repeat), `country_id`, `state_id`, `company`, `q`, `date_from`, `date_to`; `limit`/`offset` |
 | GET | `/geo/countries`, `/geo/states?country_id=`, `/geo/cities?country_id=&q=` | The place picker's lookups, read from our own database (login required) |
 | GET | `/applications/export.csv` | Every application as a CSV file (your backup); includes status history; ignores list filters |
+| POST | `/applications/import` | Import a CSV (sent as `text/csv`; `skip_duplicates`, default true). Adds what it can and returns what it added, skipped and changed |
 | GET | `/applications/duplicates` | Other applications with the same company and role (`company`, `role`, optional `exclude_id`), for the duplicate warning |
 | GET | `/applications/upcoming` | Open applications with a follow-up overdue or due within `days` (default 7) |
 | GET / PATCH / DELETE | `/applications/{id}` | Read (with status history) / partial update / delete |
@@ -146,6 +147,19 @@ The location field is a country and a city picked from real data, with a way to 
 - **Tests** run against a tiny stand-in dataset (with duplicate names on purpose) so the suite stays fast; one file checks the real files' checksums and row counts and loads them through the migration on both databases.
 
 Place data: countries-states-cities-database, ODbL v1.0, credited on the landing page. The data files stay under the ODbL; the rest of the repository is MIT.
+
+## CSV import
+
+The Account page can import a CSV: the reverse of the export, so exporting and then importing into a fresh account reproduces every application (fields, picked places, status history), which is how it is tested. Spreadsheets from elsewhere work if the first row names the columns: `Company` and `Role` are required, anything else is optional, and common spellings are recognised ("Employer", "Job title", "Applied", "URL"...). Comma, semicolon and tab separators, and UTF-8 or Windows-1252, are all read.
+
+The rule is "import what can be imported, and say exactly what was not". The result lists:
+
+- **Skipped:** rows with no company or no role, or a value the database would refuse (with the reason and the row number as a spreadsheet shows it).
+- **Left out as duplicates:** a row with the same company and role (the duplicate-warning rules: case and spacing ignored, nothing fuzzier) as an application you already have, or as an earlier row of the file. Importing the same file twice therefore adds nothing. Untick the box to keep duplicates.
+- **Adjusted values:** a date that is not `YYYY-MM-DD` (`3/4/2026` could be March or April, so it is not guessed), a salary that is not a number, an unknown work mode or status, a link that is not `http(s)`, rounds out of range. The value is left empty (an unknown status becomes Applied) and the row is still imported. A row with no usable applied date is dated today, as adding one by hand without a date is, and that is reported, because it will count as applied today.
+- Blank rows are ignored.
+
+Country, State and City are matched back to the place data by name (the country also by code), so an exported file restores the exact city; a city that is ambiguous without its state, or a place that is not in the data, stays as typed text rather than being guessed. The apostrophe the export puts before text beginning with `=`, `+`, `-` or `@` (to stop a spreadsheet running it as a formula) is taken off again. A `Status history` column in the export's format is rebuilt into dated status changes if it ends at the row's status, which keeps the time-in-stage figures meaningful; otherwise the row starts from its status. Limits: 1,000 rows and 2 MB per file. The import is one transaction.
 
 ## Duplicate warning
 
