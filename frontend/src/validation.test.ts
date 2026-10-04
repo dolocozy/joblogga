@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emailRequiredRule, httpUrlRule, loginPasswordRule, newPasswordRule, required, roundRule, wholeNumberRule } from './validation'
+import { emailRequiredRule, httpUrlRule, loginPasswordRule, newPasswordRule, required, roundRule, weeklyGoalRule, wholeNumberRule } from './validation'
 
 describe('emailRequiredRule (every form with an email field)', () => {
   it('only asks for something to be typed', () => {
@@ -62,5 +62,20 @@ describe('roundRule', () => {
 
   it('refuses everything else with one message', () => {
     for (const v of ['0', '51', '-1', '2.5', 'two', '1e2']) expect(roundRule(v), v).toBe('Enter a whole number from 1 to 50')
+  })
+})
+
+describe('weeklyGoalRule', () => {
+  it('accepts a whole number from 1 to 100', () => {
+    for (const v of ['1', '10', ' 7 ', '100']) expect(weeklyGoalRule(v), v).toBeNull()
+  })
+
+  it('asks for a number when empty, since removing a goal is its own button', () => {
+    expect(weeklyGoalRule('')).toBe('Enter how many applications you want to send each week')
+    expect(weeklyGoalRule('  ')).toBe('Enter how many applications you want to send each week')
+  })
+
+  it('refuses everything else with one message', () => {
+    for (const v of ['0', '101', '-3', '2.5', 'ten', '1e2']) expect(weeklyGoalRule(v), v).toBe('Enter a whole number from 1 to 100')
   })
 })

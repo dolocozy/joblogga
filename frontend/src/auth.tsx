@@ -22,6 +22,7 @@ interface AuthContextValue {
   refreshUser: () => Promise<void>
   // Switches the daily follow-up email on or off for this account.
   setReminderEmails: (on: boolean) => Promise<void>
+  setWeeklyGoal: (goal: number | null) => Promise<void>
   logout: () => void
 }
 
@@ -75,6 +76,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(await api.setReminderEmails(on))
   }, [])
 
+  const setWeeklyGoal = useCallback(async (goal: number | null) => {
+    setUser(await api.setWeeklyGoal(goal))
+  }, [])
+
   const refreshUser = useCallback(async () => {
     if (api.tokenStore.get()) setUser(await api.fetchMe())
   }, [])
@@ -95,8 +100,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, loading, sessionExpired, accountDeleted, login, signup, refreshUser, setReminderEmails, deleteAccount, logout }),
-    [user, loading, sessionExpired, accountDeleted, login, signup, refreshUser, setReminderEmails, deleteAccount, logout],
+    () => ({ user, loading, sessionExpired, accountDeleted, login, signup, refreshUser, setReminderEmails, setWeeklyGoal, deleteAccount, logout }),
+    [user, loading, sessionExpired, accountDeleted, login, signup, refreshUser, setReminderEmails, setWeeklyGoal, deleteAccount, logout],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

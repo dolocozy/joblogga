@@ -745,3 +745,36 @@ def test_downgrading_drops_only_the_currency_column(engine):
     assert "salary_currency" not in {c["name"] for c in inspect(engine).get_columns("applications")}
     with engine.connect() as conn:
         assert conn.execute(text("SELECT salary_min FROM applications")).scalar() == 5
+
+
+# --- 0014: weekly goal ----------------------------------------------------------------------
+
+
+def test_nobody_has_a_goal_after_the_upgrade(engine):
+    migrate_to(engine, "0013")
+    seed_rows(engine)
+    upgrade_database(engine)
+    assert version(engine) == HEAD
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT weekly_goal FROM users")).scalar() is None  # no goal until someone sets one
+        assert schema_differences(conn) == []
+    assert counts(engine) == (1, 1, 1)
+
+
+def test_old_code_can_still_add_users_while_the_goal_column_is_live(engine):
+    migrate_to(engine, "0013")
+    upgrade_database(engine)
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO users (email, hashed_password, created_at) VALUES ('old2@example.com', 'x', '2026-01-01 00:00:00')"))
+        assert conn.execute(text("SELECT weekly_goal FROM users")).scalar() is None
+
+
+def test_downgrading_drops_only_the_goal_column(engine):
+    upgrade_database(engine)
+    seed_rows(engine)
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE users SET weekly_goal = 10"))
+    with engine.begin() as conn:
+        command.downgrade(alembic_config(conn), "0013")
+    assert "weekly_goal" not in {c["name"] for c in inspect(engine).get_columns("users")}
+    assert counts(engine) == (1, 1, 1)

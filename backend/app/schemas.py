@@ -15,6 +15,7 @@ from pydantic import (
 
 from app.models import ApplicationStatus, WorkMode
 from app.contacts import check_text
+from app.goals import MAX_WEEKLY_GOAL
 from app.currencies import CURRENCIES, DEFAULT_CURRENCY, normalize_currency
 from app.tags import normalize_tags
 
@@ -74,9 +75,19 @@ class DeleteAccountRequest(BaseModel):
 
 
 class AccountSettingsUpdate(BaseModel):
-    """PATCH /auth/me: the settings a person can change on their own account."""
+    """PATCH /auth/me: the settings a person can change on their own account. Send the ones to change; at least one."""
 
-    reminder_emails: StrictBool  # a real boolean: "yes" or 1 must not switch emails on
+    reminder_emails: StrictBool | None = None  # a real boolean: "yes" or 1 must not switch emails on
+    # A whole number of applications a week; null removes the goal (no goal, no progress shown).
+    weekly_goal: Annotated[int, Field(strict=True, ge=1, le=MAX_WEEKLY_GOAL)] | None = None
+
+    @model_validator(mode="after")
+    def says_something_valid(self) -> "AccountSettingsUpdate":
+        if not self.model_fields_set:
+            raise ValueError("Send at least one setting to change")
+        if "reminder_emails" in self.model_fields_set and self.reminder_emails is None:
+            raise ValueError("reminder_emails must be true or false")  # null is how weekly_goal is cleared, not this
+        return self
 
 
 class UnsubscribeRequest(BaseModel):
@@ -117,6 +128,7 @@ class UserOut(BaseModel):
     # Lets the UI show "please verify your email" without a second request.
     email_verified: bool
     reminder_emails: bool  # opted in to the daily follow-up digest
+    weekly_goal: int | None  # applications to send each week; None means no goal
 
 
 
@@ -510,6 +522,18 @@ class ResumeBreakdown(BaseModel):
     versions: list[ResumeVersionStat]
 
 
+class GoalProgress(BaseModel):
+    """This week against the weekly goal (see app/goals.py). Present only for someone who has set a goal."""
+
+    target: int
+    this_week: int  # applications applied to this calendar week, up to today
+    week_start: date  # the Monday
+    pace_target: int  # what would be on pace, judged on days already finished
+    on_pace: bool
+    reached: bool
+    remaining: int
+
+
 class StatsOut(BaseModel):
     total: int
     by_status: list[StatusCount]  # every status except Saved, in pipeline order (Saved is not an application yet)
@@ -518,3 +542,4 @@ class StatsOut(BaseModel):
     no_reply: NoReply
     stages: list[StageTime]  # Applied, Screening, Interview, Offer: always all four, in order
     resume: ResumeBreakdown
+    goal: GoalProgress | None  # None unless a weekly goal is set: no goal, no pressure

@@ -8,10 +8,10 @@ import ImportSummary from '../components/ImportSummary'
 import { localToday } from '../dates'
 import { saveFile } from '../download'
 import { useFieldErrors } from '../hooks'
-import { loginPasswordRule } from '../validation'
+import { loginPasswordRule, weeklyGoalRule } from '../validation'
 
 export default function Account() {
-  const { user, deleteAccount, setReminderEmails } = useAuth()
+  const { user, deleteAccount, setReminderEmails, setWeeklyGoal } = useAuth()
   const base = useId()
 
   const [confirming, setConfirming] = useState(false)
@@ -24,12 +24,18 @@ export default function Account() {
   const [savingReminders, setSavingReminders] = useState(false)
   const [remindersError, setRemindersError] = useState<string | null>(null)
 
+  const [goal, setGoal] = useState<string | null>(null) // null: untouched, show the saved goal
+  const [savingGoal, setSavingGoal] = useState(false)
+  const [goalError, setGoalError] = useState<string | null>(null)
+
   const [file, setFile] = useState<File | null>(null)
   const [skipDuplicates, setSkipDuplicates] = useState(true)
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const [imported, setImported] = useState<ImportResult | null>(null)
 
+  const goalText = goal ?? (user?.weekly_goal != null ? String(user.weekly_goal) : '')
+  const goalFields = useFieldErrors({ goal: weeklyGoalRule(goalText) }, (n) => `${base}-${n}-input`) // its own form, validated on its own
   const fields = useFieldErrors({ password: loginPasswordRule(password) }, (n) => `${base}-${n}`)
 
   async function exportCsv() {
@@ -53,6 +59,34 @@ export default function Account() {
       setRemindersError(err instanceof Error ? err.message : 'Could not change that setting')
     } finally {
       setSavingReminders(false)
+    }
+  }
+
+  async function saveGoal(e: FormEvent) {
+    e.preventDefault()
+    setGoalError(null)
+    if (!goalFields.validateAll()) return
+    setSavingGoal(true)
+    try {
+      await setWeeklyGoal(Number(goalText.trim()))
+      setGoal(null)
+    } catch (err) {
+      setGoalError(err instanceof Error ? err.message : 'Could not save your goal')
+    } finally {
+      setSavingGoal(false)
+    }
+  }
+
+  async function removeGoal() {
+    setSavingGoal(true)
+    setGoalError(null)
+    try {
+      await setWeeklyGoal(null)
+      setGoal(null)
+    } catch (err) {
+      setGoalError(err instanceof Error ? err.message : 'Could not remove your goal')
+    } finally {
+      setSavingGoal(false)
     }
   }
 
@@ -132,6 +166,52 @@ export default function Account() {
         {remindersError && (
           <p role="alert" className="text-sm text-brick">
             {remindersError}
+          </p>
+        )}
+      </section>
+
+      <section aria-labelledby={`${base}-goal`} id="goal" className="space-y-3">
+        <h2 id={`${base}-goal`} className="text-xl">
+          Weekly goal
+        </h2>
+        <p className="text-sm text-ink-soft">
+          Optional. Set how many applications you would like to send each week and the dashboard shows how this week is going. Weeks run Monday to Sunday, and
+          an application counts once it is out of Saved. Leave it unset and nothing about a goal appears anywhere.
+        </p>
+        <form onSubmit={saveGoal} noValidate className="space-y-3">
+          <Field id={`${base}-goal-input`} label="Applications per week" error={goalFields.error('goal')}>
+            {(control) => (
+              <input
+                {...control}
+                type="text"
+                inputMode="numeric"
+                value={goalText}
+                onChange={(e) => {
+                  setGoal(e.target.value)
+                  goalFields.visit('goal')
+                }}
+                onBlur={() => goalFields.visit('goal')}
+                className="input w-32"
+              />
+            )}
+          </Field>
+          <div className="flex flex-wrap gap-3">
+            <button type="submit" disabled={savingGoal} className="btn btn-secondary">
+              {savingGoal ? 'Saving…' : 'Save goal'}
+            </button>
+            {user?.weekly_goal != null && (
+              <button type="button" onClick={removeGoal} disabled={savingGoal} className="btn btn-secondary">
+                Remove goal
+              </button>
+            )}
+          </div>
+        </form>
+        <p role="status" className="text-sm">
+          {user?.weekly_goal != null ? `Your goal is ${user.weekly_goal} a week.` : 'No goal set.'}
+        </p>
+        {goalError && (
+          <p role="alert" className="text-sm text-brick">
+            {goalError}
           </p>
         )}
       </section>

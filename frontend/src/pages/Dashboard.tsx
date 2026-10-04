@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchStats } from '../api'
 import type { Stats } from '../api'
+import GoalProgress from '../components/GoalProgress'
 import ResumeChart from '../components/charts/ResumeChart'
 import StageTimeChart from '../components/charts/StageTimeChart'
 import StatusChart from '../components/charts/StatusChart'
@@ -78,6 +79,13 @@ export default function Dashboard() {
         <p role="alert" className="mb-4 border-l-2 border-brick bg-brick/5 px-3 py-2 text-sm text-brick-deep">
           {error}
         </p>
+      )}
+
+      {/* About this week only, so it does not depend on the range above or on there being any applications in it. */}
+      {stats?.goal && (
+        <div className="mb-6">
+          <GoalProgress goal={stats.goal} />
+        </div>
       )}
 
       {stats === null ? (

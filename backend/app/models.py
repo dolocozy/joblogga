@@ -46,6 +46,8 @@ class User(Base):
     # The day (UTC) this user's last digest went out. Claimed atomically before sending, so a retried or
     # doubly-triggered run cannot send the same day's digest twice.
     reminder_last_sent_on: Mapped[date | None] = mapped_column(Date)
+    # Applications to send each week. NULL means no goal, and then nothing about goals is shown: no goal, no pressure.
+    weekly_goal: Mapped[int | None] = mapped_column()
 
     @property
     def email_verified(self) -> bool:

@@ -91,6 +91,7 @@ export interface User {
   // False until the owner opens the link we emailed. Only a banner depends on it.
   email_verified: boolean
   reminder_emails: boolean // opted in to the daily email about follow-ups that are due (off until switched on)
+  weekly_goal: number | null // applications to send each week; null until the person sets one
 }
 
 export const fetchHealth = () => request<HealthResponse>('/health')
@@ -124,6 +125,10 @@ export const fetchMe = () => request<User>('/auth/me')
 // Opt in or out of the daily follow-up email. Off for everyone until they switch it on.
 export const setReminderEmails = (on: boolean) =>
   request<User>('/auth/me', { method: 'PATCH', body: JSON.stringify({ reminder_emails: on }) })
+
+// Set the weekly application goal, or pass null to remove it. Only the goal is sent, so reminders are left as they are.
+export const setWeeklyGoal = (goal: number | null) =>
+  request<User>('/auth/me', { method: 'PATCH', body: JSON.stringify({ weekly_goal: goal }) })
 
 // From the link in a reminder email: needs no login, the signed token is the credential.
 export const unsubscribeReminders = (token: string) =>
@@ -414,6 +419,17 @@ export interface ResumeVersionStat {
   enough_data: boolean // false below the minimum sample: show the counts, not the rate
 }
 
+// This week against the weekly goal. Present only when a goal is set.
+export interface GoalProgress {
+  target: number
+  this_week: number // applications sent this calendar week (Monday on), up to today
+  week_start: string
+  pace_target: number // what on pace looks like by the end of yesterday
+  on_pace: boolean
+  reached: boolean
+  remaining: number
+}
+
 export interface Stats {
   total: number
   by_status: { status: ApplicationStatus; count: number }[]
@@ -427,6 +443,7 @@ export interface Stats {
   no_reply: { days: number; count: number }
   stages: StageTime[] // Applied, Screening, Interview, Offer: always all four, in order
   resume: { min_sample: number; versions: ResumeVersionStat[] }
+  goal: GoalProgress | null // null when no weekly goal is set: nothing is shown
 }
 
 // `weeks` limits every figure to the last N weeks; null means all time.

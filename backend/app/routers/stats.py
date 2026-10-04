@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_user
 from app.models import Application, ApplicationStatus, StatusChange, User
+from app.goals import week_progress
 from app.resume_stats import MIN_SAMPLE, resume_breakdown
-from app.schemas import NoReply, ResponseRate, ResumeBreakdown, ResumeVersionStat, StageTime, StatsOut, StatusCount, WeekCount
+from app.schemas import GoalProgress, NoReply, ResponseRate, ResumeBreakdown, ResumeVersionStat, StageTime, StatsOut, StatusCount, WeekCount
 from app.stage_times import Step, stage_stats
 
 router = APIRouter(prefix="/stats", tags=["stats"])
@@ -36,6 +37,11 @@ RESPONDED = (
 # an event, so it is worked out here. An application still at Applied this many days
 # after it was sent has had no reply.
 NO_REPLY_DAYS = 30
+
+
+def today() -> date:
+    """Today's date. A function so tests can move the calendar."""
+    return date.today()
 
 
 def now() -> datetime:
@@ -73,7 +79,7 @@ def get_stats(
     then withdrawn shows as Withdrawn in the breakdown and still counts as a
     response in the rate.
     """
-    this_week = week_start(date.today())
+    this_week = week_start(today())
     # Applications dated later than this week (e.g. entered in advance) are left
     # out so the weekly chart, which ends at the current week, matches the totals.
     # Saved jobs are not applications yet: they are out of every figure here until applied to.
@@ -106,11 +112,31 @@ def get_stats(
         for resume, status, did_respond in db.execute(select(Application.resume_version, Application.status, ever_responded).where(*conditions))
     ]
 
+    # The weekly goal, if there is one: independent of the time range above (it is always this week). Saved jobs are not
+    # applications, so they do not count; only applications dated this week up to today do.
+    goal = None
+    if user.weekly_goal:
+        day = today()  # read once, so a request that straddles midnight cannot mix two dates
+        applied_this_week = (
+            db.scalar(
+                select(func.count())
+                .select_from(Application)
+                .where(
+                    Application.user_id == user.id,
+                    Application.status != ApplicationStatus.SAVED,
+                    Application.date_applied >= week_start(day),
+                    Application.date_applied <= day,
+                )
+            )
+            or 0
+        )
+        goal = GoalProgress(**vars(week_progress(applied_this_week, user.weekly_goal, day)))
+
     no_reply = (
         db.scalar(
             select(func.count())
             .select_from(Application)
-            .where(*conditions, Application.status == ApplicationStatus.APPLIED, Application.date_applied <= date.today() - timedelta(days=NO_REPLY_DAYS))
+            .where(*conditions, Application.status == ApplicationStatus.APPLIED, Application.date_applied <= today() - timedelta(days=NO_REPLY_DAYS))
         )
         or 0
     )
@@ -156,6 +182,7 @@ def get_stats(
         response=response_rate(responded, eligible),
         no_reply=NoReply(days=NO_REPLY_DAYS, count=no_reply),
         stages=[StageTime(**vars(s)) for s in stages],
+        goal=goal,
         resume=ResumeBreakdown(min_sample=MIN_SAMPLE, versions=[ResumeVersionStat(**vars(s)) for s in resume_breakdown(resume_rows)]),
         per_week=per_week,
     )

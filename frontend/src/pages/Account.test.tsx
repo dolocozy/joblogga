@@ -383,3 +383,118 @@ describe('email reminders', () => {
     expect(screen.queryByRole('link', { name: 'Get these by email each day' })).not.toBeInTheDocument()
   })
 })
+
+describe('weekly goal', () => {
+  const asUser = (over: Partial<typeof USER> = {}) => {
+    tokenStore.set('valid-token')
+    server.use(http.get(url('/auth/me'), () => HttpResponse.json({ ...USER, ...over })))
+  }
+  const input = () => screen.getByLabelText('Applications per week')
+  const patchWith = (bodies: unknown[], reply: (body: Record<string, unknown>) => Record<string, unknown>) =>
+    server.use(
+      http.patch(url('/auth/me'), async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        bodies.push(body)
+        return HttpResponse.json({ ...USER, ...reply(body) })
+      }),
+    )
+
+  it('is optional: with no goal the box is empty and it says so', async () => {
+    asUser()
+    renderApp('/account')
+    expect(await screen.findByRole('heading', { name: 'Weekly goal' })).toBeInTheDocument()
+    expect(input()).toHaveValue('')
+    expect(screen.getByText('No goal set.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Remove goal' })).not.toBeInTheDocument()
+  })
+
+  it('shows the saved goal', async () => {
+    asUser({ weekly_goal: 8 })
+    renderApp('/account')
+    await screen.findByRole('heading', { name: 'Weekly goal' })
+    expect(input()).toHaveValue('8')
+    expect(screen.getByText('Your goal is 8 a week.')).toBeInTheDocument()
+  })
+
+  it('saves a real number, sending only the goal so reminders are left alone', async () => {
+    const user = userEvent.setup()
+    const bodies: unknown[] = []
+    asUser()
+    patchWith(bodies, (b) => ({ weekly_goal: b.weekly_goal }))
+    renderApp('/account')
+    await user.type(await screen.findByLabelText('Applications per week'), '10')
+    await user.click(screen.getByRole('button', { name: 'Save goal' }))
+
+    await screen.findByText('Your goal is 10 a week.')
+    expect(bodies).toEqual([{ weekly_goal: 10 }])
+    expect(screen.getByRole('button', { name: 'Remove goal' })).toBeInTheDocument()
+  })
+
+  it('changes an existing goal', async () => {
+    const user = userEvent.setup()
+    const bodies: unknown[] = []
+    asUser({ weekly_goal: 5 })
+    patchWith(bodies, (b) => ({ weekly_goal: b.weekly_goal }))
+    renderApp('/account')
+    const box = await screen.findByLabelText('Applications per week')
+    await user.clear(box)
+    await user.type(box, '12')
+    await user.click(screen.getByRole('button', { name: 'Save goal' }))
+    await screen.findByText('Your goal is 12 a week.')
+    expect(bodies).toEqual([{ weekly_goal: 12 }])
+  })
+
+  it('removes the goal by sending null', async () => {
+    const user = userEvent.setup()
+    const bodies: unknown[] = []
+    asUser({ weekly_goal: 5 })
+    patchWith(bodies, () => ({ weekly_goal: null }))
+    renderApp('/account')
+    await user.click(await screen.findByRole('button', { name: 'Remove goal' }))
+
+    await screen.findByText('No goal set.')
+    expect(bodies).toEqual([{ weekly_goal: null }])
+    expect(input()).toHaveValue('')
+  })
+
+  it.each([
+    ['0', 'Enter a whole number from 1 to 100'],
+    ['101', 'Enter a whole number from 1 to 100'],
+    ['2.5', 'Enter a whole number from 1 to 100'],
+    ['', 'Enter how many applications you want to send each week'],
+  ])('shows %j as an error under the field and sends nothing', async (typed, message) => {
+    const user = userEvent.setup()
+    const bodies: unknown[] = []
+    asUser()
+    patchWith(bodies, () => ({}))
+    renderApp('/account')
+    const box = await screen.findByLabelText('Applications per week')
+    if (typed) await user.type(box, typed)
+    await user.click(screen.getByRole('button', { name: 'Save goal' }))
+
+    expect(await screen.findByText(message)).toBeInTheDocument()
+    expect(box).toHaveAttribute('aria-invalid', 'true')
+    expect(bodies).toEqual([])
+  })
+
+  it('shows the server\'s reason when saving fails', async () => {
+    const user = userEvent.setup()
+    asUser()
+    server.use(http.patch(url('/auth/me'), () => HttpResponse.json({ detail: 'Something went wrong' }, { status: 500 })))
+    renderApp('/account')
+    await user.type(await screen.findByLabelText('Applications per week'), '4')
+    await user.click(screen.getByRole('button', { name: 'Save goal' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong')
+  })
+
+  it('does not disturb the delete form: a bad goal does not block it, nor the reverse', async () => {
+    const user = userEvent.setup()
+    asUser()
+    renderApp('/account')
+    await user.type(await screen.findByLabelText('Applications per week'), '0')
+    const pw = await openConfirm(user)
+    await user.type(pw, 'x')
+    expect(confirmButton()).toBeEnabled()
+    expect(screen.queryByText('Enter your password')).not.toBeInTheDocument()
+  })
+})

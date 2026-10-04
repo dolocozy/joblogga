@@ -173,8 +173,12 @@ def confirm_password_reset(body: PasswordResetConfirm, db: DbSession, request: R
 
 @router.patch("/me", response_model=UserOut)
 def update_me(body: AccountSettingsUpdate, user: Annotated[User, Depends(get_current_user)], db: DbSession) -> User:
-    """Change the logged-in user's own settings. Today that is the follow-up reminder emails (off until switched on)."""
-    user.reminder_emails = body.reminder_emails
+    """Change the logged-in user's own settings: the follow-up reminder emails (off until switched on) and the weekly
+    application goal (none until set; null removes it). Only the settings sent are changed."""
+    if "reminder_emails" in body.model_fields_set:
+        user.reminder_emails = body.reminder_emails  # type: ignore[assignment]  # not None: checked by the schema
+    if "weekly_goal" in body.model_fields_set:
+        user.weekly_goal = body.weekly_goal
     db.commit()
     return user
 

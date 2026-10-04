@@ -8,7 +8,7 @@ import { server } from './server'
 
 export const url = (path: string) => `${API_URL}${path}`
 
-export const USER = { id: 1, email: 'me@example.com', created_at: '2026-01-01T00:00:00Z', email_verified: true, reminder_emails: false }
+export const USER = { id: 1, email: 'me@example.com', created_at: '2026-01-01T00:00:00Z', email_verified: true, reminder_emails: false, weekly_goal: null as number | null }
 
 export function makeApplication(overrides: Partial<Application> = {}): Application {
   const app: Application = {
@@ -124,6 +124,7 @@ export function makeStats(overrides: Partial<Stats> = {}): Stats {
         { name: null, applications: 6, responded: 2, eligible: 5, rate: 0.4, enough_data: true },
       ],
     },
+    goal: null,
     stages: [
       { status: 'applied', finished: 6, mean_days: 7.5, median_days: 6, in_progress: 2, in_progress_mean_days: 12 },
       { status: 'screening', finished: 3, mean_days: 4, median_days: 3, in_progress: 1, in_progress_mean_days: 2 },

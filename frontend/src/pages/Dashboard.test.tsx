@@ -476,3 +476,72 @@ describe('response rate by resume version', () => {
     await waitFor(() => expect(seen.at(-1)!.searchParams.get('weeks')).toBe('4'))
   })
 })
+
+describe('weekly goal', () => {
+  const goal = (over: Partial<NonNullable<ReturnType<typeof makeStats>['goal']>> = {}) => ({
+    target: 10,
+    this_week: 4,
+    week_start: '2026-03-09',
+    pace_target: 4,
+    on_pace: true,
+    reached: false,
+    remaining: 6,
+    ...over,
+  })
+
+  it('shows nothing about a goal when none is set: no bar, no 0 of 0', async () => {
+    mockStats(makeStats({ goal: null }))
+    renderApp('/dashboard')
+    await screen.findByText('Response rate')
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(screen.queryByText(/this week/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/0 of 0/)).not.toBeInTheDocument()
+  })
+
+  it('shows this week against the goal as an accessible progress bar', async () => {
+    mockStats(makeStats({ goal: goal() }))
+    renderApp('/dashboard')
+    const bar = await screen.findByRole('progressbar', { name: 'Applications sent this week' })
+    expect(bar).toHaveAttribute('aria-valuenow', '4')
+    expect(bar).toHaveAttribute('aria-valuemax', '10')
+    expect(bar).toHaveAttribute('aria-valuetext', '4 of 10 applications')
+    expect(screen.getByText('On pace. 6 to go this week.')).toBeInTheDocument()
+    expect(screen.getByTestId('pace-marker')).toHaveStyle({ left: '40%' })
+  })
+
+  it('says plainly, and without scolding, when behind pace', async () => {
+    mockStats(makeStats({ goal: goal({ this_week: 1, on_pace: false, remaining: 9 }) }))
+    renderApp('/dashboard')
+    expect(await screen.findByText('A little behind pace: about 4 by now. 9 to go this week.')).toBeInTheDocument()
+  })
+
+  it('celebrates quietly when reached, and a count past the goal fills the bar without overflowing it', async () => {
+    mockStats(makeStats({ goal: goal({ this_week: 13, reached: true, remaining: 0 }) }))
+    renderApp('/dashboard')
+    const bar = await screen.findByRole('progressbar')
+    expect(screen.getByText('Goal reached for this week.')).toBeInTheDocument()
+    expect(screen.getByText('13')).toBeInTheDocument()
+    expect(bar).toHaveAttribute('aria-valuenow', '10') // never above its own maximum
+    expect(bar.firstElementChild).toHaveStyle({ width: '100%' })
+    expect(screen.queryByTestId('pace-marker')).not.toBeInTheDocument()
+  })
+
+  it('has no pace marker on Monday morning, when there is nothing to be on pace for yet', async () => {
+    mockStats(makeStats({ goal: goal({ this_week: 0, pace_target: 0, remaining: 10 }) }))
+    renderApp('/dashboard')
+    await screen.findByRole('progressbar')
+    expect(screen.queryByTestId('pace-marker')).not.toBeInTheDocument()
+  })
+
+  it('links to where the goal is changed', async () => {
+    mockStats(makeStats({ goal: goal() }))
+    renderApp('/dashboard')
+    expect(await screen.findByRole('link', { name: 'Change goal' })).toHaveAttribute('href', '/account#goal')
+  })
+
+  it('still shows for someone with no applications in the chosen range, since it is about this week', async () => {
+    mockStats(makeStats({ total: 0, goal: goal({ this_week: 0, pace_target: 0, remaining: 10 }) }))
+    renderApp('/dashboard')
+    expect(await screen.findByRole('progressbar')).toBeInTheDocument()
+  })
+})

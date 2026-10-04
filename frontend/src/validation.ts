@@ -49,6 +49,15 @@ export const roundRule: Rule = (v) => {
   return /^\d+$/.test(t) && Number(t) >= 1 && Number(t) <= 50 ? null : 'Enter a whole number from 1 to 50'
 }
 
+// The weekly application goal: a whole number from 1 to 100 (the server's limit). Empty is an error here, since removing a
+// goal is its own button.
+export const MAX_WEEKLY_GOAL = 100
+export const weeklyGoalRule: Rule = (v) => {
+  const t = v.trim()
+  if (!t) return 'Enter how many applications you want to send each week'
+  return /^\d+$/.test(t) && Number(t) >= 1 && Number(t) <= MAX_WEEKLY_GOAL ? null : `Enter a whole number from 1 to ${MAX_WEEKLY_GOAL}`
+}
+
 // The second "type it again" box on a new-password form.
 export const matches =
   (other: string, message = 'The passwords do not match'): Rule =>
