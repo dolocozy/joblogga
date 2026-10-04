@@ -494,6 +494,22 @@ class StageTime(BaseModel):
     in_progress_mean_days: float | None  # how long those have waited so far, on average
 
 
+class ResumeVersionStat(BaseModel):
+    """Response rate for the applications sent with one resume version (see app/resume_stats.py)."""
+
+    name: str | None  # None is "not specified"
+    applications: int
+    responded: int
+    eligible: int
+    rate: float | None  # responded / eligible, or None when nothing is eligible
+    enough_data: bool  # False below the minimum sample: show the counts, not the rate
+
+
+class ResumeBreakdown(BaseModel):
+    min_sample: int  # applications needed before a version's rate is shown
+    versions: list[ResumeVersionStat]
+
+
 class StatsOut(BaseModel):
     total: int
     by_status: list[StatusCount]  # every status except Saved, in pipeline order (Saved is not an application yet)
@@ -501,3 +517,4 @@ class StatsOut(BaseModel):
     per_week: list[WeekCount]  # oldest first, empty weeks included as 0
     no_reply: NoReply
     stages: list[StageTime]  # Applied, Screening, Interview, Offer: always all four, in order
+    resume: ResumeBreakdown

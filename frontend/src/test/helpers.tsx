@@ -115,6 +115,15 @@ export function makeStats(overrides: Partial<Stats> = {}): Stats {
       { week_start: '2026-03-09', count: 7 },
     ],
     no_reply: { days: 30, count: 0 },
+    resume: {
+      min_sample: 5,
+      versions: [
+        { name: 'Tech-focused', applications: 12, responded: 5, eligible: 12, rate: 5 / 12, enough_data: true },
+        { name: 'Events-focused', applications: 20, responded: 3, eligible: 20, rate: 0.15, enough_data: true },
+        { name: 'One-off', applications: 1, responded: 1, eligible: 1, rate: 1, enough_data: false },
+        { name: null, applications: 6, responded: 2, eligible: 5, rate: 0.4, enough_data: true },
+      ],
+    },
     stages: [
       { status: 'applied', finished: 6, mean_days: 7.5, median_days: 6, in_progress: 2, in_progress_mean_days: 12 },
       { status: 'screening', finished: 3, mean_days: 4, median_days: 3, in_progress: 1, in_progress_mean_days: 2 },

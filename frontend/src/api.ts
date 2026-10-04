@@ -404,6 +404,16 @@ export interface StageTime {
   in_progress_mean_days: number | null
 }
 
+// Response rate for the applications sent with one resume version. `name` is null for "not specified".
+export interface ResumeVersionStat {
+  name: string | null
+  applications: number
+  responded: number
+  eligible: number // the rate's denominator: leaves out applications withdrawn before any reply
+  rate: number | null
+  enough_data: boolean // false below the minimum sample: show the counts, not the rate
+}
+
 export interface Stats {
   total: number
   by_status: { status: ApplicationStatus; count: number }[]
@@ -416,6 +426,7 @@ export interface Stats {
   // Applications still at Applied `days` days after they were sent. "Ghosted" is worked out, not a status.
   no_reply: { days: number; count: number }
   stages: StageTime[] // Applied, Screening, Interview, Offer: always all four, in order
+  resume: { min_sample: number; versions: ResumeVersionStat[] }
 }
 
 // `weeks` limits every figure to the last N weeks; null means all time.

@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_user
 from app.models import Application, ApplicationStatus, StatusChange, User
-from app.schemas import NoReply, ResponseRate, StageTime, StatsOut, StatusCount, WeekCount
+from app.resume_stats import MIN_SAMPLE, resume_breakdown
+from app.schemas import NoReply, ResponseRate, ResumeBreakdown, ResumeVersionStat, StageTime, StatsOut, StatusCount, WeekCount
 from app.stage_times import Step, stage_stats
 
 router = APIRouter(prefix="/stats", tags=["stats"])
@@ -99,6 +100,12 @@ def get_stats(
         or 0
     )
 
+    # Response rate by resume version: the same two definitions as above, per application, grouped in Python.
+    resume_rows = [
+        (resume, bool(did_respond), bool(did_respond) or status != ApplicationStatus.WITHDRAWN)
+        for resume, status, did_respond in db.execute(select(Application.resume_version, Application.status, ever_responded).where(*conditions))
+    ]
+
     no_reply = (
         db.scalar(
             select(func.count())
@@ -149,5 +156,6 @@ def get_stats(
         response=response_rate(responded, eligible),
         no_reply=NoReply(days=NO_REPLY_DAYS, count=no_reply),
         stages=[StageTime(**vars(s)) for s in stages],
+        resume=ResumeBreakdown(min_sample=MIN_SAMPLE, versions=[ResumeVersionStat(**vars(s)) for s in resume_breakdown(resume_rows)]),
         per_week=per_week,
     )

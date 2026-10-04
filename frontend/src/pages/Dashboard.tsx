@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchStats } from '../api'
 import type { Stats } from '../api'
+import ResumeChart from '../components/charts/ResumeChart'
 import StageTimeChart from '../components/charts/StageTimeChart'
 import StatusChart from '../components/charts/StatusChart'
 import WeeklyChart from '../components/charts/WeeklyChart'
@@ -152,6 +153,15 @@ export default function Dashboard() {
             <p className="max-w-3xl text-sm text-ink-soft">
               Worked out from your status history, so it is as accurate as your updates: it measures when you recorded each change. Only stays that have ended are in the
               average; applications still waiting in a stage are counted separately under &ldquo;Still here&rdquo; (view as table), with how long they have waited so far.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <ResumeChart resume={stats.resume} />
+            <p className="max-w-3xl text-sm text-ink-soft">
+              A reply is counted exactly as in the response rate above (including an application that was answered and then withdrawn). A version&apos;s rate is
+              shown once at least {stats.resume.min_sample} applications count toward it; below that, one reply swings the percentage too much to mean anything. Versions
+              are grouped ignoring capitals and extra spaces, and &ldquo;Not specified&rdquo; is every application with no resume version recorded.
             </p>
           </div>
         </div>

@@ -398,3 +398,81 @@ describe('the link to compare offers', () => {
     expect(screen.queryByRole('link', { name: 'Compare them side by side' })).not.toBeInTheDocument()
   })
 })
+
+describe('response rate by resume version', () => {
+  const section = async () => (await screen.findByRole('heading', { name: 'Response rate by resume version' })).closest('section')!
+  const tableRows = async () => {
+    const user = userEvent.setup()
+    const card = await section()
+    await user.click(within(card).getByRole('button', { name: 'View as table' }))
+    return within(card).getAllByRole('row').map((r) => within(r).queryAllByRole('cell').map((c) => c.textContent)).filter((r) => r.length)
+  }
+
+  it('has its own card in the same style as the others, with the explanation of what it measures', async () => {
+    mockStats()
+    renderApp('/dashboard')
+    const card = await section()
+    expect(card).toHaveTextContent('Share of applications that got a reply, by the resume sent')
+    expect(within(card).getByRole('button', { name: 'View as table' })).toBeInTheDocument()
+    expect(screen.getByText(/at least 5 applications count toward it/)).toBeInTheDocument()
+    expect(screen.getByText(/ignoring capitals and extra spaces/)).toBeInTheDocument()
+  })
+
+  it('lists every version in the table with its counts: the groups add up and nothing is hidden', async () => {
+    mockStats()
+    renderApp('/dashboard')
+    expect(await tableRows()).toEqual([
+      ['Tech-focused', '12', '5 of 12', '42%'],
+      ['Events-focused', '20', '3 of 20', '15%'],
+      ['One-off', '1', '1 of 1', 'too few to judge'], // a version used once that got a reply is not shown as 100%
+      ['Not specified', '6', '2 of 5', '40%'],
+    ])
+  })
+
+  it('charts only the versions with enough applications, so one lucky reply is not a 100% resume', async () => {
+    mockStats()
+    renderApp('/dashboard')
+    const chart = within(await section()).getByRole('img')
+    expect(chart).toHaveAccessibleName('Bar chart of response rate by resume version. Tech-focused: 42%, Events-focused: 15%, Not specified: 40%.')
+    expect(chart.getAttribute('aria-label')).not.toContain('One-off')
+  })
+
+  it('shows a dash, not zero, for a version with nothing eligible', async () => {
+    mockStats(makeStats({ resume: { min_sample: 5, versions: [{ name: 'Only withdrawn', applications: 3, responded: 0, eligible: 0, rate: null, enough_data: false }, { name: 'Tech', applications: 9, responded: 3, eligible: 9, rate: 1 / 3, enough_data: true }] } }))
+    renderApp('/dashboard')
+    const rows = await tableRows()
+    expect(rows.find((r) => r[0] === 'Only withdrawn')).toEqual(['Only withdrawn', '3', '0 of 0', '—'])
+  })
+
+  it('says why there is no chart when no version has enough applications yet, and still has the table', async () => {
+    mockStats(makeStats({ resume: { min_sample: 5, versions: [{ name: 'Tech', applications: 3, responded: 1, eligible: 3, rate: 1 / 3, enough_data: false }] } }))
+    renderApp('/dashboard')
+    const card = await section()
+    expect(card).toHaveTextContent('No version has 5 applications that count yet, so no rates are shown')
+    expect(within(card).queryByRole('img')).not.toBeInTheDocument()
+    expect(await tableRows()).toEqual([['Tech', '3', '1 of 3', 'too few to judge']])
+  })
+
+  it('invites you to record resume versions when none of your applications says which it used', async () => {
+    mockStats(makeStats({ resume: { min_sample: 5, versions: [{ name: null, applications: 12, responded: 4, eligible: 12, rate: 1 / 3, enough_data: true }] } }))
+    renderApp('/dashboard')
+    const card = await section()
+    expect(card).toHaveTextContent('None of your applications says which resume it used')
+    expect(within(card).queryByRole('img')).not.toBeInTheDocument() // a single "not specified" bar would compare nothing
+  })
+
+  it('says nothing to show yet for an empty account', async () => {
+    mockStats(makeStats({ resume: { min_sample: 5, versions: [] } }))
+    renderApp('/dashboard')
+    expect(await section()).toHaveTextContent('Nothing to show yet.')
+  })
+
+  it('follows the time range like every other figure on the page', async () => {
+    const user = userEvent.setup()
+    const seen = mockStats()
+    renderApp('/dashboard')
+    await section()
+    await user.click(screen.getByRole('button', { name: '4 weeks' }))
+    await waitFor(() => expect(seen.at(-1)!.searchParams.get('weeks')).toBe('4'))
+  })
+})
