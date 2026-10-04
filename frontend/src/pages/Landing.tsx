@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import LoginForm from '../components/LoginForm'
+import ThemeToggle from '../components/ThemeToggle'
 import StatusBadge from '../components/StatusBadge'
 import Wordmark from '../components/Wordmark'
 import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader } from '../components/Ledger'
@@ -49,9 +50,12 @@ export default function Landing() {
     <div className="min-h-screen">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 md:px-8">
         <Wordmark />
-        <Link to="/signup" className="btn btn-secondary btn-sm">
-          Create an account
-        </Link>
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <Link to="/signup" className="btn btn-secondary btn-sm">
+            Create an account
+          </Link>
+        </div>
       </header>
 
       <main className="mx-auto max-w-6xl px-4 md:px-8">

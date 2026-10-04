@@ -78,6 +78,12 @@ A drop moves the card immediately and puts it back with an error if the server r
 
 The interface is styled as a logbook: warm paper, dark ink, pine green for actions, brick red for trouble, and a highlighter yellow behind overdue follow-ups. Titles are set in a serif, dates and numbers in a monospace so columns line up like a ledger. The applications list is a ruled ledger with a small stage meter per status, not a stack of cards.
 
+### Dark mode
+
+A dark theme (the same logbook by lamplight) follows the device's light/dark setting by default and keeps following it, for example at sunset. A **Theme** button in the header of every page, and on the landing and sign-in pages, steps through System, Light and Dark and back round to System, so there is always a way back to following the device; the choice is saved in this browser's `localStorage` only (it is a display preference, not account data, so there is no backend field and it does not follow you between devices). It covers the whole app, the dashboard charts included.
+
+How it works, and why it is not a pile of `dark:` variants: every colour in the app already comes from a handful of design tokens (`frontend/src/index.css`), and the charts read the same tokens, so dark mode is a second set of values for those tokens under `html.dark`, set by `frontend/src/theme.ts`. Nothing can be missed on one screen, because no screen has its own colours. The `dark:` variant is still enabled for anything that ever needs one. A small script in `index.html` applies the saved or system choice before the page paints so a dark-mode reader never sees a flash of light; a test runs that script against the app's own logic so the two cannot drift. The dark palette keeps the light one's standard (text 4.5:1 or better, control borders 3:1), checked by a test that reads the stylesheet, which also fails if a colour is added without a dark value or a chart hard-codes one. One exception is deliberate: text on the solid yellow highlight stays dark in both themes (a token of its own), since the ink colour turns light in dark mode.
+
 The rules that keep it from looking generic are enforced by a test (`frontend/src/design.test.ts`): no middle-dot separators, no arrows on links, no all-caps tracked labels, no default Tailwind palette colors, two border radii only, and no shadows except the chart tooltip. All text and background pairings were contrast-checked against WCAG.
 
 ## Pages

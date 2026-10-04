@@ -22,6 +22,8 @@ afterEach(() => {
   forgetCurrencies()
   forgetCountries() // the country list is cached for the life of a page; each test is a new page
   localStorage.clear() // the auth token must not leak between tests
+  document.documentElement.classList.remove('dark') // nor one test's theme into the next
+  document.querySelector('meta[name="theme-color"]')?.remove()
 })
 
 afterAll(() => server.close())

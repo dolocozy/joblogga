@@ -15,6 +15,7 @@
   --color-brick: #b2401f; /* overdue, rejected, delete: 5.0:1 on paper */
   --color-brick-deep: #8f3218;
   --color-marker: #f0c94a; /* highlighter; only ever behind ink text (9.7:1) */
+  --color-on-marker: #1f2622; /* text on a SOLID marker wash: dark in both themes (ink turns light in dark mode) */
 
   --font-serif: "Newsreader Variable", Georgia, serif;
   --font-sans: "Hanken Grotesk Variable", system-ui, sans-serif;
@@ -23,6 +24,30 @@
   /* Two radii, by role: small for fields and sheets, a touch more for buttons. */
   --radius-field: 2px;
   --radius-button: 4px;
+}
+
+/* Dark mode: the same logbook by lamplight. Every colour in the app comes from the tokens above, so a second set of values
+   is all it takes (no per-element dark: variants to forget, and the charts follow because they read the tokens too).
+   It applies when <html> has the "dark" class, which src/theme.ts sets from the saved choice or, by default, the system
+   preference. Every pairing was contrast-checked: text 6.5:1 or better, control borders 4.3:1, the marker wash with ink 6.9:1. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+}
+:root.dark {
+  color-scheme: dark; /* native controls, scrollbars and date pickers follow */
+  --color-paper: #161a18;
+  --color-sheet: #1e2421;
+  --color-ink: #ece7db;
+  --color-ink-soft: #a8aca4;
+  --color-rule: #38423d;
+  --color-pencil: #7e8882;
+  --color-pine: #7cc0a6; /* lighter pine: 8.3:1 on paper, and dark sheet-coloured text on it is 7.5:1 */
+  --color-pine-deep: #9ad3bd; /* hover: lighter still, as the light theme's hover is darker */
+  --color-brick: #ee8c73;
+  --color-brick-deep: #f4a590;
+  /* --color-marker stays the same yellow; it sits behind translucent washes and dark on-marker text. */
 }
 
 @layer base {
@@ -83,7 +108,7 @@
 
 /* Chart colors, defined once and referenced by role. Series 1 is pine: it clears
    3:1 on the sheet (7.6:1) and both charts have a single series, so identity comes
-   from the chart title. The app is light-only today. */
+   from the chart title. These point at the tokens, so dark mode recolours the charts with no extra rules. */
 :root {
   --viz-surface: var(--color-sheet);
   --viz-ink: var(--color-ink);

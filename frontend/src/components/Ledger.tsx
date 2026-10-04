@@ -30,12 +30,12 @@ export function DateCell({ label, children }: { label: string; children: ReactNo
 }
 
 // A follow-up date. Overdue ones get the highlighter wash and the word "overdue".
-// Ink stays on the wash (9.7:1); red text on yellow would be too faint.
+// Dark text stays on the wash in both themes (9.7:1); red text on yellow would be too faint.
 export function FollowUp({ text, overdue }: { text: string; overdue: boolean }) {
   if (!overdue) return <>{text}</>
   return (
     <>
-      <mark className="bg-marker px-1 text-ink">{text}</mark>{' '}
+      <mark className="bg-marker px-1 text-on-marker">{text}</mark>{' '}
       <span className="font-sans text-xs font-semibold text-ink">overdue</span>
     </>
   )

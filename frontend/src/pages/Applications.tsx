@@ -301,7 +301,7 @@ export default function Applications() {
           aria-label="Search"
           value={filters.q}
           onChange={(e) => setFilter({ q: e.target.value })}
-          className="input sm:col-span-2 lg:col-span-2"
+          className="input sm:col-span-2 lg:col-span-3"
         />
         <input
           type="search"
@@ -309,7 +309,7 @@ export default function Applications() {
           aria-label="Company"
           value={filters.company}
           onChange={(e) => setFilter({ company: e.target.value })}
-          className={`input ${view === 'list' ? 'lg:col-span-2' : 'lg:col-span-3'}`}
+          className={`input ${view === 'list' ? 'lg:col-span-1' : 'lg:col-span-2'}`}
         />
         {view === 'list' && (
           <select

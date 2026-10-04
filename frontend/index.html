@@ -6,6 +6,20 @@
     <title>Joblogga: a logbook for your job search</title>
     <meta name="description" content="Joblogga keeps every job application in one place: where it stands, when you applied, and when to follow up." />
     <meta name="theme-color" content="#f4efe5" />
+    <!-- Sets the colour theme before the page paints, so dark mode never flashes light. The same rule as applyTheme in
+         src/theme.ts (the two are tested against each other): a saved "light" or "dark" wins, otherwise the system preference. -->
+    <script>
+      (function () {
+        var saved = null
+        try {
+          saved = localStorage.getItem('joblogga-theme')
+        } catch (e) {}
+        var dark = saved === 'dark' || (saved !== 'light' && !!window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.toggle('dark', dark)
+        var meta = document.querySelector('meta[name="theme-color"]')
+        if (meta) meta.setAttribute('content', dark ? '#161a18' : '#f4efe5')
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

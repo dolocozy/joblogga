@@ -1,5 +1,6 @@
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth'
+import ThemeToggle from './ThemeToggle'
 import VerifyBanner from './VerifyBanner'
 import Wordmark from './Wordmark'
 
@@ -29,6 +30,7 @@ export default function Layout() {
             <Link to="/account" className="hidden text-ink-soft underline-offset-2 hover:text-ink hover:underline sm:inline" aria-label={`Account: ${user?.email}`}>
               {user?.email}
             </Link>
+            <ThemeToggle />
             <button onClick={logout} className="btn btn-secondary btn-sm whitespace-nowrap">
               Log out
             </button>
