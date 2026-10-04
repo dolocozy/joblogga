@@ -336,3 +336,13 @@ def test_a_tag_that_starts_with_a_formula_character_survives_the_round_trip(clie
     do_import(client, fresh, client.get("/applications/export.csv", headers=auth).content)
     (restored,) = client.get("/applications", headers=fresh).json()["items"]
     assert restored["tags"] == ["+one", "=hot", "regular"]
+
+
+def test_tags_come_back_in_one_order_whatever_the_databases_collation(client, auth):
+    """Sorted by code point: punctuation first, then digits and letters, accented letters after "z". Postgres collates these
+    differently from SQLite, so the API sorts them itself rather than leaving it to the database."""
+    app = create(client, auth, tags=["zebra", "é", "+plus", "=equals", "apple", "2nd", "Éclair"])
+    expected = ["+plus", "2nd", "=equals", "apple", "zebra", "é", "éclair"]
+    assert app["tags"] == expected
+    assert client.get(f"/applications/{app['id']}", headers=auth).json()["tags"] == expected
+    assert client.get("/applications", headers=auth).json()["items"][0]["tags"] == expected

@@ -204,7 +204,9 @@ class Application(Base):
 
     @property
     def tags(self) -> list[str]:
-        return [link.tag for link in self.tag_links]
+        # Sorted here, by code point, rather than trusting the database's ordering: Postgres and SQLite collate punctuation and
+        # accents differently, and the API promises one order.
+        return sorted(link.tag for link in self.tag_links)
 
     def set_tags(self, tags: list[str]) -> None:
         """Make the tags exactly `tags` (already normalised), touching only the rows that differ."""
