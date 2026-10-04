@@ -14,7 +14,7 @@ from app.deps import get_current_user
 from app.geo import place_label
 from app.importer import ImportFileError, import_csv
 from app.contacts import MAX_CONTACTS
-from app.models import CLOSED_STATUSES, Application, ApplicationContact, ApplicationStatus, ApplicationTag, City, Country, StatusChange, User, WorkMode
+from app.models import CLOSED_STATUSES, OFFER_STATUSES, Application, ApplicationContact, ApplicationStatus, ApplicationTag, City, Country, StatusChange, User, WorkMode
 from app.tags import normalize_tag
 from app.schemas import (
     ApplicationCreate,
@@ -27,6 +27,7 @@ from app.schemas import (
     ContactUpdate,
     DuplicateOut,
     ImportResultOut,
+    OfferOut,
     TagCount,
     check_rounds,
     check_salary_range,
@@ -227,6 +228,37 @@ def import_applications(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error))
     db.commit()
     return ImportResultOut.model_validate(result, from_attributes=True)
+
+
+@router.get("/offers", response_model=list[OfferOut])
+def offers(
+    db: DbSession,
+    user: CurrentUser,
+    archived: Annotated[ArchivedFilter, Query(description="hide (default), include, or only archived offers")] = ArchivedFilter.HIDE,
+) -> list[OfferOut]:
+    """The user's applications at an offer stage (Offer, Offer accepted, Offer declined), for comparing side by side.
+
+    Most recently received first. Each carries `offer_recorded_on` and `days_to_offer`, worked out from the status history
+    (the first time it reached any offer status), so the comparison can say how long the process took. They are derived
+    here, not stored, and "recorded" is meant literally: the history holds when each change was entered.
+    """
+    conditions = [Application.user_id == user.id, Application.status.in_(OFFER_STATUSES)]
+    if archived == ArchivedFilter.HIDE:
+        conditions.append(Application.archived_at.is_(None))
+    elif archived == ArchivedFilter.ONLY:
+        conditions.append(Application.archived_at.is_not(None))
+    found = db.scalars(select(Application).where(*conditions).options(selectinload(Application.history))).all()
+    out: list[OfferOut] = []
+    for app in found:
+        reached = next((h.changed_at.date() for h in app.history if h.to_status in OFFER_STATUSES), None)
+        days = (reached - app.date_applied).days if reached is not None and app.date_applied is not None else None
+        out.append(
+            OfferOut.model_validate(
+                {**ApplicationOut.model_validate(app).model_dump(), "offer_recorded_on": reached, "days_to_offer": days if days is not None and days >= 0 else None}
+            )
+        )
+    # Newest offer first; an offer with no known date goes last, and the id keeps the order stable.
+    return sorted(out, key=lambda o: (o.offer_recorded_on is None, -(o.offer_recorded_on.toordinal() if o.offer_recorded_on else 0), -o.id))
 
 
 # Declared BEFORE "/{application_id}" so "tags" isn't parsed as an id.

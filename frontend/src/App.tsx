@@ -9,6 +9,7 @@ import Applications from './pages/Applications'
 import ForgotPassword from './pages/ForgotPassword'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import Offers from './pages/Offers'
 import NewApplication from './pages/NewApplication'
 import ResetPassword from './pages/ResetPassword'
 import Signup from './pages/Signup'
@@ -48,6 +49,7 @@ export default function App() {
               }
             />
             <Route path="/account" element={<Account />} />
+            <Route path="/offers" element={<Offers />} />
             <Route path="/applications/new" element={<NewApplication />} />
             <Route path="/applications/:id" element={<ApplicationDetail />} />
           </Route>

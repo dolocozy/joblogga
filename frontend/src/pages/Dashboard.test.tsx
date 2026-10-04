@@ -371,3 +371,30 @@ describe('time in each stage', () => {
     await waitFor(() => expect(seen.at(-1)!.searchParams.get('weeks')).toBe('4'))
   })
 })
+
+describe('the link to compare offers', () => {
+  const withOffers = (offer: number, accepted: number, declined: number) =>
+    makeStats({
+      by_status: makeStats().by_status.map((s) => (s.status === 'offer' ? { ...s, count: offer } : s.status === 'offer_accepted' ? { ...s, count: accepted } : s.status === 'offer_declined' ? { ...s, count: declined } : s)),
+    })
+
+  it('appears once there are two or more offers, counting every offer stage', async () => {
+    mockStats(withOffers(1, 1, 1))
+    renderApp('/dashboard')
+    expect(await screen.findByText(/You have 3 offers\./)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Compare them side by side' })).toHaveAttribute('href', '/offers')
+  })
+
+  it('counts two offers that are in different stages', async () => {
+    mockStats(withOffers(0, 1, 1))
+    renderApp('/dashboard')
+    expect(await screen.findByRole('link', { name: 'Compare them side by side' })).toBeInTheDocument()
+  })
+
+  it('is not offered with one offer, or none', async () => {
+    mockStats(withOffers(1, 0, 0))
+    renderApp('/dashboard')
+    await heroValue()
+    expect(screen.queryByRole('link', { name: 'Compare them side by side' })).not.toBeInTheDocument()
+  })
+})

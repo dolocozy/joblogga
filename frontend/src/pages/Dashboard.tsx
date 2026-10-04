@@ -52,6 +52,8 @@ export default function Dashboard() {
   }
 
   const count = (status: string) => stats?.by_status.find((s) => s.status === status)?.count ?? 0
+  // Every offer stage, the same set the Offers tile counts and the comparison view lists.
+  const offerCount = count('offer') + count('offer_accepted') + count('offer_declined')
 
   return (
     <>
@@ -114,8 +116,18 @@ export default function Dashboard() {
             {/* An offer waiting on your answer is still open. */}
             <StatTile label="Still open" value={count('applied') + count('screening') + count('interview') + count('offer')} />
             {/* Every offer stage, so an offer you accepted or declined does not vanish from the count. */}
-            <StatTile label="Offers" value={count('offer') + count('offer_accepted') + count('offer_declined')} />
+            <StatTile label="Offers" value={offerCount} />
           </div>
+
+          {offerCount >= 2 && (
+            <p className="text-sm">
+              You have {offerCount} offers.{' '}
+              <Link to="/offers" className="link">
+                Compare them side by side
+              </Link>
+              .
+            </p>
+          )}
 
           {stats.no_reply.count > 0 && (
             <p className="max-w-3xl text-sm">

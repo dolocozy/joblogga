@@ -277,6 +277,14 @@ export function forgetCurrencies() {
   currencies = null // for tests
 }
 
+// An application at an offer stage, for the comparison view. The two extra values are worked out from the status history
+// (not stored): the day it first reached an offer status, and how many days after applying that was.
+export interface Offer extends Application {
+  offer_recorded_on: string | null
+  days_to_offer: number | null
+}
+export const fetchOffers = (includeArchived: boolean) => request<Offer[]>(`/applications/offers${includeArchived ? '?archived=include' : ''}`)
+
 // The tags this user has used, with how many applications carry each: for the tag filter and for suggestions.
 export interface TagCount {
   tag: string

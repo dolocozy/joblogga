@@ -445,6 +445,13 @@ class ApplicationDetail(ApplicationOut):
     contacts: list[ContactOut]  # only here, not in the list: they are detail, not at-a-glance
 
 
+class OfferOut(ApplicationOut):
+    """An application at an offer stage, with how long the offer took to arrive (worked out from the status history, not stored)."""
+
+    offer_recorded_on: date | None  # the day the application first reached an offer status
+    days_to_offer: int | None  # from the applied date to that day; None if either is unknown or they are out of order
+
+
 class ApplicationList(BaseModel):
     items: list[ApplicationOut]
     total: int  # matches ignoring limit/offset, so the UI can paginate

@@ -91,6 +91,7 @@ The rules that keep it from looking generic are enforced by a test (`frontend/sr
 | `/account` | Who you are, CSV export, and deleting your account |
 | `/applications`, `/applications/new`, `/applications/:id` | Your applications, as a ledger list, a Kanban board (`?view=board`), or the jobs you have saved but not applied to (`?view=saved`) |
 | `/dashboard` | Response rate and charts |
+| `/offers` | Your offers side by side (linked from the dashboard once you have two) |
 
 Visiting a protected page while logged out sends you to `/`, and logging in returns you to the page you asked for.
 
@@ -120,6 +121,7 @@ Interactive docs are at http://localhost:8000/docs when the backend is running.
 | GET | `/applications/export.csv` | Every application as a CSV file (your backup); includes status history; ignores list filters |
 | POST | `/applications/import` | Import a CSV (sent as `text/csv`; `skip_duplicates`, default true). Adds what it can and returns what it added, skipped and changed |
 | POST / PATCH / DELETE | `/applications/{id}/contacts[/{contact_id}]` | Add, change or remove a contact (the detail response lists them) |
+| GET | `/applications/offers` | Applications at an offer stage, newest first, with `offer_recorded_on` and `days_to_offer` (worked out from the history); `archived` as for the list |
 | GET | `/currencies` | The currency codes a salary can be in, with names (common ones first) |
 | GET | `/applications/tags` | Every tag you have used, with how many applications carry it |
 | GET | `/applications/duplicates` | Other applications with the same company and role (`company`, `role`, optional `exclude_id`), for the duplicate warning |
@@ -155,6 +157,15 @@ The location field is a country and a city picked from real data, with a way to 
 - **Tests** run against a tiny stand-in dataset (with duplicate names on purpose) so the suite stays fast; one file checks the real files' checksums and row counts and loads them through the migration on both databases.
 
 Place data: countries-states-cities-database, ODbL v1.0, credited on the landing page. The data files stay under the ODbL; the rest of the repository is MIT.
+
+## Comparing offers
+
+`/offers` puts applications at **Offer**, **Offer accepted** or **Offer declined** side by side (a past offer can still be worth weighing against a new one): a column per offer, a row per thing worth deciding on. The dashboard links to it once you have two or more.
+
+- **Up to four at once.** A column per offer stops being readable past a handful, so with more than four you tick which to compare (the newest four to start). Columns scroll sideways on a narrow screen, with the row labels staying put. Archived offers are left out unless you tick "Include archived offers".
+- **Rows:** status, salary with its currency, work mode, location, interview rounds, applied date, when the offer was recorded and how many days after applying that was, tags, the posting link, and the notes in full. A value that was never recorded says "Not recorded" rather than showing a blank or a zero.
+- **No conversion.** If the offers are in different currencies it says so and that the amounts are shown as entered and cannot be compared directly.
+- **Read-only, and derived.** Nothing here is stored for the view. The one thing the list could not already give, how long the offer took, is worked out by the endpoint from the status history (the first time the application reached any offer status) rather than adding a column. "Recorded" is meant literally: it is when the change was entered, so it is only as accurate as your updates (an application entered straight at the Offer stage shows the day it was entered).
 
 ## Salary currency
 

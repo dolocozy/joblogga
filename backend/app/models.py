@@ -139,6 +139,10 @@ CLOSED_STATUSES = (
 )
 
 
+# Statuses where an offer exists (or existed): the offers worth putting side by side.
+OFFER_STATUSES = (ApplicationStatus.OFFER, ApplicationStatus.OFFER_ACCEPTED, ApplicationStatus.OFFER_DECLINED)
+
+
 def _status_enum() -> Enum:
     # Stored as a plain string (native_enum=False), not a Postgres ENUM type:
     # adding a status later is then a code change, not a database migration.
