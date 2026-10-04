@@ -297,7 +297,7 @@ export default function Applications() {
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <input
           type="search"
-          placeholder="Search company, role, location, notes"
+          placeholder="Search company, role, notes, tags, location"
           aria-label="Search"
           value={filters.q}
           onChange={(e) => setFilter({ q: e.target.value })}

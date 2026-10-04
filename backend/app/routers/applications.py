@@ -112,6 +112,20 @@ def create_application(body: ApplicationCreate, db: DbSession, user: CurrentUser
     return app
 
 
+def keyword_match(term: str):
+    """One search word, found in any of: company, role, location (city, state or country), tags or notes. Case-insensitive,
+    substring, and the characters % and _ mean themselves."""
+    return or_(
+        Application.company.icontains(term, autoescape=True),
+        Application.role.icontains(term, autoescape=True),
+        Application.location.icontains(term, autoescape=True),
+        # A typed place with a picked country ("Somewhere" + Canada) is still found by "canada".
+        Application.country.has(Country.name.icontains(term, autoescape=True)),
+        Application.notes.icontains(term, autoescape=True),
+        Application.tag_links.any(ApplicationTag.tag.icontains(term, autoescape=True)),
+    )
+
+
 @router.get("", response_model=ApplicationList)
 def list_applications(
     db: DbSession,
@@ -123,7 +137,7 @@ def list_applications(
     country_id: Annotated[int | None, Query(ge=1, description="Only this country (a picked city or country)")] = None,
     state_id: Annotated[int | None, Query(ge=1, description="Only places in this state or province")] = None,
     company: Annotated[str | None, Query(max_length=200, description="Company contains…")] = None,
-    q: Annotated[str | None, Query(max_length=200, description="Keyword in company, role, location (city, state or country), tags or notes")] = None,
+    q: Annotated[str | None, Query(max_length=200, description="Search words: each must appear in the company, role, location (city, state or country), tags or notes")] = None,
     date_from: date | None = None,
     date_to: date | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
@@ -151,18 +165,10 @@ def list_applications(
         # autoescape: a user typing "%" or "_" searches for those characters
         # literally instead of them acting as SQL wildcards.
         conditions.append(Application.company.icontains(company, autoescape=True))
-    if q:
-        conditions.append(
-            or_(
-                Application.company.icontains(q, autoescape=True),
-                Application.role.icontains(q, autoescape=True),
-                Application.location.icontains(q, autoescape=True),
-                # A typed place with a picked country ("Somewhere" + Canada) is still found by "canada".
-                Application.country.has(Country.name.icontains(q, autoescape=True)),
-                Application.notes.icontains(q, autoescape=True),
-                Application.tag_links.any(ApplicationTag.tag.icontains(q, autoescape=True)),
-            )
-        )
+    # "Search everything": every word must be found, each in any of the fields, so "acme backend" finds the Backend Engineer role at
+    # Acme although the two words live in different fields. (One contiguous phrase in one field was the only thing that matched.)
+    for term in (q or "").split():
+        conditions.append(keyword_match(term))
     if date_from:
         conditions.append(Application.date_applied >= date_from)
     if date_to:

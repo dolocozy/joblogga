@@ -116,7 +116,7 @@ Interactive docs are at http://localhost:8000/docs when the backend is running.
 | POST | `/auth/password-reset/confirm` | Set a new password with a reset token |
 | GET | `/health` | Liveness check |
 | POST | `/applications` | Create (records the initial status) |
-| GET | `/applications` | List; filters `status`, `work_mode` (either can repeat), `archived` (`hide` by default, `include`, `only`), `tag` (repeat to require several), `country_id`, `state_id`, `company`, `q`, `date_from`, `date_to`; `limit`/`offset` |
+| GET | `/applications` | List; filters `status`, `work_mode` (either can repeat), `archived` (`hide` by default, `include`, `only`), `tag` (repeat to require several), `country_id`, `state_id`, `company`, `q` (search words, see Search), `date_from`, `date_to`; `limit`/`offset` |
 | GET | `/geo/countries`, `/geo/states?country_id=`, `/geo/cities?country_id=&q=` | The place picker's lookups, read from our own database (login required) |
 | GET | `/applications/export.csv` | Every application as a CSV file (your backup); includes status history; ignores list filters |
 | POST | `/applications/import` | Import a CSV (sent as `text/csv`; `skip_duplicates`, default true). Adds what it can and returns what it added, skipped and changed |
@@ -214,6 +214,10 @@ An opt-in email, once a day, listing your open applications whose follow-up date
 4. Run the workflow once by hand from the Actions tab to check it ("Send today's digests"). Its log shows `sent`, `failed`, `skipped_unverified` and `remaining`.
 
 **Limits to know about.** GitHub disables scheduled workflows in a public repository after 60 days with no repository activity, with no warning, so if development stops the reminders silently stop (re-enable the workflow from the Actions tab). Scheduled runs can also be delayed, and occasionally dropped, when GitHub is busy; the schedule is deliberately off the hour for that reason.
+
+## Search
+
+One search box above the list, board and saved view looks in the company, role, notes, tags and location (city, state or country) at once, ignoring case. It is **one more filter, layered on the others**: searching "google" while the status filter says Interview shows Google applications at Interview, and clearing the search leaves the status filter alone. **Every word must be found, each in any field**, so "acme backend" finds the Backend Engineer role at Acme although the words are in different fields (it used to match only one contiguous phrase inside a single field, which made two-word searches miss). Words match parts of words, and `%` and `_` mean themselves. Nothing found is an ordinary empty result, not an error. Archived applications stay hidden unless the archive filter includes them, searching or not. Search is a database substring match, which is right for a personal logbook of hundreds of rows; it is not ranked and not typo-tolerant, and would be swapped for Postgres full-text search before it had to serve much more.
 
 ## Archive
 

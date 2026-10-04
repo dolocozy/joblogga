@@ -1013,3 +1013,65 @@ describe('the tag filter', () => {
     expect(screen.queryByRole('combobox', { name: 'Filter by tag' })).not.toBeInTheDocument()
   })
 })
+
+describe('search', () => {
+  const box = () => screen.getByRole('searchbox', { name: 'Search' })
+
+  it('says every field it looks in, tags included', async () => {
+    mockList([])
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+    expect(box()).toHaveAttribute('placeholder', 'Search company, role, notes, tags, location')
+  })
+
+  it('sends several words as one query, spaces between them kept, and trims the ends', async () => {
+    const user = userEvent.setup()
+    const seen = mockList([])
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+
+    await user.type(box(), '  acme backend  ')
+
+    await waitFor(() => expect(lastParams(seen).q).toBe('acme backend'))
+  })
+
+  it('is layered on the other filters: the status choice is still sent with it', async () => {
+    const user = userEvent.setup()
+    const seen = mockList([makeApplication({ company: 'Globex' })])
+    renderApp('/applications')
+    await screen.findByText('Globex')
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by status' }), 'interview')
+    await user.type(box(), 'google')
+
+    await waitFor(() => expect(lastParams(seen)).toMatchObject({ q: 'google', status: 'interview' }))
+    // Clearing the search leaves the status filter alone.
+    await user.clear(box())
+    await waitFor(() => expect(lastParams(seen).q).toBeUndefined())
+    expect(lastParams(seen).status).toBe('interview')
+  })
+
+  it('shows plain text, not an error, when nothing matches', async () => {
+    const user = userEvent.setup()
+    mockList([])
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+
+    await user.type(box(), 'zzzz')
+
+    expect(await screen.findByText('No applications match your filters.')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(box()).toHaveValue('zzzz') // still there to edit
+  })
+
+  it('works on the board too', async () => {
+    const user = userEvent.setup()
+    const seen = mockList([])
+    renderApp('/applications?view=board')
+    await screen.findByRole('searchbox', { name: 'Search' })
+
+    await user.type(box(), 'acme')
+
+    await waitFor(() => expect(lastParams(seen).q).toBe('acme'))
+  })
+})
