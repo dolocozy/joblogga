@@ -13,6 +13,7 @@ export function blankApplication(status: ApplicationStatus = 'applied'): Applica
     resume_version: null,
     salary_min: null,
     salary_max: null,
+    salary_currency: 'USD',
     location: null,
     country_id: null,
     city_id: null,

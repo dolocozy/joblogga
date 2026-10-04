@@ -693,3 +693,55 @@ def test_contacts_go_with_their_application_and_the_downgrade_drops_only_the_tab
         command.downgrade(alembic_config(conn), "0011")
     assert "application_contacts" not in tables(engine)
     assert counts(engine)[0] == 1  # the user is still there
+
+
+# --- 0013: salary currency -------------------------------------------------------------------
+
+
+def test_every_existing_application_becomes_usd_and_none_is_left_null(engine):
+    migrate_to(engine, "0012")
+    seed_rows(engine)
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE applications SET salary_min = 100000, salary_max = 120000 WHERE id = 1"))
+        conn.execute(
+            text(
+                "INSERT INTO applications (id, user_id, company, role, date_applied, status, created_at, updated_at) "
+                "VALUES (2, 1, 'No salary', 'Eng', '2026-03-02', 'applied', '2026-03-02 00:00:00', '2026-03-02 00:00:00')"
+            )
+        )
+
+    upgrade_database(engine)
+
+    assert version(engine) == HEAD
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT salary_currency FROM applications ORDER BY id")).scalars().all() == ["USD", "USD"]
+        assert conn.execute(text("SELECT COUNT(*) FROM applications WHERE salary_currency IS NULL")).scalar() == 0
+        assert conn.execute(text("SELECT salary_min, salary_max FROM applications WHERE id = 1")).one() == (100000, 120000)  # the amounts are untouched
+        assert schema_differences(conn) == []
+    assert counts(engine)[1] == 2
+
+
+def test_old_code_can_still_add_applications_while_the_currency_column_is_live(engine):
+    migrate_to(engine, "0012")
+    seed_rows(engine)
+    upgrade_database(engine)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO applications (id, user_id, company, role, date_applied, status, created_at, updated_at) "
+                "VALUES (95, 1, 'Old code', 'Eng', '2026-03-02', 'applied', '2026-03-02 00:00:00', '2026-03-02 00:00:00')"
+            )
+        )
+        assert conn.execute(text("SELECT salary_currency FROM applications WHERE id = 95")).scalar() == "USD"
+
+
+def test_downgrading_drops_only_the_currency_column(engine):
+    upgrade_database(engine)
+    seed_rows(engine)
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE applications SET salary_currency = 'EUR', salary_min = 5"))
+    with engine.begin() as conn:
+        command.downgrade(alembic_config(conn), "0012")
+    assert "salary_currency" not in {c["name"] for c in inspect(engine).get_columns("applications")}
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT salary_min FROM applications")).scalar() == 5

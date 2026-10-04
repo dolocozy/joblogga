@@ -838,3 +838,37 @@ describe('contacts on the detail page', () => {
     expect(screen.getByLabelText('Notes')).toHaveValue('half-written thought')
   })
 })
+
+describe('salary and currency on the detail page', () => {
+  it('shows the salary beside its currency under the heading, so a euro figure never looks like a dollar one', async () => {
+    mockGet(makeDetail({ id: 3, salary_min: 100000, salary_max: 120000, salary_currency: 'EUR' }))
+    renderApp('/applications/3')
+    expect(await screen.findByText('100,000–120,000 EUR', { selector: 'p' })).toBeInTheDocument()
+  })
+
+  it('shows nothing extra for an application with no salary', async () => {
+    mockGet(makeDetail({ id: 3, salary_min: null, salary_max: null, salary_currency: 'EUR' }))
+    renderApp('/applications/3')
+    await screen.findByLabelText('Company')
+    expect(screen.queryByText(/EUR/, { selector: 'p' })).not.toBeInTheDocument()
+  })
+
+  it('opens the form with the saved currency selected, and saves a changed one', async () => {
+    const user = userEvent.setup()
+    const bodies: Record<string, unknown>[] = []
+    mockGet(makeDetail({ id: 3, salary_min: 90000, salary_currency: 'CAD' }))
+    server.use(http.patch(url('/applications/3'), async ({ request }) => {
+      const body = (await request.json()) as Record<string, unknown>
+      bodies.push(body)
+      return HttpResponse.json(makeDetail({ id: 3, salary_min: 90000, salary_currency: body.salary_currency as string, updated_at: '2026-06-01T00:00:00Z' }))
+    }))
+    renderApp('/applications/3')
+    const currency = await screen.findByLabelText('Salary currency')
+    await waitFor(() => expect(currency).toHaveValue('CAD'))
+    await user.selectOptions(currency, 'EUR')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0].salary_currency).toBe('EUR')
+    expect(await screen.findByText('from 90,000 EUR', { selector: 'p' })).toBeInTheDocument()
+  })
+})

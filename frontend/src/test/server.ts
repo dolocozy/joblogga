@@ -12,9 +12,18 @@ export const COUNTRIES = [
   { id: 6, name: 'United States', iso2: 'US' },
 ]
 
+// A few currencies, so any page with a salary form can load its list.
+export const CURRENCIES = [
+  { code: 'USD', name: 'United States dollar', common: true },
+  { code: 'EUR', name: 'Euro', common: true },
+  { code: 'CAD', name: 'Canadian dollar', common: true },
+  { code: 'KES', name: 'Kenyan shilling', common: false },
+]
+
 export const server = setupServer(
   http.get(`${API_URL}/health`, () => HttpResponse.json({ status: 'ok' })),
   http.get(`${API_URL}/geo/countries`, () => HttpResponse.json(COUNTRIES)),
+  http.get(`${API_URL}/currencies`, () => HttpResponse.json(CURRENCIES)),
   // Saving an application first asks whether it duplicates one; by default nothing does. Tests that care override it.
   http.get(`${API_URL}/applications/duplicates`, () => HttpResponse.json([])),
   // The form suggests tags you have used, and the list can filter by them; by default there are none.

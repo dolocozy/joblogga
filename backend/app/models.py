@@ -167,6 +167,8 @@ class Application(Base):
     resume_version: Mapped[str | None] = mapped_column(String(100))
     salary_min: Mapped[int | None] = mapped_column()
     salary_max: Mapped[int | None] = mapped_column()
+    # ISO 4217 code the two amounts are in. Never NULL: existing rows were set to USD by the migration that added it.
+    salary_currency: Mapped[str] = mapped_column(String(3), default="USD", server_default="USD")
     # The readable place. For a picked city it is generated ("Springfield, Illinois, United States");
     # otherwise it is whatever was typed. Existing applications' free text stays exactly as it was.
     location: Mapped[str | None] = mapped_column(String(200))

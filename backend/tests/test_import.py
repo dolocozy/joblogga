@@ -35,8 +35,8 @@ def reasons(notes):
 
 
 def adjustments(result):
-    """The adjustments, leaving out "dated today": most of these tiny files have no date column, which is a note of its own."""
-    return [n for n in result["adjusted"] if "dated today" not in n["reason"]]
+    """The adjustments, leaving out "dated today" and "no salary currency": most of these tiny files have neither column, which is a note of its own."""
+    return [n for n in result["adjusted"] if "dated today" not in n["reason"] and "no salary currency" not in n["reason"]]
 
 
 MINIMAL = ["Company", "Role"]
@@ -47,8 +47,8 @@ MINIMAL = ["Company", "Role"]
 
 def test_a_clean_file_imports_every_row_with_all_its_fields(client, auth):
     data = csv_bytes(
-        [["Acme", "Engineer", "Interview", "2026-03-01", "2026-04-01", "https://jobs.example.com/1", "Remote", "", "", "", "remote", "90000", "120000", "tech", "2", "3", "Referred by Sam"]],
-        header=["Company", "Role", "Status", "Date applied", "Follow up by", "Job posting link", "Location", "Country", "State", "City", "Work mode", "Salary min", "Salary max", "Resume version", "Interview round", "Interview rounds total", "Notes"],
+        [["Acme", "Engineer", "Interview", "2026-03-01", "2026-04-01", "https://jobs.example.com/1", "Remote", "", "", "", "remote", "90000", "120000", "USD", "tech", "2", "3", "Referred by Sam"]],
+        header=["Company", "Role", "Status", "Date applied", "Follow up by", "Job posting link", "Location", "Country", "State", "City", "Work mode", "Salary min", "Salary max", "Salary currency", "Resume version", "Interview round", "Interview rounds total", "Notes"],
     )
     result = ok(client, auth, data)
     assert result == {"total_rows": 1, "blank_rows": 0, "added": 1, "skipped": [], "duplicates": [], "adjusted": []}

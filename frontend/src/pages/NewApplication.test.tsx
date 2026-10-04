@@ -46,6 +46,7 @@ describe('add application form', () => {
       resume_version: null,
       salary_min: 90000, // a number, not "90000"
       salary_max: 120000,
+      salary_currency: 'USD', // the default, until another is chosen
       location: null,
       country_id: null,
       city_id: null,
@@ -936,5 +937,51 @@ describe('tags on the form', () => {
     await user.type(await screen.findByRole('combobox', { name: 'Tags' }), 'hot{Enter}')
     expect(screen.getByRole('list', { name: 'Chosen tags' })).toHaveTextContent('hot')
     expect(document.querySelectorAll('datalist option')).toHaveLength(0)
+  })
+})
+
+describe('salary currency on the form', () => {
+  const currency = () => screen.getByLabelText('Salary currency')
+
+  it('defaults to USD, and lists the common currencies first and then the rest', async () => {
+    renderApp('/applications/new')
+    await screen.findByLabelText('Company')
+    await waitFor(() => expect(within(currency()).getAllByRole('option').length).toBeGreaterThan(1))
+    expect(currency()).toHaveValue('USD')
+    const groups = Array.from(currency().querySelectorAll('optgroup')).map((g) => [g.label, Array.from(g.querySelectorAll('option')).map((o) => o.value)])
+    expect(groups).toEqual([
+      ['Common', ['USD', 'EUR', 'CAD']],
+      ['All currencies', ['KES']],
+    ])
+    expect(within(currency()).getByRole('option', { name: 'EUR: Euro' })).toBeInTheDocument()
+  })
+
+  it('sends the chosen currency with the amounts', async () => {
+    const user = userEvent.setup()
+    let body: Record<string, unknown> | null = null
+    server.use(
+      http.post(url('/applications'), async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(makeDetail({ id: 50 }), { status: 201 })
+      }),
+      http.get(url('/applications/50'), () => HttpResponse.json(makeDetail({ id: 50 }))),
+    )
+    renderApp('/applications/new')
+    await user.type(await screen.findByLabelText('Company'), 'Acme')
+    await user.type(screen.getByLabelText('Role'), 'Engineer')
+    await waitFor(() => expect(within(currency()).getAllByRole('option').length).toBeGreaterThan(1))
+    await user.selectOptions(currency(), 'EUR')
+    await user.type(screen.getByLabelText('Salary min'), '100000')
+    await user.click(screen.getByRole('button', { name: 'Add application' }))
+    await screen.findByRole('heading', { name: /Acme/ })
+    expect(body).toMatchObject({ salary_currency: 'EUR', salary_min: 100000 })
+  })
+
+  it('still works, showing just the current currency, if the list cannot be loaded', async () => {
+    server.use(http.get(url('/currencies'), () => HttpResponse.json({ detail: 'down' }, { status: 500 })))
+    renderApp('/applications/new')
+    await screen.findByLabelText('Company')
+    expect(within(currency()).getAllByRole('option').map((o) => o.textContent)).toEqual(['USD'])
+    expect(currency()).toHaveValue('USD')
   })
 })

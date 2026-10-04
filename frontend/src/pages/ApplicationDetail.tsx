@@ -12,6 +12,7 @@ import TagList from '../components/TagList'
 import { MAX_TAGS } from '../tags'
 import { formatDateTime } from '../dates'
 import { statusLabel } from '../status'
+import { salaryLine } from '../salary'
 import { placeLine, roleLine } from '../workMode'
 
 function toInput(a: Detail): ApplicationInput {
@@ -23,6 +24,7 @@ function toInput(a: Detail): ApplicationInput {
     resume_version: a.resume_version,
     salary_min: a.salary_min,
     salary_max: a.salary_max,
+    salary_currency: a.salary_currency,
     location: a.location,
     country_id: a.country?.id ?? null,
     city_id: a.city?.id ?? null,
@@ -107,6 +109,7 @@ export default function ApplicationDetail() {
         <h1 className="text-3xl">{app.company}</h1>
         <p className="text-lg text-ink-soft">{roleLine(app)}</p>
         {placeLine(app) && <p className="text-ink-soft">{placeLine(app)}</p>}
+        {salaryLine(app) && <p className="figure text-ink-soft">{salaryLine(app)}</p>}
         <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1">
           <StatusBadge status={app.status} />
           <RoundsNote app={app} className="text-sm" />

@@ -20,6 +20,7 @@ export function makeApplication(overrides: Partial<Application> = {}): Applicati
     resume_version: null,
     salary_min: null,
     salary_max: null,
+    salary_currency: 'USD',
     location: null,
     location_display: null,
     country: null,

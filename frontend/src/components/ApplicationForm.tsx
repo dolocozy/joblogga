@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 import type { FormEvent } from 'react'
-import { fetchTags, findDuplicates, STATUSES, WORK_MODES } from '../api'
-import type { ApplicationInput, ApplicationStatus, DuplicateMatch, WorkMode } from '../api'
+import { fetchCurrencies, fetchTags, findDuplicates, STATUSES, WORK_MODES } from '../api'
+import type { ApplicationInput, CurrencyOption, ApplicationStatus, DuplicateMatch, WorkMode } from '../api'
 import { blankApplication } from '../applicationDefaults'
 import { localToday } from '../dates'
 import { useFieldErrors } from '../hooks'
@@ -39,6 +39,14 @@ export default function ApplicationForm({ initial = blankApplication(), initialP
   const [jobUrl, setJobUrl] = useState(initial.job_url ?? '')
   const [dateApplied, setDateApplied] = useState(initial.date_applied ?? '')
   const [resume, setResume] = useState(initial.resume_version ?? '')
+  const [currency, setCurrency] = useState(initial.salary_currency)
+  // The list comes from the server. Until it arrives (or if it cannot be fetched) the current value is the only option, so the box is always valid.
+  const [currencies, setCurrencies] = useState<CurrencyOption[]>([])
+  useEffect(() => {
+    fetchCurrencies()
+      .then(setCurrencies)
+      .catch(() => {})
+  }, [])
   const [salaryMin, setSalaryMin] = useState(initial.salary_min?.toString() ?? '')
   const [salaryMax, setSalaryMax] = useState(initial.salary_max?.toString() ?? '')
   // The picker reports what to send; until it does, what the application already has.
@@ -152,6 +160,7 @@ export default function ApplicationForm({ initial = blankApplication(), initialP
         date_applied: dateApplied || null,
         resume_version: orNull(resume),
         salary_min: numOrNull(salaryMin),
+        salary_currency: currency,
         salary_max: numOrNull(salaryMax),
         ...place,
         work_mode: workMode || null,
@@ -228,12 +237,40 @@ export default function ApplicationForm({ initial = blankApplication(), initialP
             <input {...c} maxLength={100} placeholder="For example, tech-focused" value={resume} onChange={(e) => setResume(e.target.value)} className="input" />
           )}
         </Field>
-        <Field id={id('salary_min')} label="Salary min" error={fields.error('salary_min')}>
-          {(c) => <input {...c} inputMode="numeric" value={salaryMin} {...bind('salary_min', setSalaryMin)} className="input figure" />}
-        </Field>
-        <Field id={id('salary_max')} label="Salary max" error={fields.error('salary_max')}>
-          {(c) => <input {...c} inputMode="numeric" value={salaryMax} {...bind('salary_max', setSalaryMax)} className="input figure" />}
-        </Field>
+        <div className="grid gap-x-5 gap-y-4 sm:col-span-2 sm:grid-cols-3">
+          <Field id={id('salary_currency')} label="Salary currency">
+            {(c) => (
+              <select {...c} value={currency} onChange={(e) => setCurrency(e.target.value)} className="input">
+                {currencies.length === 0 ? (
+                  <option value={currency}>{currency}</option>
+                ) : (
+                  <>
+                    <optgroup label="Common">
+                      {currencies.filter((o) => o.common).map((o) => (
+                        <option key={o.code} value={o.code}>
+                          {o.code}: {o.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="All currencies">
+                      {currencies.filter((o) => !o.common).map((o) => (
+                        <option key={o.code} value={o.code}>
+                          {o.code}: {o.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </>
+                )}
+              </select>
+            )}
+          </Field>
+          <Field id={id('salary_min')} label="Salary min" error={fields.error('salary_min')}>
+            {(c) => <input {...c} inputMode="numeric" value={salaryMin} {...bind('salary_min', setSalaryMin)} className="input figure" />}
+          </Field>
+          <Field id={id('salary_max')} label="Salary max" error={fields.error('salary_max')}>
+            {(c) => <input {...c} inputMode="numeric" value={salaryMax} {...bind('salary_max', setSalaryMax)} className="input figure" />}
+          </Field>
+        </div>
         {showsRoundFields(status, round.trim() !== '' || roundsTotal.trim() !== '') && (
           <>
             <Field id={id('interview_round')} label="Interview round" hint="Which round you are in." error={fields.error('interview_round')}>

@@ -171,6 +171,7 @@ export interface Application {
   resume_version: string | null
   salary_min: number | null
   salary_max: number | null
+  salary_currency: string // ISO 4217 ("USD"): what the two amounts are in. Nothing is converted.
   location: string | null // the typed text, or the generated place for a picked city
   location_display: string | null // the place as it reads everywhere: "Springfield, Illinois, United States"
   country: PlaceRef | null
@@ -219,6 +220,7 @@ export interface ApplicationInput {
   resume_version: string | null
   salary_min: number | null
   salary_max: number | null
+  salary_currency: string
   location: string | null // typed text; the server replaces it with the generated place when a city is picked
   country_id: number | null
   city_id: number | null // a city fixes the state and country too
@@ -255,6 +257,24 @@ export function listApplications(filters: ApplicationFilters = {}) {
   }
   const qs = params.toString()
   return request<{ items: Application[]; total: number }>(`/applications${qs ? `?${qs}` : ''}`)
+}
+
+// The currencies a salary can be in, from the server (so there is one list). Fetched once: it never changes while the app is open.
+export interface CurrencyOption {
+  code: string
+  name: string
+  common: boolean // the few most salaries are in, listed first
+}
+let currencies: Promise<CurrencyOption[]> | null = null
+export function fetchCurrencies(): Promise<CurrencyOption[]> {
+  currencies ??= request<CurrencyOption[]>('/currencies').catch((err) => {
+    currencies = null // a failure is not remembered: the next try asks again
+    throw err
+  })
+  return currencies
+}
+export function forgetCurrencies() {
+  currencies = null // for tests
 }
 
 // The tags this user has used, with how many applications carry each: for the tag filter and for suggestions.

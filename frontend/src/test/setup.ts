@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll } from 'vitest'
-import { forgetCountries } from '../api'
+import { forgetCountries, forgetCurrencies } from '../api'
 import { server } from './server'
 
 // Recharts' ResponsiveContainer needs ResizeObserver, which jsdom lacks. With no
@@ -19,6 +19,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterEach(() => {
   cleanup() // unmount rendered components
   server.resetHandlers()
+  forgetCurrencies()
   forgetCountries() // the country list is cached for the life of a page; each test is a new page
   localStorage.clear() // the auth token must not leak between tests
 })

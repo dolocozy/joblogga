@@ -27,6 +27,7 @@ from app.duplicates import duplicate_key, existing_applications, normalize
 from app.geo import place_label, search_key
 from app.models import Application, ApplicationContact, ApplicationStatus, City, Country, State, StatusChange, WorkMode
 from app.contacts import MAX_CONTACTS, parse_contacts_cell
+from app.currencies import CURRENCIES, DEFAULT_CURRENCY, normalize_currency
 from app.tags import parse_tag_cell
 from app.schemas import MAX_ROUNDS, ApplicationCreate, ContactIn, check_rounds, check_salary_range
 
@@ -39,7 +40,7 @@ HEADERS: dict[str, str] = {
         ("company", "company"), ("role", "role"), ("status", "status"), ("date applied", "date_applied"),
         ("follow up by", "follow_up_date"), ("job posting link", "job_url"), ("location", "location"),
         ("country", "country"), ("state", "state"), ("city", "city"), ("work mode", "work_mode"),
-        ("salary min", "salary_min"), ("salary max", "salary_max"), ("resume version", "resume_version"),
+        ("salary min", "salary_min"), ("salary max", "salary_max"), ("salary currency", "salary_currency"), ("resume version", "resume_version"),
         ("interview round", "interview_round"), ("interview rounds total", "interview_rounds_total"),
         ("notes", "notes"), ("status history", "history"), ("archived", "archived"), ("tags", "tags"), ("contacts", "contacts"),
     ]},
@@ -50,6 +51,7 @@ HEADERS: dict[str, str] = {
     "follow up": "follow_up_date", "follow-up": "follow_up_date", "follow up date": "follow_up_date", "follow-up date": "follow_up_date",
     "link": "job_url", "url": "job_url", "job link": "job_url", "job url": "job_url", "posting": "job_url", "job posting": "job_url",
     "resume": "resume_version", "cv": "resume_version", "cv version": "resume_version",
+    "currency": "salary_currency", "salary currency code": "salary_currency",
     "min salary": "salary_min", "salary from": "salary_min", "max salary": "salary_max", "salary to": "salary_max",
     "remote": "work_mode", "on-site": "work_mode", "arrangement": "work_mode",
     "note": "notes", "comments": "notes", "labels": "tags", "tag": "tags",
@@ -341,6 +343,15 @@ def import_csv(db: Session, user_id: int, data: bytes, skip_duplicates: bool = T
             note("the minimum salary is above the maximum, so both were left empty")
             salary_min = salary_max = None
 
+        currency = DEFAULT_CURRENCY
+        raw_currency = _clean(cells.get("salary_currency"))
+        if raw_currency and normalize_currency(raw_currency) in CURRENCIES:
+            currency = normalize_currency(raw_currency)
+        elif raw_currency:
+            note(f"salary currency '{raw_currency[:20]}' is not a currency code (such as USD or EUR), so USD was assumed")
+        elif salary_min is not None or salary_max is not None:
+            note("no salary currency given, so USD was assumed")
+
         round_, total = read_number("interview_round", "interview round"), read_number("interview_rounds_total", "interview rounds total")
         for label, value in (("interview round", round_), ("interview rounds total", total)):
             if value is not None and not 1 <= value <= MAX_ROUNDS:
@@ -401,6 +412,7 @@ def import_csv(db: Session, user_id: int, data: bytes, skip_duplicates: bool = T
             "work_mode": work_mode,
             "salary_min": salary_min,
             "salary_max": salary_max,
+            "salary_currency": currency,
             "resume_version": _text(cells.get("resume_version")),
             "interview_round": round_,
             "interview_rounds_total": total,

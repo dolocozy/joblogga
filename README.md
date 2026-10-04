@@ -120,6 +120,7 @@ Interactive docs are at http://localhost:8000/docs when the backend is running.
 | GET | `/applications/export.csv` | Every application as a CSV file (your backup); includes status history; ignores list filters |
 | POST | `/applications/import` | Import a CSV (sent as `text/csv`; `skip_duplicates`, default true). Adds what it can and returns what it added, skipped and changed |
 | POST / PATCH / DELETE | `/applications/{id}/contacts[/{contact_id}]` | Add, change or remove a contact (the detail response lists them) |
+| GET | `/currencies` | The currency codes a salary can be in, with names (common ones first) |
 | GET | `/applications/tags` | Every tag you have used, with how many applications carry it |
 | GET | `/applications/duplicates` | Other applications with the same company and role (`company`, `role`, optional `exclude_id`), for the duplicate warning |
 | GET | `/applications/upcoming` | Open applications with a follow-up overdue or due within `days` (default 7) |
@@ -137,7 +138,7 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 - `application_contacts`: the people you have dealt with at a company, per application (name, title, email, LinkedIn link). Removed with the application.
 - `application_tags`: one row per application and tag, tags stored normalised (see Tags). Removed with the application.
 - `password_reset_tokens`, `email_verification_tokens`: hash of each token, its expiry, and when it was used.
-- `applications`: belongs to a user; company, role, job link, date applied (empty while Saved), resume version, salary min/max, location (readable text) with `country_id` and `city_id` pointing at the place tables, work mode (remote, hybrid or in person; empty means not specified), `archived_at` (empty unless archived), interview round and total rounds (optional, e.g. round 2 of 3; kept as a record after the application moves on, and with no effect on status or any statistic), notes, current status, follow-up date.
+- `applications`: belongs to a user; company, role, job link, date applied (empty while Saved), resume version, salary min/max with `salary_currency`, location (readable text) with `country_id` and `city_id` pointing at the place tables, work mode (remote, hybrid or in person; empty means not specified), `archived_at` (empty unless archived), interview round and total rounds (optional, e.g. round 2 of 3; kept as a record after the application moves on, and with no effect on status or any statistic), notes, current status, follow-up date.
 - `status_changes`: append-only log (`from_status`, `to_status`, timestamp) written whenever an application's status changes, so the full timeline is kept.
 
 ## Places
@@ -154,6 +155,15 @@ The location field is a country and a city picked from real data, with a way to 
 - **Tests** run against a tiny stand-in dataset (with duplicate names on purpose) so the suite stays fast; one file checks the real files' checksums and row counts and loads them through the migration on both databases.
 
 Place data: countries-states-cities-database, ODbL v1.0, credited on the landing page. The data files stay under the ODbL; the rest of the repository is MIT.
+
+## Salary currency
+
+Salaries are recorded in a currency, because once locations went global a `120000` could be dollars or euros and nothing said which. Each application has a `salary_currency` (an ISO 4217 code, `USD` by default), chosen next to the amounts on the form and shown beside them on the detail page as `110,000–130,000 USD`, with the code after the number rather than a symbol before it (`$` is a dozen currencies).
+
+- **Record-keeping only.** There is no conversion and no exchange-rate service: a code is stored and shown, and amounts are never changed or compared across currencies.
+- **A list in code, not a table.** The valid codes (`backend/app/currencies.py`, served at `/currencies` so the form and server share one list) were generated from the currency columns of the bundled places data and then corrected where that data is behind or not ISO: Antarctica's `AAD` is removed, and `SLE` and `ZWG` are added (the retired `SLL` and `ZWL` stay valid, since an old salary may be in them). A test ties the list to the data, so refreshing the data without updating the list fails the build. `usd` is tidied to `USD`, and anything that is not a real code, such as `USS`, is refused rather than stored.
+- **Existing applications became `USD`** in the migration that added the column, rather than being left empty: the app had no currency before, was used in the US, and the places data is only days older. Nothing is inferred from an application's place, which would be a guess presented as data. A salary in another currency is a one-field change.
+- **CSV:** a `Salary currency` column in the export, read back by the import. A file with a salary but no currency (or an unrecognised one) is imported as `USD` and says so in the result, rather than guessing.
 
 ## Contacts
 

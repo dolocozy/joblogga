@@ -15,6 +15,7 @@ from pydantic import (
 
 from app.models import ApplicationStatus, WorkMode
 from app.contacts import check_text
+from app.currencies import CURRENCIES, DEFAULT_CURRENCY, normalize_currency
 from app.tags import normalize_tags
 
 
@@ -153,6 +154,15 @@ MAX_ROUNDS = 50
 # accepts tags stores the same thing.
 Tags = Annotated[list[str], BeforeValidator(lambda v: normalize_tags(v) if isinstance(v, list) and all(isinstance(i, str) for i in v) else v)]
 
+def _known_currency(v: str) -> str:
+    if v not in CURRENCIES:
+        raise ValueError("Salary currency must be a three-letter currency code such as USD, EUR or CAD")
+    return v
+
+
+# An ISO 4217 code: "usd" is USD, and anything that is not a real code is refused (so "USS" is a typo, not a currency).
+Currency = Annotated[str, BeforeValidator(lambda v: normalize_currency(v) if isinstance(v, str) else v), AfterValidator(_known_currency)]
+
 # A dataset id: a whole number, strictly (JSON true would otherwise pass for 1).
 PlaceId = Annotated[int, Field(strict=True, ge=1)] | None
 # A whole number, and strictly so: JSON true would otherwise pass for 1.
@@ -178,6 +188,7 @@ class ApplicationFields(BaseModel):
     resume_version: optional_text(100) = None
     salary_min: int | None = Field(default=None, ge=0)
     salary_max: int | None = Field(default=None, ge=0)
+    salary_currency: Currency = DEFAULT_CURRENCY  # what the two amounts are in; nothing is ever converted
     location: optional_text(200) = None  # typed text; replaced by the generated place when a city is picked
     country_id: PlaceId = None  # a row of the countries table
     city_id: PlaceId = None  # a row of the cities table; fixes the state and country too
@@ -219,6 +230,7 @@ class ApplicationUpdate(BaseModel):
     resume_version: optional_text(100) = None
     salary_min: int | None = Field(default=None, ge=0)
     salary_max: int | None = Field(default=None, ge=0)
+    salary_currency: Currency | None = None  # (a currency cannot be cleared: it is never empty)
     location: optional_text(200) = None
     country_id: PlaceId = None  # null clears it
     city_id: PlaceId = None
@@ -242,7 +254,7 @@ class ApplicationUpdate(BaseModel):
         # must always have a value, explicitly sending null is an error.
         # date_applied may be null: a Saved job has none. Whether that is allowed for the
         # resulting status is decided in the router, which knows the stored status too.
-        for name in ("company", "role", "status", "archived", "tags"):
+        for name in ("company", "role", "status", "archived", "tags", "salary_currency"):
             if name in self.model_fields_set and getattr(self, name) is None:
                 raise ValueError(f"{name} cannot be null")
         return self
@@ -394,6 +406,7 @@ class ApplicationOut(BaseModel):
     resume_version: str | None
     salary_min: int | None
     salary_max: int | None
+    salary_currency: str  # ISO 4217; shown beside the amounts
     location: str | None  # the typed text, or the generated place for a picked city
     location_display: str | None  # the place as it reads everywhere it is shown
     country: PlaceRef | None
@@ -409,6 +422,12 @@ class ApplicationOut(BaseModel):
     follow_up_date: date | None
     created_at: datetime
     updated_at: datetime
+
+
+class CurrencyOut(BaseModel):
+    code: str
+    name: str
+    common: bool  # one of the few most salaries are in, listed first in the picker
 
 
 class ContactOut(BaseModel):
