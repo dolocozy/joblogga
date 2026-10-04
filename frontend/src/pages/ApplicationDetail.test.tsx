@@ -864,7 +864,9 @@ describe('salary and currency on the detail page', () => {
     }))
     renderApp('/applications/3')
     const currency = await screen.findByLabelText('Salary currency')
-    await waitFor(() => expect(currency).toHaveValue('CAD'))
+    // The list arrives after the form: until then the current currency is the only option, so wait for the one to be chosen.
+    await waitFor(() => expect(within(currency).getByRole('option', { name: /^EUR/ })).toBeInTheDocument())
+    expect(currency).toHaveValue('CAD')
     await user.selectOptions(currency, 'EUR')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(bodies).toHaveLength(1))
