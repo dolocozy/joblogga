@@ -13,7 +13,8 @@ from app.export import applications_to_csv
 from app.deps import get_current_user
 from app.geo import place_label
 from app.importer import ImportFileError, import_csv
-from app.models import CLOSED_STATUSES, Application, ApplicationStatus, ApplicationTag, City, Country, StatusChange, User, WorkMode
+from app.contacts import MAX_CONTACTS
+from app.models import CLOSED_STATUSES, Application, ApplicationContact, ApplicationStatus, ApplicationTag, City, Country, StatusChange, User, WorkMode
 from app.tags import normalize_tag
 from app.schemas import (
     ApplicationCreate,
@@ -21,6 +22,9 @@ from app.schemas import (
     ApplicationList,
     ApplicationOut,
     ApplicationUpdate,
+    ContactIn,
+    ContactOut,
+    ContactUpdate,
     DuplicateOut,
     ImportResultOut,
     TagCount,
@@ -188,7 +192,7 @@ def export_applications(db: DbSession, user: CurrentUser) -> Response:
         select(Application)
         .where(Application.user_id == user.id)
         # Load each application's history in one extra query, not one per row.
-        .options(selectinload(Application.history))
+        .options(selectinload(Application.history), selectinload(Application.contacts))
         .order_by(Application.date_applied.desc().nulls_last(), Application.id.desc())
     ).all()
     filename = f"joblogga-applications-{date.today().isoformat()}.csv"
@@ -339,6 +343,44 @@ def update_application(
     # The place relationships were loaded before the change; reload so the response shows the new city and country.
     db.refresh(app)
     return app
+
+
+def get_owned_contact(db: Session, application: Application, contact_id: int) -> ApplicationContact:
+    """A contact of this application. Anything else (another application's contact, a missing one) is the same 404."""
+    contact = db.scalar(
+        select(ApplicationContact).where(ApplicationContact.id == contact_id, ApplicationContact.application_id == application.id)
+    )
+    if contact is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    return contact
+
+
+@router.post("/{application_id}/contacts", response_model=ContactOut, status_code=status.HTTP_201_CREATED)
+def add_contact(application_id: int, body: ContactIn, db: DbSession, user: CurrentUser) -> ApplicationContact:
+    """Add a person you have dealt with at this application's company."""
+    app = get_owned_application(db, user, application_id)
+    if len(app.contacts) >= MAX_CONTACTS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"An application can have at most {MAX_CONTACTS} contacts")
+    contact = ApplicationContact(application_id=app.id, **body.model_dump())
+    db.add(contact)
+    db.commit()
+    return contact
+
+
+@router.patch("/{application_id}/contacts/{contact_id}", response_model=ContactOut)
+def update_contact(application_id: int, contact_id: int, body: ContactUpdate, db: DbSession, user: CurrentUser) -> ApplicationContact:
+    contact = get_owned_contact(db, get_owned_application(db, user, application_id), contact_id)
+    for field, value in body.model_dump(exclude_unset=True).items():  # only what was sent; null clears an optional field
+        setattr(contact, field, value)
+    db.commit()
+    return contact
+
+
+@router.delete("/{application_id}/contacts/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_contact(application_id: int, contact_id: int, db: DbSession, user: CurrentUser) -> None:
+    contact = get_owned_contact(db, get_owned_application(db, user, application_id), contact_id)
+    db.delete(contact)
+    db.commit()
 
 
 @router.delete("/{application_id}", status_code=status.HTTP_204_NO_CONTENT)

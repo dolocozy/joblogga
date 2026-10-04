@@ -14,7 +14,7 @@ from tests.conftest import TEST_DATABASE_URL, reset_database
 ON_POSTGRES = not TEST_DATABASE_URL.startswith("sqlite")
 BASELINE = "0001"
 HEAD = ScriptDirectory(str(BACKEND_DIR / "alembic")).get_current_head()  # moves with every new migration
-TABLES = {"users", "applications", "status_changes", "password_reset_tokens", "email_verification_tokens", "countries", "states", "cities", "application_tags"}
+TABLES = {"users", "applications", "status_changes", "password_reset_tokens", "email_verification_tokens", "countries", "states", "cities", "application_tags", "application_contacts"}
 
 
 @pytest.fixture
@@ -664,3 +664,32 @@ def test_sqlite_enforces_foreign_keys_on_a_connection_that_has_just_run_the_migr
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM users WHERE id = 1"))
         assert conn.execute(text("SELECT COUNT(*) FROM applications")).scalar() == 0  # the cascade fired
+
+
+# --- 0012: contacts -------------------------------------------------------------------------
+
+
+def test_the_contacts_table_is_created_empty_and_existing_applications_are_untouched(engine):
+    migrate_to(engine, "0011")
+    seed_rows(engine)
+    upgrade_database(engine)
+    assert version(engine) == HEAD
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT COUNT(*) FROM application_contacts")).scalar() == 0
+        assert schema_differences(conn) == []
+    assert counts(engine) == (1, 1, 1)
+
+
+def test_contacts_go_with_their_application_and_the_downgrade_drops_only_the_table(engine):
+    upgrade_database(engine)
+    seed_rows(engine)
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO application_contacts (application_id, name) VALUES (1, 'Jane')"))
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM applications WHERE id = 1"))
+        assert conn.execute(text("SELECT COUNT(*) FROM application_contacts")).scalar() == 0  # cascade
+
+    with engine.begin() as conn:
+        command.downgrade(alembic_config(conn), "0011")
+    assert "application_contacts" not in tables(engine)
+    assert counts(engine)[0] == 1  # the user is still there

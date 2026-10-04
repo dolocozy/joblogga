@@ -232,6 +232,11 @@ class Application(Base):
             return place_label(self.location, None, self.country.name) if self.location else self.country.name
         return self.location
 
+    # People you have dealt with at the company. Only the detail page shows them, so they load when asked for.
+    contacts: Mapped[list["ApplicationContact"]] = relationship(
+        cascade="all, delete-orphan", order_by="ApplicationContact.id"
+    )
+
     history: Mapped[list["StatusChange"]] = relationship(
         back_populates="application",
         order_by="StatusChange.id",
@@ -304,3 +309,16 @@ class ApplicationTag(Base):
 
     application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), primary_key=True)
     tag: Mapped[str] = mapped_column(String(MAX_TAG_LENGTH), primary_key=True)
+
+
+class ApplicationContact(Base):
+    """One person at the company for one application. Free text throughout: titles vary too much for a list."""
+
+    __tablename__ = "application_contacts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    title: Mapped[str | None] = mapped_column(String(100))  # "Recruiter", "Hiring manager"...
+    email: Mapped[str | None] = mapped_column(String(320))
+    linkedin_url: Mapped[str | None] = mapped_column(String(2048))

@@ -195,8 +195,19 @@ export interface StatusChange {
   changed_at: string
 }
 
+// A person you have dealt with at a company, for one application. Free text throughout.
+export interface Contact {
+  id: number
+  name: string
+  title: string | null // "Recruiter", "Hiring manager"...
+  email: string | null
+  linkedin_url: string | null
+}
+export type ContactInput = Omit<Contact, 'id'>
+
 export interface ApplicationDetail extends Application {
   history: StatusChange[]
+  contacts: Contact[] // detail only: the list does not carry them
 }
 
 // What the form sends. Optional fields are null when left blank.
@@ -306,6 +317,16 @@ export type ApplicationPatch = Partial<ApplicationInput> & { archived?: boolean 
 
 export const updateApplication = (id: number, input: ApplicationPatch) =>
   request<ApplicationDetail>(`/applications/${id}`, { method: 'PATCH', body: JSON.stringify(input) })
+
+// Each contact is saved on its own, straight away (the application form does not carry them).
+export const addContact = (applicationId: number, input: ContactInput) =>
+  request<Contact>(`/applications/${applicationId}/contacts`, { method: 'POST', body: JSON.stringify(input) })
+
+export const updateContact = (applicationId: number, contactId: number, input: Partial<ContactInput>) =>
+  request<Contact>(`/applications/${applicationId}/contacts/${contactId}`, { method: 'PATCH', body: JSON.stringify(input) })
+
+export const deleteContact = (applicationId: number, contactId: number) =>
+  request<void>(`/applications/${applicationId}/contacts/${contactId}`, { method: 'DELETE' })
 
 export const deleteApplication = (id: number) =>
   request<void>(`/applications/${id}`, { method: 'DELETE' })

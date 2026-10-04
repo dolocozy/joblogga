@@ -663,3 +663,178 @@ describe('tags on the detail page', () => {
     expect(bodies[0].tags).toEqual([])
   })
 })
+
+describe('contacts on the detail page', () => {
+  const JANE = { id: 11, name: 'Jane Doe', title: 'Recruiter', email: 'jane@acme.com', linkedin_url: 'https://www.linkedin.com/in/jane' }
+  const SAM = { id: 12, name: 'Sam Lee', title: null, email: null, linkedin_url: null }
+  const section = async () => within((await screen.findByRole('heading', { name: 'Contacts' })).closest('section')!)
+
+  it('invites you to add one when there are none', async () => {
+    mockGet(makeDetail({ id: 3, contacts: [] }))
+    renderApp('/applications/3')
+    const contacts = await section()
+    expect(contacts.getByText(/No contacts yet/)).toBeInTheDocument()
+    expect(contacts.getByRole('button', { name: 'Add contact' })).toBeInTheDocument()
+  })
+
+  it('lists each person with their title, a mailto link and a LinkedIn link that opens safely in a new tab', async () => {
+    mockGet(makeDetail({ id: 3, contacts: [JANE, SAM] }))
+    renderApp('/applications/3')
+    const contacts = await section()
+    expect(contacts.getByText('Jane Doe')).toBeInTheDocument()
+    expect(contacts.getByText('Recruiter')).toBeInTheDocument()
+    expect(contacts.getByRole('link', { name: 'jane@acme.com' })).toHaveAttribute('href', 'mailto:jane@acme.com')
+    const linkedin = contacts.getByRole('link', { name: 'LinkedIn profile of Jane Doe' })
+    expect(linkedin).toHaveAttribute('href', 'https://www.linkedin.com/in/jane')
+    expect(linkedin).toHaveAttribute('target', '_blank')
+    expect(linkedin).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(contacts.getAllByRole('link')).toHaveLength(2) // Sam has neither, so no dead links
+  })
+
+  it('never renders an unsafe link, even if one reached the database', async () => {
+    mockGet(makeDetail({ id: 3, contacts: [{ ...JANE, email: 'not an email <x>', linkedin_url: 'javascript:alert(1)' }] }))
+    renderApp('/applications/3')
+    const contacts = await section()
+    expect(contacts.queryByRole('link')).not.toBeInTheDocument()
+    expect(contacts.getByText('not an email <x>')).toBeInTheDocument() // shown as plain text
+    expect(document.querySelector('a[href^="javascript"]')).toBeNull()
+  })
+
+  it('adds a contact, sending it on its own, and shows it at once', async () => {
+    const user = userEvent.setup()
+    const bodies: Record<string, unknown>[] = []
+    mockGet(makeDetail({ id: 3, contacts: [] }))
+    server.use(http.post(url('/applications/3/contacts'), async ({ request }) => {
+      const body = (await request.json()) as Record<string, unknown>
+      bodies.push(body)
+      return HttpResponse.json({ id: 20, ...body }, { status: 201 })
+    }))
+    renderApp('/applications/3')
+    await user.click((await section()).getByRole('button', { name: 'Add contact' }))
+    const form = within(screen.getByRole('form', { name: 'Add a contact' }))
+    await user.type(form.getByLabelText('Name'), '  Jane Doe ')
+    await user.type(form.getByLabelText('Role or title'), 'Recruiter')
+    await user.type(form.getByLabelText('Email'), 'jane@acme.com')
+    await user.click(form.getByRole('button', { name: 'Add contact' }))
+
+    expect(await (await section()).findByText('Jane Doe')).toBeInTheDocument()
+    expect(bodies).toEqual([{ name: 'Jane Doe', title: 'Recruiter', email: 'jane@acme.com', linkedin_url: null }])
+    expect(screen.queryByRole('form', { name: 'Add a contact' })).not.toBeInTheDocument()
+  })
+
+  it('needs a name, and says so next to the field without sending anything', async () => {
+    const user = userEvent.setup()
+    const bodies: unknown[] = []
+    mockGet(makeDetail({ id: 3 }))
+    server.use(http.post(url('/applications/3/contacts'), async ({ request }) => (bodies.push(await request.json()), HttpResponse.json({}, { status: 201 }))))
+    renderApp('/applications/3')
+    await user.click((await section()).getByRole('button', { name: 'Add contact' }))
+    await user.click(within(screen.getByRole('form', { name: 'Add a contact' })).getByRole('button', { name: 'Add contact' }))
+    expect(await screen.findByText("Enter the person's name")).toBeInTheDocument()
+    expect(bodies).toHaveLength(0)
+  })
+
+  it('shows the server\'s own message for an email it refuses, and keeps what was typed', async () => {
+    const user = userEvent.setup()
+    mockGet(makeDetail({ id: 3 }))
+    server.use(http.post(url('/applications/3/contacts'), () => HttpResponse.json({ detail: [{ msg: 'value is not a valid email address: An email address must have an @-sign.' }] }, { status: 422 })))
+    renderApp('/applications/3')
+    await user.click((await section()).getByRole('button', { name: 'Add contact' }))
+    const form = within(screen.getByRole('form', { name: 'Add a contact' }))
+    await user.type(form.getByLabelText('Name'), 'Jane')
+    await user.type(form.getByLabelText('Email'), 'nope')
+    await user.click(form.getByRole('button', { name: 'Add contact' }))
+
+    expect(await form.findByRole('alert')).toHaveTextContent('not a valid email address')
+    expect(form.getByLabelText('Email')).toHaveValue('nope')
+    expect(form.getByRole('button', { name: 'Add contact' })).toBeEnabled()
+  })
+
+  it('cancelling closes the form and adds nothing', async () => {
+    const user = userEvent.setup()
+    mockGet(makeDetail({ id: 3 }))
+    renderApp('/applications/3')
+    await user.click((await section()).getByRole('button', { name: 'Add contact' }))
+    await user.click(within(screen.getByRole('form', { name: 'Add a contact' })).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('form', { name: 'Add a contact' })).not.toBeInTheDocument()
+    expect((await section()).getByText(/No contacts yet/)).toBeInTheDocument()
+  })
+
+  it('edits a contact in place, sending the whole form, and clearing a field sends null', async () => {
+    const user = userEvent.setup()
+    const bodies: Record<string, unknown>[] = []
+    mockGet(makeDetail({ id: 3, contacts: [JANE, SAM] }))
+    server.use(http.patch(url('/applications/3/contacts/11'), async ({ request }) => {
+      const body = (await request.json()) as Record<string, unknown>
+      bodies.push(body)
+      return HttpResponse.json({ id: 11, ...body })
+    }))
+    renderApp('/applications/3')
+    await user.click((await section()).getByRole('button', { name: 'Edit Jane Doe' }))
+    const form = within(screen.getByRole('form', { name: 'Edit Jane Doe' }))
+    expect(form.getByLabelText('Email')).toHaveValue('jane@acme.com') // prefilled
+    await user.clear(form.getByLabelText('Role or title'))
+    await user.type(form.getByLabelText('Role or title'), 'Hiring manager')
+    await user.clear(form.getByLabelText('Email'))
+    await user.click(form.getByRole('button', { name: 'Save contact' }))
+
+    expect(await (await section()).findByText('Hiring manager')).toBeInTheDocument()
+    expect(bodies).toEqual([{ name: 'Jane Doe', title: 'Hiring manager', email: null, linkedin_url: 'https://www.linkedin.com/in/jane' }])
+    expect((await section()).getByText('Sam Lee')).toBeInTheDocument() // the other one is unchanged
+  })
+
+  it('removes a contact after confirming, and not if you decline', async () => {
+    const user = userEvent.setup()
+    const confirm = vi.spyOn(window, 'confirm')
+    let deleted = 0
+    mockGet(makeDetail({ id: 3, contacts: [JANE, SAM] }))
+    server.use(http.delete(url('/applications/3/contacts/11'), () => (deleted++, new HttpResponse(null, { status: 204 }))))
+    renderApp('/applications/3')
+
+    confirm.mockReturnValueOnce(false)
+    await user.click((await section()).getByRole('button', { name: 'Remove Jane Doe' }))
+    expect(deleted).toBe(0)
+    expect((await section()).getByText('Jane Doe')).toBeInTheDocument()
+
+    confirm.mockReturnValueOnce(true)
+    await user.click((await section()).getByRole('button', { name: 'Remove Jane Doe' }))
+    await waitFor(() => expect((screen.getByRole('heading', { name: 'Contacts' }).closest('section')!).textContent).not.toContain('Jane Doe'))
+    expect(deleted).toBe(1)
+    expect(confirm).toHaveBeenLastCalledWith('Remove Jane Doe from this application?')
+    confirm.mockRestore()
+  })
+
+  it('says why a removal failed and keeps the contact', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    mockGet(makeDetail({ id: 3, contacts: [JANE] }))
+    server.use(http.delete(url('/applications/3/contacts/11'), () => HttpResponse.json({ detail: 'Contact not found' }, { status: 404 })))
+    renderApp('/applications/3')
+    await user.click((await section()).getByRole('button', { name: 'Remove Jane Doe' }))
+    expect(await (await section()).findByRole('alert')).toHaveTextContent('Contact not found')
+    expect((await section()).getByText('Jane Doe')).toBeInTheDocument()
+    vi.restoreAllMocks()
+  })
+
+  it('stops offering to add at ten, and says why', async () => {
+    mockGet(makeDetail({ id: 3, contacts: Array.from({ length: 10 }, (_, i) => ({ id: 100 + i, name: `Person ${i}`, title: null, email: null, linkedin_url: null })) }))
+    renderApp('/applications/3')
+    const contacts = await section()
+    expect(contacts.queryByRole('button', { name: 'Add contact' })).not.toBeInTheDocument()
+    expect(contacts.getByText(/the most contacts an application can have \(10\)/)).toBeInTheDocument()
+  })
+
+  it('adding a contact does not wipe what you are typing in the application form', async () => {
+    const user = userEvent.setup()
+    mockGet(makeDetail({ id: 3, contacts: [] }))
+    server.use(http.post(url('/applications/3/contacts'), async ({ request }) => HttpResponse.json({ id: 21, ...((await request.json()) as object) }, { status: 201 })))
+    renderApp('/applications/3')
+    await user.type(await screen.findByLabelText('Notes'), 'half-written thought')
+    await user.click((await section()).getByRole('button', { name: 'Add contact' }))
+    const form = within(screen.getByRole('form', { name: 'Add a contact' }))
+    await user.type(form.getByLabelText('Name'), 'Jane')
+    await user.click(form.getByRole('button', { name: 'Add contact' }))
+    await (await section()).findByText('Jane')
+    expect(screen.getByLabelText('Notes')).toHaveValue('half-written thought')
+  })
+})

@@ -25,9 +25,10 @@ from sqlalchemy.orm import Session
 
 from app.duplicates import duplicate_key, existing_applications, normalize
 from app.geo import place_label, search_key
-from app.models import Application, ApplicationStatus, City, Country, State, StatusChange, WorkMode
+from app.models import Application, ApplicationContact, ApplicationStatus, City, Country, State, StatusChange, WorkMode
+from app.contacts import MAX_CONTACTS, parse_contacts_cell
 from app.tags import parse_tag_cell
-from app.schemas import MAX_ROUNDS, ApplicationCreate, check_rounds, check_salary_range
+from app.schemas import MAX_ROUNDS, ApplicationCreate, ContactIn, check_rounds, check_salary_range
 
 MAX_BYTES = 2_000_000
 MAX_ROWS = 1000
@@ -40,7 +41,7 @@ HEADERS: dict[str, str] = {
         ("country", "country"), ("state", "state"), ("city", "city"), ("work mode", "work_mode"),
         ("salary min", "salary_min"), ("salary max", "salary_max"), ("resume version", "resume_version"),
         ("interview round", "interview_round"), ("interview rounds total", "interview_rounds_total"),
-        ("notes", "notes"), ("status history", "history"), ("archived", "archived"), ("tags", "tags"),
+        ("notes", "notes"), ("status history", "history"), ("archived", "archived"), ("tags", "tags"), ("contacts", "contacts"),
     ]},
     # Friendly spellings other spreadsheets tend to use.
     "employer": "company", "organisation": "company", "organization": "company",
@@ -107,12 +108,17 @@ def _clean(value: str | None) -> str:
     return (value or "").strip()
 
 
-def _text(value: str | None) -> str | None:
-    """A text cell: trimmed, blank is None, and the apostrophe the export puts before a '=' or '+' is taken off again."""
-    text = _clean(value)
+def _unneutralised(text: str) -> str:
+    """Takes off the apostrophe the export puts before a cell that starts with '=', '+', '-' or '@' (so a spreadsheet
+    does not run it as a formula). It is only ever at the very start of the cell."""
     if len(text) > 1 and text[0] == "'" and text[1] in _FORMULA_STARTERS:
-        text = text[1:]
-    return text or None
+        return text[1:]
+    return text
+
+
+def _text(value: str | None) -> str | None:
+    """A text cell: trimmed, blank is None, and the export's formula-protecting apostrophe is taken off again."""
+    return _unneutralised(_clean(value)) or None
 
 
 def parse_date(value: str) -> date | None:
@@ -207,6 +213,39 @@ def _history(raw: str, status: ApplicationStatus) -> list[tuple[ApplicationStatu
             return None
         entries.append((ApplicationStatus(match[1]), datetime(day.year, day.month, day.day, 12, tzinfo=UTC)))
     return entries if entries and entries[-1][0] == status else None
+
+
+def _contacts(cell: str, note) -> list[ApplicationContact]:
+    """The Contacts cell as contacts. A contact with no name is skipped; an email or link that is not valid is left
+    empty; each is reported. Past the limit the rest are left out."""
+    contacts: list[ApplicationContact] = []
+    for name, title, email, linkedin in parse_contacts_cell(cell):
+        if not name:
+            note("a contact with no name was left out")
+            continue
+        if len(contacts) == MAX_CONTACTS:
+            note(f"only {MAX_CONTACTS} contacts are kept, so '{name[:30]}' and any after it were left out")
+            break
+        values = {"name": name, "title": title, "email": email, "linkedin_url": linkedin}
+        for _ in range(4):  # drop the optional values that are not valid, one by one, until what is left is
+            try:
+                valid = ContactIn.model_validate(values)
+                break
+            except ValidationError as error:
+                bad = {str(e["loc"][0]) for e in error.errors() if e["loc"]} - {"name"}
+                if not bad:
+                    valid = None
+                    break
+                for field in bad:
+                    note(f"the contact {name[:30]}'s {'LinkedIn link' if field == 'linkedin_url' else field} is not valid, so it was left empty")
+                    values[field] = ""
+        else:
+            valid = None
+        if valid is None:
+            note(f"the contact '{name[:30]}' could not be read, so it was left out")
+            continue
+        contacts.append(ApplicationContact(**valid.model_dump()))
+    return contacts
 
 
 def _archived_at(raw: str) -> datetime | None:
@@ -367,7 +406,7 @@ def import_csv(db: Session, user_id: int, data: bytes, skip_duplicates: bool = T
             "interview_rounds_total": total,
             "notes": _text(cells.get("notes")),
         }
-        tags, tag_problems = parse_tag_cell(cells.get("tags", ""))
+        tags, tag_problems = parse_tag_cell(_unneutralised(cells.get("tags", "")))
         for problem in tag_problems:
             note(problem)
         if date_applied is None and status != ApplicationStatus.SAVED:
@@ -384,6 +423,8 @@ def import_csv(db: Session, user_id: int, data: bytes, skip_duplicates: bool = T
 
         application = Application(**{**body.model_dump(exclude={"tags"}), "country_id": country_id, "city_id": city_id}, user_id=user_id)
         application.set_tags(tags)
+        for contact in _contacts(_unneutralised(cells.get("contacts", "")), note):
+            application.contacts.append(contact)
         application.archived_at = _archived_at(cells.get("archived", ""))
         history = _history(cells.get("history", ""), body.status) if cells.get("history") else None
         if cells.get("history") and history is None:

@@ -2,6 +2,7 @@ from datetime import date, datetime
 from typing import Annotated
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     BeforeValidator,
     ConfigDict,
@@ -13,6 +14,7 @@ from pydantic import (
 )
 
 from app.models import ApplicationStatus, WorkMode
+from app.contacts import check_text
 from app.tags import normalize_tags
 
 
@@ -157,11 +159,11 @@ PlaceId = Annotated[int, Field(strict=True, ge=1)] | None
 Round = Annotated[int, Field(strict=True, ge=1, le=MAX_ROUNDS)] | None
 
 
-def _check_http_url(v: str | None) -> str | None:
+def _check_http_url(v: str | None, what: str = "Job link") -> str | None:
     # Only http(s). The frontend renders this as a clickable link, and a stored
     # "javascript:..." URL would run script when clicked (stored XSS).
     if v is not None and not v.lower().startswith(("http://", "https://")):
-        raise ValueError("Job link must start with http:// or https://")
+        raise ValueError(f"{what} must start with http:// or https://")
     return v
 
 
@@ -326,6 +328,52 @@ class ImportResultOut(BaseModel):
     adjusted: list[ImportRowNote]  # imported, but a value was left empty or defaulted
 
 
+def _contact_text(max_length: int):
+    """Optional contact text: trimmed, blank becomes None, no pipe or line break (the CSV's separators)."""
+    return Annotated[
+        Annotated[str, Field(max_length=max_length)] | None,
+        BeforeValidator(_blank_to_none),
+        AfterValidator(check_text),
+    ]
+
+
+_ContactEmail = Annotated[EmailStr | None, BeforeValidator(_blank_to_none), AfterValidator(check_text)]
+
+
+class ContactIn(BaseModel):
+    """Create a contact. Only the name is required: you may know a recruiter's name and nothing else."""
+
+    name: Annotated[str, Field(min_length=1, max_length=200), BeforeValidator(lambda v: v.strip() if isinstance(v, str) else v), AfterValidator(check_text)]
+    title: _contact_text(100) = None
+    email: _ContactEmail = None  # judged by the server, as on every form: its own message is shown
+    linkedin_url: _contact_text(2048) = None
+
+    @field_validator("linkedin_url")
+    @classmethod
+    def linkedin_is_http(cls, v: str | None) -> str | None:
+        return _check_http_url(v, "LinkedIn link")
+
+
+class ContactUpdate(BaseModel):
+    """PATCH: only what is sent changes, and null clears an optional field (a name cannot be cleared)."""
+
+    name: Annotated[str, Field(min_length=1, max_length=200), BeforeValidator(lambda v: v.strip() if isinstance(v, str) else v), AfterValidator(check_text)] | None = None
+    title: _contact_text(100) = None
+    email: _ContactEmail = None
+    linkedin_url: _contact_text(2048) = None
+
+    @field_validator("linkedin_url")
+    @classmethod
+    def linkedin_is_http(cls, v: str | None) -> str | None:
+        return _check_http_url(v, "LinkedIn link")
+
+    @model_validator(mode="after")
+    def name_not_null(self) -> "ContactUpdate":
+        if "name" in self.model_fields_set and self.name is None:
+            raise ValueError("name cannot be null")
+        return self
+
+
 class StatusChangeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -363,8 +411,19 @@ class ApplicationOut(BaseModel):
     updated_at: datetime
 
 
+class ContactOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    title: str | None
+    email: str | None
+    linkedin_url: str | None
+
+
 class ApplicationDetail(ApplicationOut):
     history: list[StatusChangeOut]
+    contacts: list[ContactOut]  # only here, not in the list: they are detail, not at-a-glance
 
 
 class ApplicationList(BaseModel):

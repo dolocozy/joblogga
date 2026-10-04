@@ -45,6 +45,7 @@ export function makeDetail(overrides: Partial<ApplicationDetail> = {}): Applicat
   return {
     ...makeApplication(overrides),
     history: [{ id: 1, from_status: null, to_status: 'applied', changed_at: '2026-03-01T12:00:00Z' }],
+    contacts: [],
     ...overrides,
   }
 }

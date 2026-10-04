@@ -2,6 +2,7 @@ import csv
 import io
 from collections.abc import Iterable
 
+from app.contacts import contact_line
 from app.models import Application
 
 COLUMNS = [
@@ -22,6 +23,7 @@ COLUMNS = [
     "Interview round",
     "Interview rounds total",
     "Tags",
+    "Contacts",
     "Notes",
     "Status history",
     "Archived",
@@ -78,6 +80,7 @@ def applications_to_csv(applications: Iterable[Application]) -> str:
                 "" if a.interview_round is None else a.interview_round,
                 "" if a.interview_rounds_total is None else a.interview_rounds_total,
                 safe_text("; ".join(a.tags)),  # a tag cannot contain ';', so this reads back exactly
+                safe_text("\n".join(contact_line(c.name, c.title, c.email, c.linkedin_url) for c in a.contacts)),  # one line each
                 safe_text(a.notes),
                 _history(a),
                 _iso(a.archived_at.date()) if a.archived_at else "",  # the day it was archived; archived applications are exported like any other

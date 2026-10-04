@@ -119,6 +119,7 @@ Interactive docs are at http://localhost:8000/docs when the backend is running.
 | GET | `/geo/countries`, `/geo/states?country_id=`, `/geo/cities?country_id=&q=` | The place picker's lookups, read from our own database (login required) |
 | GET | `/applications/export.csv` | Every application as a CSV file (your backup); includes status history; ignores list filters |
 | POST | `/applications/import` | Import a CSV (sent as `text/csv`; `skip_duplicates`, default true). Adds what it can and returns what it added, skipped and changed |
+| POST / PATCH / DELETE | `/applications/{id}/contacts[/{contact_id}]` | Add, change or remove a contact (the detail response lists them) |
 | GET | `/applications/tags` | Every tag you have used, with how many applications carry it |
 | GET | `/applications/duplicates` | Other applications with the same company and role (`company`, `role`, optional `exclude_id`), for the duplicate warning |
 | GET | `/applications/upcoming` | Open applications with a follow-up overdue or due within `days` (default 7) |
@@ -133,6 +134,7 @@ Every `/applications` query is scoped to the logged-in user; another user's appl
 
 - `users`: email (unique), bcrypt hash, `email_verified_at` (empty until verified), `reminder_emails` (off until switched on) and `reminder_last_sent_on`, `session_version` (random at signup; bumped by a password reset to end earlier sessions).
 - `countries`, `states`, `cities`: the place data (see Places), loaded once by a migration. Their ids are the dataset's own.
+- `application_contacts`: the people you have dealt with at a company, per application (name, title, email, LinkedIn link). Removed with the application.
 - `application_tags`: one row per application and tag, tags stored normalised (see Tags). Removed with the application.
 - `password_reset_tokens`, `email_verification_tokens`: hash of each token, its expiry, and when it was used.
 - `applications`: belongs to a user; company, role, job link, date applied (empty while Saved), resume version, salary min/max, location (readable text) with `country_id` and `city_id` pointing at the place tables, work mode (remote, hybrid or in person; empty means not specified), `archived_at` (empty unless archived), interview round and total rounds (optional, e.g. round 2 of 3; kept as a record after the application moves on, and with no effect on status or any statistic), notes, current status, follow-up date.
@@ -152,6 +154,14 @@ The location field is a country and a city picked from real data, with a way to 
 - **Tests** run against a tiny stand-in dataset (with duplicate names on purpose) so the suite stays fast; one file checks the real files' checksums and row counts and loads them through the migration on both databases.
 
 Place data: countries-states-cities-database, ODbL v1.0, credited on the landing page. The data files stay under the ODbL; the rest of the repository is MIT.
+
+## Contacts
+
+Who you have actually talked to at a company: recruiter, hiring manager, referral. An application can have up to 10 contacts, each a name (required) plus an optional role or title (free text, since titles vary too much for a list), email and LinkedIn link.
+
+- **Detail page only.** They are detail, not at-a-glance like tags or work mode, so they appear on the detail page and not in the list or board. Each add, edit and remove is saved on its own straight away (the application form does not carry them), so adding a contact never disturbs what you are typing in the form.
+- **Validation** follows the rest of the app: the server judges an email address (its own message is shown), the LinkedIn link must be `http(s)`, and links are only rendered if they are safe.
+- **CSV:** one `Contacts` column, one contact per line as `Name | Title | email | LinkedIn link` (empty fields kept in place). A name-and-role summary would have dropped emails and links from what is also your backup, and the import promises a round trip, so every field is written and the import reads it back (an invalid email or link is left empty and reported, a contact with no name is skipped and reported). The price: those four fields cannot contain a pipe or a line break.
 
 ## Tags
 

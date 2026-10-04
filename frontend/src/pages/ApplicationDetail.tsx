@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, deleteApplication, getApplication, updateApplication } from '../api'
 import type { ApplicationDetail as Detail, ApplicationInput } from '../api'
 import ApplicationForm from '../components/ApplicationForm'
+import ContactsSection from '../components/ContactsSection'
 import MarkApplied from '../components/MarkApplied'
 import PostingLink from '../components/PostingLink'
 import RoundsNote from '../components/RoundsNote'
@@ -163,6 +164,7 @@ export default function ApplicationDetail() {
         </div>
 
         <aside className="space-y-8">
+          <ContactsSection applicationId={app.id} contacts={app.contacts} onChange={(contacts) => setApp({ ...app, contacts })} />
           <section>
             <h2 className="mb-2 border-b-2 border-ink pb-2 text-lg">Status history</h2>
             <ol>

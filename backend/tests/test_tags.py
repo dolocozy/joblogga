@@ -325,3 +325,14 @@ def test_a_bad_tag_in_an_import_is_dropped_and_reported_but_the_row_is_kept(clie
     assert result["added"] == 1
     assert any("longer than" in n["reason"] for n in result["adjusted"])
     assert client.get("/applications", headers=auth).json()["items"][0]["tags"] == ["ok"]
+
+
+def test_a_tag_that_starts_with_a_formula_character_survives_the_round_trip(client, auth):
+    from tests.conftest import make_user
+
+    create(client, auth, tags=["=hot", "+one", "regular"])
+    assert export_rows(client, auth)["Acme Corp"]["Tags"].startswith("'+one")  # neutralised for the spreadsheet
+    fresh = make_user(client, email="fresh@example.com")
+    do_import(client, fresh, client.get("/applications/export.csv", headers=auth).content)
+    (restored,) = client.get("/applications", headers=fresh).json()["items"]
+    assert restored["tags"] == ["+one", "=hot", "regular"]
