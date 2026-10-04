@@ -346,3 +346,13 @@ def test_tags_come_back_in_one_order_whatever_the_databases_collation(client, au
     assert app["tags"] == expected
     assert client.get(f"/applications/{app['id']}", headers=auth).json()["tags"] == expected
     assert client.get("/applications", headers=auth).json()["items"][0]["tags"] == expected
+
+
+def test_the_tags_property_sorts_whatever_order_the_rows_arrive_in():
+    """No database involved: the rows are handed over out of order, as a database with a different collation could, and the
+    property must still give code-point order. (The test above only bites on Postgres; this one bites everywhere.)"""
+    from app.models import Application, ApplicationTag
+
+    application = Application()
+    application.tag_links = [ApplicationTag(tag=t) for t in ("zebra", "=equals", "é", "+plus", "apple")]
+    assert application.tags == ["+plus", "=equals", "apple", "zebra", "é"]
