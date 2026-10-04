@@ -1,10 +1,15 @@
 import csv
 import io
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
 BASE = {"company": "Acme Corp", "role": "Backend Engineer"}
+
+
+def utc_today() -> str:
+    """The day an application was archived, as the export writes it: UTC, which differs from the local date in the evening."""
+    return datetime.now(UTC).date().isoformat()
 
 
 def create(client, auth, **fields):
@@ -190,7 +195,7 @@ def test_the_export_includes_archived_applications_and_says_when(client, auth):
     rows = export_rows(client, auth)
     assert set(rows) == {"Active", "Old"}
     assert rows["Active"]["Archived"] == ""
-    assert rows["Old"]["Archived"] == date.today().isoformat()
+    assert rows["Old"]["Archived"] == utc_today()
 
 
 def test_duplicates_still_see_archived_applications(client, auth):
@@ -265,7 +270,7 @@ def test_exporting_then_importing_restores_what_was_archived(client, auth):
     assert do_import(client, fresh, client.get("/applications/export.csv", headers=auth).content)["added"] == 2
     assert companies(client, fresh) == ["Active"]
     assert companies(client, fresh, archived="only") == ["Old"]
-    assert export_rows(client, fresh)["Old"]["Archived"] == date.today().isoformat()
+    assert export_rows(client, fresh)["Old"]["Archived"] == utc_today()
 
 
 @pytest.mark.parametrize("cell,archived", [("2026-02-03", True), ("yes", True), ("TRUE", True), ("", False), ("no", False), ("maybe", False)])
