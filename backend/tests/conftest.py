@@ -10,6 +10,15 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 # duplicate city names on purpose); the real dataset is checked once, by tests/test_geo_data.py.
 os.environ["JOBLOGGA_GEO_DIR"] = os.path.join(os.path.dirname(__file__), "fixtures", "geo")
 
+# Test-only: hash passwords at bcrypt's cheapest cost. Nearly every test signs a user up and logs in, which is a hash and a
+# verify, and at the production cost (12, bcrypt's default, which the app code uses untouched) that was about half a second
+# of every test: the suite's 1000+ tests took long enough to hit CI's 10-minute limit. The cost is stored inside each hash,
+# so verifying still works, and this runs before `app` is imported so DUMMY_HASH is cheap too. No test depends on the cost.
+import bcrypt
+
+_real_gensalt = bcrypt.gensalt
+bcrypt.gensalt = lambda rounds=4, prefix=b"2b": _real_gensalt(rounds, prefix)
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
