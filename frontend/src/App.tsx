@@ -6,6 +6,7 @@ import { GuestRoute, ProtectedRoute } from './components/RouteGuards'
 import Account from './pages/Account'
 import ApplicationDetail from './pages/ApplicationDetail'
 import Applications from './pages/Applications'
+import Faq from './pages/Faq'
 import ForgotPassword from './pages/ForgotPassword'
 import Home from './pages/Home'
 import Login from './pages/Login'
@@ -27,6 +28,8 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/" element={<Home />} />
+        {/* Public, and the same page whether or not you are logged in. */}
+        <Route path="/faq" element={<Faq />} />
         {/* Open to everyone, logged in or not: a reset link must work whichever browser session it lands in. */}
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />

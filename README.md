@@ -12,6 +12,8 @@ A multi-user job application tracker: log applications, move them through a stat
 
 *Every screenshot here uses a demo account with fictional data.*
 
+A public FAQ at `/faq` answers the common questions (what the statuses mean, how the response rate is worked out, reminders, privacy, deleting an account) without needing a login.
+
 ## Built with Claude Code
 
 This project is built with [Claude Code](https://claude.com/claude-code) as a development tool. I direct the design and review every decision; Claude Code writes much of the code alongside me.
@@ -123,6 +125,7 @@ The rules that keep it from looking generic are enforced by a test (`frontend/sr
 | `/login`, `/signup` | Stand-alone forms |
 | `/forgot-password`, `/reset-password` | Request a reset link by email / choose a new password (open to everyone, logged in or not) |
 | `/verify-email` | Where the verification link in the signup email lands (open to everyone) |
+| `/faq` | Frequently asked questions, in plain language (open to everyone, logged in or not) |
 | `/account` | Who you are, email reminders, the weekly goal, CSV export and import, and deleting your account |
 | `/applications`, `/applications/new`, `/applications/:id` | Your applications, as a ledger list, a Kanban board (`?view=board`), or the jobs you have saved but not applied to (`?view=saved`) |
 | `/dashboard` | Response rate and charts |

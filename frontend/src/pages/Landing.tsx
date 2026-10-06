@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import LoginForm from '../components/LoginForm'
 import ThemeToggle from '../components/ThemeToggle'
+import SiteFooter from '../components/SiteFooter'
 import StatusBadge from '../components/StatusBadge'
 import Wordmark from '../components/Wordmark'
 import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader } from '../components/Ledger'
@@ -51,6 +52,9 @@ export default function Landing() {
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 md:px-8">
         <Wordmark />
         <div className="flex items-center gap-3">
+          <Link to="/faq" className="text-sm font-semibold text-ink-soft hover:text-ink">
+            FAQ
+          </Link>
           <ThemeToggle />
           <Link to="/signup" className="btn btn-secondary btn-sm">
             Create an account
@@ -139,25 +143,7 @@ export default function Landing() {
         </Section>
       </main>
 
-      <footer className="border-t border-rule">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-8 text-sm text-ink-soft md:px-8">
-          <p>
-            Joblogga is open source under the MIT license.{' '}
-            <a href="https://github.com/dolocozy/joblogga" className="link" target="_blank" rel="noopener noreferrer">
-              View the source on GitHub
-            </a>
-            .
-          </p>
-          <p>
-            Place data from the{' '}
-            <a href="https://github.com/dr5hn/countries-states-cities-database" className="link" target="_blank" rel="noopener noreferrer">
-              countries-states-cities database
-            </a>{' '}
-            (ODbL).
-          </p>
-          <p>Built with Claude Code as a development tool.</p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   )
 }
