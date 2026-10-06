@@ -121,8 +121,8 @@ export default function Landing() {
             there?&rdquo;, this is for you.
           </p>
           <p>
-            I built Joblogga during my own job search, because a spreadsheet stopped being enough. It is the tool I
-            wanted while I was applying.
+            Joblogga is built to help people keep track of their job applications once a spreadsheet stops being
+            enough. It is meant to be the one place you check while you are applying.
           </p>
         </Section>
 

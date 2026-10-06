@@ -33,9 +33,10 @@ describe('landing page at /', () => {
     expect(screen.getByLabelText('Password')).toBeInTheDocument()
   })
 
-  it('includes the personal note about being built during a real job search', async () => {
+  it('says what it is built for, without an origin story', async () => {
     renderApp('/')
-    expect(await screen.findByText(/built joblogga during my own job search/i)).toBeInTheDocument()
+    expect(await screen.findByText(/built to help people keep track of their job applications/i)).toBeInTheDocument()
+    expect(screen.queryByText(/my own job search/i)).not.toBeInTheDocument()
   })
 
   it('links to sign up (twice: header and under the form)', async () => {

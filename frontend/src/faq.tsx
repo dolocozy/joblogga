@@ -5,7 +5,7 @@ export const FAQS: { question: string; answer: ReactNode }[] = [
   {
     question: 'What is Joblogga, and who is it for?',
     answer:
-      'Joblogga is a logbook for a job search: each application, where it stands, when you applied, which resume you sent and when to follow up. It is for people in the middle of a real search who are sending applications faster than they can remember them. It is open source, and was built during its author’s own job search.',
+      'Joblogga is a logbook for a job search: each application, where it stands, when you applied, which resume you sent and when to follow up. It is for people in the middle of a real search who are sending applications faster than they can remember them. It is open source, and built to help people keep track of their job applications.',
   },
   {
     question: 'Is my data private? Who can see my applications?',
