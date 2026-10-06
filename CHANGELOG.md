@@ -2,6 +2,37 @@
 
 Versions follow [semantic versioning](https://semver.org). Details of the reasoning behind each change are in the README and in `docs/`.
 
+## v0.1.4
+
+### Added
+
+- **Contacts per application.** The people you have dealt with at a company, as many as you need up to 10 per application: a name, an optional role or title (free text, since titles vary too much for a list), an email and a LinkedIn link. They are added, edited and removed on the application's detail page, each saved on its own, and are not shown on the list or board, which stay at-a-glance. The CSV export has a `Contacts` column with one line per contact, and the import reads it back, dropping an invalid email or link with a note instead of failing the row. Deleting an application deletes its contacts.
+- **Salary currency.** Salaries now carry a currency: an ISO 4217 code chosen from a list on the form (common currencies first), shown wherever a salary is ("110,000–130,000 USD") and in a `Salary currency` column that the CSV import reads back. Every existing salary was set to USD by the migration, so nothing is left blank or ambiguous (an imported row with no currency is also taken as USD, and the import says so). There is no conversion, no exchange rates and no external service: this is a record of what was entered.
+- **Offer comparison.** `/offers` shows applications at Offer, Offer accepted and Offer declined side by side, one column each, up to four at a time (a chooser appears if there are more): status, salary and currency, work mode, location, interview rounds, when you applied, the day the offer was recorded and how many days after applying that was, tags, the posting and notes. It is linked from the dashboard once you have two offers. It is read-only, built from what is already recorded, and says so when offers are in different currencies instead of converting them.
+- **Response rate by resume version.** A dashboard section in the same chart-and-table card as time in each stage. It uses exactly the existing response-rate definition. Versions are grouped ignoring case and extra spaces, applications with no version form an explicit "Not specified" group so the groups add up to every application, and a rate is shown only once a version has 5 applications that count toward it, because one lucky reply is not a 100% resume. Below that a version stays in the table with its raw counts ("1 of 3, too few to judge").
+- **Weekly goal.** An optional number of applications per week (1 to 100) on the Account page, next to the reminders. The dashboard shows this week's applications against it as a progress bar with a mark for where on pace would be. What counts is applications dated this Monday-to-Sunday week up to today, in any status except Saved, archived ones included. Pace is judged on finished days, so nobody is behind on Monday morning, and once the goal is met the question is settled. With no goal set nothing about one appears anywhere. There is deliberately no streak (see Decided against).
+- **Search across all words.** The search box already looked in the company, role, notes, tags and location, but a query had to match as one phrase inside one field, so "acme backend" found nothing. Now every word must be found, each in any of those fields, still case-insensitive and still layered on top of the other filters. The placeholder names every field it searches.
+- **Dark mode.** A dark theme for the whole app, the dashboard charts included. It follows the device's setting by default and keeps following it, and a Theme button on every page, including the landing and sign-in pages, steps through System, Light and Dark. The choice is saved in the browser only. A small script applies it before the page paints, so there is no flash of the wrong theme on load. Every colour pairing was contrast-checked and a test guards the palette.
+- **A public FAQ.** `/faq` answers thirteen common questions in plain language (what the statuses mean, how the response rate is worked out, reminders, privacy, import and export, archiving, tags, deleting an account, missing emails, dark mode, how to report a problem), with no login needed. It is linked from the landing page, the app header and the sign-in and sign-up pages.
+- **Refreshed README screenshots, in light and dark.** New pictures of the list, board, dashboard and offers comparison in both themes, shown in the reader's own GitHub theme. They come from a fictional demo account, and `docs/screenshots` holds the seed script, the capture script and a short note, so they can be retaken after a release. The seed script refuses to touch the development database, and the capture script refuses to run against any account but the demo one.
+
+### Decided against
+
+- **No streak** ("3 weeks in a row"). An honest streak needs the goal as it was in each past week, otherwise raising your goal would quietly break weeks that met the old one, which means storing a goal history. And a counter you can lose is pressure that bites hardest in the busiest weeks of a search. The weekly chart already shows consistency without scoring it.
+
+### Fixed
+
+- Tags came back in an order that could differ between SQLite and Postgres, because each database sorted them by its own collation. They are now sorted by code point in the application, so both agree.
+- The test suite had grown past CI's 10-minute limit, and the Postgres job was being cancelled. Tests now hash passwords at bcrypt's cheapest cost, set in the test configuration only; production hashing is unchanged. The suite went from about 335 seconds to about 46 locally, and CI takes about 3 minutes.
+
+### Database migrations
+
+Applied automatically on the next start. All are backward compatible with the previous release running during the deploy.
+
+- `0012`: the `application_contacts` table, empty at first. Contacts go with their application (`ON DELETE CASCADE`).
+- `0013`: `applications.salary_currency`, not null with a default of `USD`, so every existing application gets USD in the same statement that adds the column. The previous release's inserts, which do not mention the column, still work.
+- `0014`: nullable `users.weekly_goal`. Nobody has a goal until they set one.
+
 ## v0.1.3
 
 ### Added

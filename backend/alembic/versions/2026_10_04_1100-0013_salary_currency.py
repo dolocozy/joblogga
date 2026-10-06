@@ -3,9 +3,9 @@
 `applications.salary_currency` is NOT NULL with a server default of 'USD', so every existing application gets USD in the
 same statement that adds the column: nothing is left NULL, and nothing is left silently ambiguous.
 
-Why USD is a sound default for existing rows: until now the salary fields had no currency at all, the app was built and used
-by one person in the US, and the picked-place data only arrived in the last release, so the existing figures are USD by
-construction. A row with no salary has a currency that is simply never shown. Nothing is inferred from a row's place (that
+Why USD is the default for existing rows: until now the salary fields had no currency at all, and the picked-place data only
+arrived in the last release, so there is nothing to tell any row apart. A salary entered before this release is taken to be
+USD, and a row with no salary has a currency that is simply never shown. Nothing is inferred from a row's place (that
 would be a guess presented as data); anyone with a salary in another currency can change it on the application.
 
 Backward compatible with the code running during the deploy: the server default means the previous version's INSERTs, which
