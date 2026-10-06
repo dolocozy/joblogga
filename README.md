@@ -4,11 +4,13 @@ A multi-user job application tracker: log applications, move them through a stat
 
 **Live at [joblogga.dolocozy.com](https://joblogga.dolocozy.com)**
 
-![The Joblogga applications list: a ruled ledger with a stage meter per status and an overdue follow-up highlighted](docs/screenshots/applications-list.png)
+![The Joblogga applications list split down the middle: the left half in the light theme, the right half in the dark theme. A ruled ledger with a stage meter per status, tags, and an overdue follow-up highlighted](docs/screenshots/hero-light-dark.png)
+
+*Joblogga has a light and a dark theme. It follows your device's setting by default, and a Theme button on every page overrides it. The picture above is one screenshot, light on the left and dark on the right.*
 
 > **Status: v0.1.3, feature-complete for personal use.** Accounts with email verification, password reset and account deletion, application tracking with status history, saved jobs, interview rounds, tags and archiving, real country and city locations, duplicate warnings, CSV export and import, opt-in follow-up reminder emails, search and filters, a dashboard with response rate and time in each stage, a Kanban board and login rate limiting are all built, tested and deployed. See [Known limitations](#known-limitations).
 
-*Screenshots use fictional demo data.*
+*Every screenshot here uses a demo account with fictional data.*
 
 ## Built with Claude Code
 
@@ -67,12 +69,39 @@ A drop moves the card immediately and puts it back with an error if the server r
 
 ## Screenshots
 
-| | |
-| --- | --- |
-| ![Landing page with the login form beside a sample logbook page](docs/screenshots/landing.png) | ![Kanban board with a column per status](docs/screenshots/kanban-board.png) |
-| **Landing page.** What it is, who it is for, and the login, on one page. | **Kanban board.** Drag a card to change its status (mouse, touch or keyboard). |
-| ![Dashboard with response rate, applications per week, and status breakdown](docs/screenshots/dashboard.png) | |
-| **Dashboard.** Response rate and charts, each with a table view. | |
+Each picture below is shown in your GitHub theme: the light version if GitHub is light, the dark one if it is dark (where a viewer does not support that, the light one is shown). They come from a demo account with made-up companies, seeded by [`docs/screenshots/seed_demo.py`](docs/screenshots/seed_demo.py), and can be retaken after a release by following the [short note beside it](docs/screenshots/README.md).
+
+**Applications list.** A ruled ledger: the stage reached, the place (a city name used in several states, like Springfield or Portland, is told apart by its state), tags, and follow-ups that are due or overdue rise to the top.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/applications-list-dark.png">
+  <img alt="The applications list: a follow-ups panel with one overdue date highlighted, search and filter controls, and ledger rows each with a stage meter, status, applied date and tags" src="docs/screenshots/applications-list-light.png">
+</picture>
+
+**Kanban board.** Drag a card to change its status (mouse, touch or keyboard). The board is a strip of columns that scrolls sideways; six are shown here.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/kanban-board-dark.png">
+  <img alt="The Kanban board with a column per status (Saved, Applied, Screening, Interview, Offer, Offer accepted) and a card for each application, showing tags, interview round and an overdue follow-up" src="docs/screenshots/kanban-board-light.png">
+</picture>
+
+**Dashboard.** This week against your weekly goal, response rate, applications per week, where applications stand, time spent in each stage, and response rate by resume version. Each chart has a table twin; the resume card is shown as its table here, where a version with too few applications reads "too few to judge" instead of a misleading percentage.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
+  <img alt="The dashboard: a progress bar for 3 of 6 applications this week, response rate 45 percent, bar charts of applications per week, status breakdown and average days in each stage, and a table of response rate by resume version" src="docs/screenshots/dashboard-light.png">
+</picture>
+
+**Comparing offers.** Offers side by side, with a note when they are in different currencies (nothing is converted).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/offers-dark.png">
+  <img alt="Two offers compared in columns: a USD offer and a EUR offer, with salary, work mode, location, interview rounds, dates, tags and notes, under a note that the currencies differ" src="docs/screenshots/offers-light.png">
+</picture>
+
+**Landing page.** What it is and who it is for, with the login and a sample logbook page. It looks the same in both themes apart from colour, so there is one picture.
+
+![The landing page: a headline, a short description, the login form, and a sample page of the logbook with made-up companies](docs/screenshots/landing.png)
 
 ## Design
 
