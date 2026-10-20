@@ -1,7 +1,7 @@
 import { NEXT_THEME, THEME_LABELS, useTheme } from '../theme'
 
-// One button that steps System, Light, Dark and back round. It names the current choice in its text (never an icon alone), so
-// it needs no legend, and says what a click does in its tooltip.
+// One button that switches between Light and Dark. It names the current theme in its text (never an icon alone), so it needs no
+// legend, and says what a click does in its tooltip.
 export default function ThemeToggle() {
   const { theme, setTheme } = useTheme()
   return (

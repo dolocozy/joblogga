@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { exportApplicationsCsv, fetchCountries, fetchStates, fetchTags, fetchUpcoming, listApplications, updateApplication, WORK_MODES } from '../api'
@@ -78,6 +79,18 @@ function UpcomingPanel({ reloadKey }: { reloadKey: number }) {
   )
 }
 
+// A filter with its name above it. The name is for sighted people; the control keeps its own accessible name.
+function FilterField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <span aria-hidden className="field-label block">
+        {label}
+      </span>
+      <div className="mt-1">{children}</div>
+    </div>
+  )
+}
+
 export default function Applications() {
   // The list/board/saved choice lives in the URL (?view=board, ?view=saved), so a refresh or a shared link keeps it.
   const [params, setParams] = useSearchParams()
@@ -93,6 +106,7 @@ export default function Applications() {
   const [moving, setMoving] = useState<ReadonlySet<number>>(new Set()) // board cards whose move is being saved
   // Bumped after a status change to refetch the list and the reminders panel.
   const [reloadKey, setReloadKey] = useState(0)
+  const [filtersOpen, setFiltersOpen] = useState(false)
 
   // Changing any filter returns to page 1; otherwise you could be left on a
   // page that no longer exists.
@@ -255,6 +269,8 @@ export default function Applications() {
   const statusFiltering = view === 'list' && status !== ''
   const dateFiltering = view !== 'saved' && (dateFrom !== '' || dateTo !== '') // saved jobs have no applied date
   const filtered = q !== '' || company !== '' || statusFiltering || workMode !== '' || countryId !== '' || tag !== '' || archived !== 'hide' || dateFiltering
+  // How many of the filters in the panel are doing something (search sits outside it, so it is not counted).
+  const panelFilterCount = [company !== '', statusFiltering, workMode !== '', countryId !== '', tag !== '', archived !== 'hide', dateFiltering].filter(Boolean).length
   const badRange = view !== 'saved' && dateFrom !== '' && dateTo !== '' && dateFrom > dateTo
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const firstShown = total === 0 ? 0 : page * PAGE_SIZE + 1
@@ -295,129 +311,154 @@ export default function Applications() {
 
       <UpcomingPanel reloadKey={reloadKey} />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      {/* Search is always in reach; the other filters live in their own panel, closed until asked for. */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
         <input
           type="search"
           placeholder="Search company, role, notes, tags, location"
           aria-label="Search"
           value={filters.q}
           onChange={(e) => setFilter({ q: e.target.value })}
-          className="input sm:col-span-2 lg:col-span-3"
+          className="input min-w-0 flex-1 basis-64"
         />
-        <input
-          type="search"
-          placeholder="Company"
-          aria-label="Company"
-          value={filters.company}
-          onChange={(e) => setFilter({ company: e.target.value })}
-          className={`input ${view === 'list' ? 'lg:col-span-1' : 'lg:col-span-2'}`}
-        />
-        {view === 'list' && (
-          <select
-            value={filters.status}
-            onChange={(e) => setFilter({ status: e.target.value as ApplicationStatus | '' })}
-            aria-label="Filter by status"
-            className="input"
-          >
-            <option value="">All statuses</option>
-            {APPLIED_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {statusLabel(s)}
-              </option>
-            ))}
-          </select>
-        )}
-        <select
-          value={filters.workMode}
-          onChange={(e) => setFilter({ workMode: e.target.value as WorkMode | '' })}
-          aria-label="Filter by work mode"
-          className="input"
+        <button
+          type="button"
+          aria-expanded={filtersOpen}
+          aria-controls="filter-panel"
+          onClick={() => setFiltersOpen((open) => !open)}
+          className="btn btn-secondary whitespace-nowrap"
         >
-          <option value="">All modes</option>
-          {WORK_MODES.map((m) => (
-            <option key={m} value={m}>
-              {workModeLabel[m]}
-            </option>
-          ))}
-        </select>
-        {countries.length > 0 && (
-          <select
-            value={filters.countryId}
-            // Changing the country clears the state, which belongs to it.
-            onChange={(e) => setFilter({ countryId: e.target.value === '' ? '' : Number(e.target.value), stateId: '' })}
-            aria-label="Filter by country"
-            className="input lg:col-span-2"
-          >
-            <option value="">All countries</option>
-            {countries.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        )}
-        {states.length > 0 && (
-          <select
-            value={filters.stateId}
-            onChange={(e) => setFilter({ stateId: e.target.value === '' ? '' : Number(e.target.value) })}
-            aria-label="Filter by state or province"
-            className="input lg:col-span-2"
-          >
-            <option value="">All states and provinces</option>
-            {states.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        )}
-        {tags.length > 0 && (
-          <select value={filters.tag} onChange={(e) => setFilter({ tag: e.target.value })} aria-label="Filter by tag" className="input">
-            <option value="">All tags</option>
-            {tags.map((t) => (
-              <option key={t.tag} value={t.tag}>
-                {t.tag} ({t.count})
-              </option>
-            ))}
-          </select>
-        )}
-        <select
-          value={filters.archived}
-          onChange={(e) => setFilter({ archived: e.target.value as Filters['archived'] })}
-          aria-label="Archived applications"
-          className="input"
-        >
-          <option value="hide">Hide archived</option>
-          <option value="include">Include archived</option>
-          <option value="only">Only archived</option>
-        </select>
-        {view !== 'saved' && (
-        <label className="flex items-center gap-2 text-sm text-ink-soft lg:col-span-2">
-          Applied from
-          <input
-            type="date"
-            value={filters.dateFrom}
-            onChange={(e) => setFilter({ dateFrom: e.target.value })}
-            className="input flex-1"
-          />
-        </label>
-        )}
-        {view !== 'saved' && (
-        <label className="flex items-center gap-2 text-sm text-ink-soft lg:col-span-2">
-          to
-          <input
-            type="date"
-            value={filters.dateTo}
-            onChange={(e) => setFilter({ dateTo: e.target.value })}
-            className="input flex-1"
-          />
-        </label>
-        )}
+          {panelFilterCount > 0 ? `Filters (${panelFilterCount})` : 'Filters'}
+        </button>
         {filtered && (
-          <button type="button" onClick={() => setFilter(NO_FILTERS)} className="link self-center justify-self-start text-sm lg:col-span-2">
+          <button type="button" onClick={() => setFilter(NO_FILTERS)} className="link text-sm">
             Clear filters
           </button>
         )}
+      </div>
+
+      {/* Hidden with CSS rather than left out, so what you chose stays put while the panel is closed. */}
+      <div id="filter-panel" className={`sheet mb-4 p-4 ${filtersOpen ? '' : 'hidden'}`}>
+        <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+          <FilterField label="Company">
+            <input
+              type="search"
+              placeholder="Part of a company name"
+              aria-label="Company"
+              value={filters.company}
+              onChange={(e) => setFilter({ company: e.target.value })}
+              className="input"
+            />
+          </FilterField>
+          {view === 'list' && (
+            <FilterField label="Status">
+              <select
+                value={filters.status}
+                onChange={(e) => setFilter({ status: e.target.value as ApplicationStatus | '' })}
+                aria-label="Filter by status"
+                className="input"
+              >
+                <option value="">All statuses</option>
+                {APPLIED_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {statusLabel(s)}
+                  </option>
+                ))}
+              </select>
+            </FilterField>
+          )}
+          <FilterField label="Work mode">
+            <select
+              value={filters.workMode}
+              onChange={(e) => setFilter({ workMode: e.target.value as WorkMode | '' })}
+              aria-label="Filter by work mode"
+              className="input"
+            >
+              <option value="">All modes</option>
+              {WORK_MODES.map((m) => (
+                <option key={m} value={m}>
+                  {workModeLabel[m]}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+          {countries.length > 0 && (
+            <FilterField label="Country">
+              <select
+                value={filters.countryId}
+                // Changing the country clears the state, which belongs to it.
+                onChange={(e) => setFilter({ countryId: e.target.value === '' ? '' : Number(e.target.value), stateId: '' })}
+                aria-label="Filter by country"
+                className="input"
+              >
+                <option value="">All countries</option>
+                {countries.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </FilterField>
+          )}
+          {states.length > 0 && (
+            <FilterField label="State or province">
+              <select
+                value={filters.stateId}
+                onChange={(e) => setFilter({ stateId: e.target.value === '' ? '' : Number(e.target.value) })}
+                aria-label="Filter by state or province"
+                className="input"
+              >
+                <option value="">All states and provinces</option>
+                {states.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </FilterField>
+          )}
+          {tags.length > 0 && (
+            <FilterField label="Tag">
+              <select value={filters.tag} onChange={(e) => setFilter({ tag: e.target.value })} aria-label="Filter by tag" className="input">
+                <option value="">All tags</option>
+                {tags.map((t) => (
+                  <option key={t.tag} value={t.tag}>
+                    {t.tag} ({t.count})
+                  </option>
+                ))}
+              </select>
+            </FilterField>
+          )}
+          <FilterField label="Archived">
+            <select
+              value={filters.archived}
+              onChange={(e) => setFilter({ archived: e.target.value as Filters['archived'] })}
+              aria-label="Archived applications"
+              className="input"
+            >
+              <option value="hide">Hide archived</option>
+              <option value="include">Include archived</option>
+              <option value="only">Only archived</option>
+            </select>
+          </FilterField>
+          {view !== 'saved' && (
+            <div className="sm:col-span-2 lg:col-span-3">
+              <span aria-hidden className="field-label block">
+                Date applied
+              </span>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <label className="flex items-center gap-2 whitespace-nowrap text-sm text-ink-soft">
+                  Applied from
+                  <input type="date" value={filters.dateFrom} onChange={(e) => setFilter({ dateFrom: e.target.value })} className="input" />
+                </label>
+                <label className="flex items-center gap-2 whitespace-nowrap text-sm text-ink-soft">
+                  to
+                  <input type="date" value={filters.dateTo} onChange={(e) => setFilter({ dateTo: e.target.value })} className="input" />
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {badRange && (

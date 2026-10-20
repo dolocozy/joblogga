@@ -109,6 +109,30 @@ describe('filters', () => {
     expect(await screen.findByText(/start date is after the end date/i)).toBeInTheDocument()
   })
 
+  it('keeps the filters in a panel that is closed until asked for, and counts the ones that are on', async () => {
+    const user = userEvent.setup()
+    mockList([])
+    renderApp('/applications')
+    await screen.findByText(/no applications yet/i)
+
+    const toggle = screen.getByRole('button', { name: 'Filters' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(document.getElementById('filter-panel')).toHaveClass('hidden')
+    expect(screen.getByRole('searchbox', { name: 'Search' })).toBeInTheDocument() // search stays outside the panel
+
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(document.getElementById('filter-panel')).not.toHaveClass('hidden')
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by work mode' }), 'Remote')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Archived applications' }), 'Include archived')
+    expect(await screen.findByRole('button', { name: 'Filters (2)' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Filters (2)' })) // closing it keeps what was chosen
+    expect(document.getElementById('filter-panel')).toHaveClass('hidden')
+    expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument()
+  })
+
   it('shows a "no matches" state when filters exclude everything, and Clear filters resets', async () => {
     const user = userEvent.setup()
     const seen = mockList([])
