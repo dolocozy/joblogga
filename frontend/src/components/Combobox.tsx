@@ -114,7 +114,7 @@ export default function Combobox({ control, options, selected, onSelect, onInput
         id={listId}
         role="listbox"
         hidden={!listed || options.length === 0}
-        className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-field border border-pencil bg-sheet py-1"
+        className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-field border border-pencil bg-ticket py-1"
       >
         {options.map((option, i) => (
           <li
@@ -128,7 +128,7 @@ export default function Combobox({ control, options, selected, onSelect, onInput
               choose(option)
             }}
             onMouseEnter={() => setActive(i)}
-            className={`cursor-pointer px-3 py-1.5 text-sm ${i === active ? 'bg-pine/10' : ''}`}
+            className={`cursor-pointer px-3 py-1.5 text-sm ${i === active ? 'bg-cobalt/10' : ''}`}
           >
             {option.label}
           </li>

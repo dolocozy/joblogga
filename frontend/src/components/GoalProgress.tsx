@@ -34,7 +34,7 @@ export default function GoalProgress({ goal }: { goal: Goal }) {
         aria-valuetext={`${done} of ${target} applications`}
         className="relative mt-3 h-2 bg-rule"
       >
-        <div className="h-full bg-pine" style={{ width: `${filled}%` }} />
+        <div className="h-full bg-cobalt" style={{ width: `${filled}%` }} />
         {/* Where on pace would be by now. Hidden once the goal is met, and on Monday when it sits at zero. */}
         {!reached && marker > 0 && <div aria-hidden data-testid="pace-marker" className="absolute -top-1 h-4 w-0.5 bg-ink" style={{ left: `${marker}%` }} />}
       </div>

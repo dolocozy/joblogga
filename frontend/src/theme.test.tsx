@@ -36,7 +36,7 @@ function deviceTheme(initial: 'light' | 'dark') {
 }
 
 beforeEach(() => {
-  document.head.insertAdjacentHTML('beforeend', '<meta name="theme-color" content="#f4efe5" />')
+  document.head.insertAdjacentHTML('beforeend', '<meta name="theme-color" content="#ffffff" />')
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -277,8 +277,7 @@ describe('the stylesheet', () => {
   const dark = colours(block(':root.dark {'))
 
   it('gives every colour a dark value, so a new colour cannot be forgotten', () => {
-    const inherited = new Set(['marker', 'on-marker']) // the same in both themes, on purpose
-    const missing = Object.keys(light).filter((name) => !(name in dark) && !inherited.has(name))
+    const missing = Object.keys(light).filter((name) => !(name in dark))
     expect(missing).toEqual([])
     expect(Object.keys(dark).filter((name) => !(name in light))).toEqual([]) // and no dark value for a colour that does not exist
   })
@@ -312,33 +311,32 @@ describe('the stylesheet', () => {
     const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
     return (hi + 0.05) / (lo + 0.05)
   }
-  const theme = (name: string) => ({ ...light, ...dark })[name]
-
   it.each([
-    ['ink', 'paper', 4.5],
-    ['ink', 'sheet', 4.5],
-    ['ink-soft', 'paper', 4.5],
-    ['ink-soft', 'sheet', 4.5],
-    ['pine', 'paper', 4.5], // links
-    ['pine', 'sheet', 4.5],
-    ['pine-deep', 'paper', 4.5], // link hover
-    ['brick', 'paper', 4.5], // overdue and errors
-    ['brick', 'sheet', 4.5],
-    ['brick-deep', 'paper', 4.5],
-    ['sheet', 'pine', 4.5], // primary button
-    ['sheet', 'pine-deep', 4.5], // its hover
-    ['sheet', 'brick', 4.5], // destructive button
-    ['sheet', 'brick-deep', 4.5],
-    ['sheet', 'ink', 4.5], // the selected range button
-    ['pencil', 'paper', 3], // control borders
-    ['pencil', 'sheet', 3],
-    ['pine', 'sheet', 3], // the chart bars and progress bar
-  ])('dark: %s on %s is at least %s:1', (fg, bg, minimum) => {
-    expect(ratio(theme(fg)!, theme(bg)!)).toBeGreaterThanOrEqual(minimum)
-  })
-
-  it('keeps dark text on the solid marker wash in both themes', () => {
-    expect(ratio(theme('on-marker')!, theme('marker')!)).toBeGreaterThanOrEqual(4.5)
-    expect(ratio(light['on-marker']!, light['marker']!)).toBeGreaterThanOrEqual(4.5)
+    ['ink', 'platform', 4.5],
+    ['ink', 'ticket', 4.5],
+    ['ink-soft', 'platform', 4.5],
+    ['ink-soft', 'ticket', 4.5],
+    ['cobalt', 'platform', 4.5], // links
+    ['cobalt', 'ticket', 4.5],
+    ['cobalt-deep', 'platform', 4.5], // link hover
+    ['brick', 'platform', 4.5], // overdue and errors
+    ['brick', 'ticket', 4.5],
+    ['brick-deep', 'platform', 4.5],
+    ['signal', 'platform', 4.5], // offers
+    ['plum', 'platform', 4.5],
+    ['ticket', 'cobalt', 4.5], // primary button
+    ['ticket', 'cobalt-deep', 4.5], // its hover
+    ['ticket', 'brick', 4.5], // destructive button
+    ['ticket', 'brick-deep', 4.5],
+    ['ticket', 'ink', 4.5], // the selected range button
+    ['pencil', 'platform', 3], // control borders
+    ['pencil', 'ticket', 3],
+    ['cobalt', 'ticket', 3], // the chart bars and progress bar
+    ['tangerine', 'platform', 3], // lines and stops are graphics, so 3:1
+    ['signal', 'ticket', 3],
+    ['plum', 'ticket', 3],
+  ])('%s on %s is at least %s:1 in both themes', (fg, bg, minimum) => {
+    expect(ratio(light[fg]!, light[bg]!)).toBeGreaterThanOrEqual(minimum)
+    expect(ratio(dark[fg]!, dark[bg]!)).toBeGreaterThanOrEqual(minimum)
   })
 })

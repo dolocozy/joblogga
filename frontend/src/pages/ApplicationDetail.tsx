@@ -142,7 +142,7 @@ export default function ApplicationDetail() {
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="sheet p-6 lg:col-span-2">
           {saved && (
-            <p role="status" className="mb-4 border-l-2 border-pine bg-pine/5 px-3 py-2 text-sm">
+            <p role="status" className="mb-4 border-l-2 border-cobalt bg-cobalt/5 px-3 py-2 text-sm">
               Saved.
             </p>
           )}

@@ -4,9 +4,20 @@ import ThemeToggle from './ThemeToggle'
 import VerifyBanner from './VerifyBanner'
 import Wordmark from './Wordmark'
 
-// The current page is marked with an underline, not just a color change.
-const navLink = ({ isActive }: { isActive: boolean }) =>
-  `border-b-2 pb-0.5 text-sm font-semibold ${isActive ? 'border-pine text-ink' : 'border-transparent text-ink-soft hover:text-ink'}`
+// The header's bottom rule is the line; the current page is a filled square stop sitting on it, so the page is
+// marked by a shape and a darker label, not by color alone.
+function NavItem({ to, end, children }: { to: string; end?: boolean; children: string }) {
+  return (
+    <NavLink to={to} end={end} className={({ isActive }) => `relative flex items-center py-3 text-sm font-semibold ${isActive ? 'text-ink' : 'text-ink-soft hover:text-ink'}`}>
+      {({ isActive }) => (
+        <>
+          {children}
+          {isActive && <span aria-hidden className="absolute -bottom-[5px] left-1/2 h-[9px] w-[9px] -translate-x-1/2 rounded-field bg-cobalt" />}
+        </>
+      )}
+    </NavLink>
+  )
+}
 
 // Shared page frame (header + content area) for every logged-in page.
 export default function Layout() {
@@ -14,22 +25,16 @@ export default function Layout() {
   return (
     <div className="min-h-screen overflow-x-clip">
       <header className="border-b border-rule">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 md:px-6">
-          <div className="flex items-center gap-6">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-stretch gap-x-8 px-4 md:px-6">
+          <div className="order-1 flex items-center py-3">
             <Wordmark to="/applications" />
-            <nav aria-label="Main" className="flex items-center gap-5">
-              <NavLink to="/applications" end className={navLink}>
-                Applications
-              </NavLink>
-              <NavLink to="/dashboard" className={navLink}>
-                Dashboard
-              </NavLink>
-              <NavLink to="/faq" className={navLink}>
-                FAQ
-              </NavLink>
-            </nav>
           </div>
-          <div className="flex items-center gap-4 text-sm">
+          <nav aria-label="Main" className="order-3 flex w-full items-stretch gap-6 md:order-2 md:w-auto">
+            <NavItem to="/applications" end>Applications</NavItem>
+            <NavItem to="/dashboard">Dashboard</NavItem>
+            <NavItem to="/faq">FAQ</NavItem>
+          </nav>
+          <div className="order-2 ml-auto flex items-center gap-4 py-3 text-sm md:order-3">
             <Link to="/account" className="hidden text-ink-soft underline-offset-2 hover:text-ink hover:underline sm:inline" aria-label={`Account: ${user?.email}`}>
               {user?.email}
             </Link>

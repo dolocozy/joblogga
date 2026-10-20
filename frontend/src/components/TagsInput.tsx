@@ -47,7 +47,7 @@ export default function TagsInput({ control, value, onChange, suggestions }: Pro
       {value.length > 0 && (
         <ul aria-label="Chosen tags" className="mb-2 flex flex-wrap gap-1.5">
           {value.map((tag) => (
-            <li key={tag} className="inline-flex items-center gap-1 rounded-field border border-pencil bg-sheet pl-2 text-sm">
+            <li key={tag} className="inline-flex items-center gap-1 rounded-field border border-pencil bg-ticket pl-2 text-sm">
               {tag}
               <button
                 type="button"

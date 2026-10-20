@@ -18,7 +18,7 @@ function NoteList({ notes }: { notes: ImportRowNote[] }) {
 export default function ImportSummary({ result }: { result: ImportResult }) {
   const { added, skipped, duplicates, adjusted, blank_rows: blank } = result
   return (
-    <div className="sheet space-y-3 border-l-2 border-l-pine p-4" role="region" aria-label="Import result">
+    <div className="sheet space-y-3 border-l-2 border-l-cobalt p-4" role="region" aria-label="Import result">
       <p role="status" className="font-semibold">
         {added > 0 ? `Imported ${plural(added, 'application')}.` : 'Nothing was imported.'}
       </p>

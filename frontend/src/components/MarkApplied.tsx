@@ -27,7 +27,7 @@ export default function MarkApplied({ onApply }: { onApply: (date: string) => Pr
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate aria-label="Mark as applied" className="sheet mb-6 flex flex-wrap items-end gap-x-4 gap-y-3 border-l-2 border-l-pine p-4">
+    <form onSubmit={handleSubmit} noValidate aria-label="Mark as applied" className="sheet mb-6 flex flex-wrap items-end gap-x-4 gap-y-3 border-l-2 border-l-cobalt p-4">
       <div>
         <p className="font-semibold">Applied to this one?</p>
         <p className="text-sm text-ink-soft">It is saved, not applied yet, so it is left out of your response rate and weekly totals until you say so.</p>

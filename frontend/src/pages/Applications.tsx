@@ -274,7 +274,7 @@ export default function Applications() {
                 aria-pressed={view === v}
                 onClick={() => changeView(v)}
                 // Two halves of one control: only the outer corners are rounded.
-                className={`btn btn-sm border border-ink ${v === 'list' ? 'rounded-r-none' : v === 'saved' ? '-ml-px rounded-l-none' : '-ml-px rounded-none'} ${view === v ? 'bg-ink text-sheet' : 'text-ink hover:bg-ink/5'}`}
+                className={`btn btn-sm border border-ink ${v === 'list' ? 'rounded-r-none' : v === 'saved' ? '-ml-px rounded-l-none' : '-ml-px rounded-none'} ${view === v ? 'bg-ink text-ticket' : 'text-ink hover:bg-ink/5'}`}
               >
                 {v === 'list' ? 'List' : v === 'board' ? 'Board' : 'Saved'}
               </button>

@@ -104,7 +104,7 @@ function Column({ status, apps, today, moving, onMove }: { status: ApplicationSt
       ref={setNodeRef}
       aria-label={`${statusLabel(status)}, ${apps.length}`}
       // A heavy outline marks where the card will land.
-      className={`min-w-[12.5rem] flex-1 rounded-field p-2 ${isOver ? 'bg-pine/5 outline-2 outline-pine' : ''}`}
+      className={`min-w-[12.5rem] flex-1 rounded-field p-2 ${isOver ? 'bg-cobalt/5 outline-2 outline-cobalt' : ''}`}
     >
       <h3 className="mb-3 flex items-center justify-between border-t-2 border-ink pt-2 text-lg">
         <span className="flex items-center gap-2">
