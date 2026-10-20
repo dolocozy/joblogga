@@ -6,12 +6,14 @@ import ApplicationForm from '../components/ApplicationForm'
 import ContactsSection from '../components/ContactsSection'
 import MarkApplied from '../components/MarkApplied'
 import PostingLink from '../components/PostingLink'
+import Route, { StopNames } from '../components/Route'
 import RoundsNote from '../components/RoundsNote'
 import StatusBadge from '../components/StatusBadge'
 import TagList from '../components/TagList'
 import { MAX_TAGS } from '../tags'
 import { formatDateTime } from '../dates'
-import { statusLabel } from '../status'
+import { lineFor } from '../routeStops'
+import { isEnded, statusLabel } from '../status'
 import { salaryLine } from '../salary'
 import { placeLine, roleLine } from '../workMode'
 
@@ -110,8 +112,16 @@ export default function ApplicationDetail() {
         <p className="text-lg text-ink-soft">{roleLine(app)}</p>
         {placeLine(app) && <p className="text-ink-soft">{placeLine(app)}</p>}
         {salaryLine(app) && <p className="figure text-ink-soft">{salaryLine(app)}</p>}
-        <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1">
-          <StatusBadge status={app.status} />
+        {app.status !== 'saved' && (
+          <div className="mt-5 max-w-md">
+            <StopNames />
+            <div className="mx-6">
+              <Route status={app.status} furthest={app.furthest_stage} lineId={app.id} />
+            </div>
+          </div>
+        )}
+        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1">
+          <StatusBadge status={app.status} meter={app.status === 'saved'} />
           <RoundsNote app={app} className="text-sm" />
           <PostingLink url={app.job_url} />
         </div>
@@ -169,18 +179,29 @@ export default function ApplicationDetail() {
         <aside className="space-y-8">
           <ContactsSection applicationId={app.id} contacts={app.contacts} onChange={(contacts) => setApp({ ...app, contacts })} />
           <section>
-            <h2 className="mb-2 border-b-2 border-ink pb-2 text-lg">Status history</h2>
+            <h2 className="mb-4 border-b-2 border-ink pb-2 text-lg">Status history</h2>
             <ol>
-              {[...app.history].reverse().map((h) => (
-                <li key={h.id} className="border-b border-rule py-3 text-sm">
-                  <p className="font-semibold">
-                    {h.from_status
-                      ? `Moved from ${statusLabel(h.from_status)} to ${statusLabel(h.to_status)}`
-                      : `Started as ${statusLabel(h.to_status)}`}
-                  </p>
-                  <p className="figure text-ink-soft">{formatDateTime(h.changed_at)}</p>
-                </li>
-              ))}
+              {[...app.history].reverse().map((h, i, all) => {
+                const line = lineFor(app.id)
+                const ended = isEnded(app.status)
+                const latest = i === 0
+                return (
+                  <li key={h.id} className="relative pb-5 pl-8 text-sm last:pb-0">
+                    {i < all.length - 1 && <span aria-hidden className={`absolute bottom-0 left-[4px] top-4 w-[3px] ${ended ? 'bg-unreached' : line.bar}`} />}
+                    {latest ? (
+                      <span aria-hidden className={`absolute -left-[5px] top-0 h-[21px] w-[21px] rounded-button ${ended ? `border-[3px] bg-platform ${app.status === 'rejected' ? 'border-brick' : 'border-pencil'}` : line.bar}`} />
+                    ) : (
+                      <span aria-hidden className={`absolute left-0 top-1 h-[11px] w-[11px] rounded-field border-[3px] bg-platform ${ended ? 'border-pencil' : line.ring}`} />
+                    )}
+                    <p className="font-semibold">
+                      {h.from_status
+                        ? `Moved from ${statusLabel(h.from_status)} to ${statusLabel(h.to_status)}`
+                        : `Started as ${statusLabel(h.to_status)}`}
+                    </p>
+                    <p className="figure text-ink-soft">{formatDateTime(h.changed_at)}</p>
+                  </li>
+                )
+              })}
             </ol>
           </section>
 

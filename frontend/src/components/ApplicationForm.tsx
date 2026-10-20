@@ -12,6 +12,7 @@ import { showsRoundFields } from '../rounds'
 import { httpUrlRule, required, roundRule, wholeNumberRule } from '../validation'
 import DuplicateWarning from './DuplicateWarning'
 import Field from './Field'
+import FormSection from './FormSection'
 import PlacePicker from './PlacePicker'
 import TagsInput from './TagsInput'
 import type { InitialPlace, PlaceValue } from './PlacePicker'
@@ -187,109 +188,122 @@ export default function ApplicationForm({ initial = blankApplication(), initialP
         </p>
       )}
 
-      <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
-        <Field id={id('company')} label="Company" required error={fields.error('company')}>
-          {(c) => <input {...c} maxLength={200} value={company} {...bind('company', (v) => (setDuplicates(null), setCompany(v)))} className="input" />}
-        </Field>
-        <Field id={id('role')} label="Role" required error={fields.error('role')}>
-          {(c) => <input {...c} maxLength={200} value={role} {...bind('role', (v) => (setDuplicates(null), setRole(v)))} className="input" />}
-        </Field>
-        <div className="sm:col-span-2">
-          <Field id={id('job_url')} label="Job posting link" error={fields.error('job_url')}>
-            {(c) => <input {...c} type="url" placeholder="https://" value={jobUrl} {...bind('job_url', setJobUrl)} className="input" />}
-          </Field>
-        </div>
-        <PlacePicker idBase={id('place')} initial={initialPlace ?? { country: null, city: null, location: initial.location }} onChange={setPlace} />
-        <Field id={id('work_mode')} label="Work mode">
-          {(c) => (
-            <select {...c} value={workMode} onChange={(e) => setWorkMode(e.target.value as WorkMode | '')} className="input">
-              {/* Left unset unless the posting says: nothing is guessed. */}
-              <option value="">Not specified</option>
-              {WORK_MODES.map((m) => (
-                <option key={m} value={m}>
-                  {workModeLabel[m]}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-        {status !== 'saved' && (
-          <Field id={id('date_applied')} label="Date applied" required error={fields.error('date_applied')}>
-            {(c) => <input {...c} type="date" value={dateApplied} {...bind('date_applied', setDateApplied)} className="input" />}
-          </Field>
-        )}
-        <Field id={id('follow_up')} label="Follow up by">
-          {(c) => <input {...c} type="date" value={followUp} onChange={(e) => setFollowUp(e.target.value)} className="input" />}
-        </Field>
-        <Field id={id('status')} label="Status">
-          {(c) => (
-            <select {...c} value={status} onChange={(e) => changeStatus(e.target.value as ApplicationStatus)} className="input">
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {statusLabel(s)}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-        <Field id={id('resume')} label="Resume version">
-          {(c) => (
-            <input {...c} maxLength={100} placeholder="For example, tech-focused" value={resume} onChange={(e) => setResume(e.target.value)} className="input" />
-          )}
-        </Field>
-        <div className="grid gap-x-5 gap-y-4 sm:col-span-2 sm:grid-cols-3">
-          <Field id={id('salary_currency')} label="Salary currency">
-            {(c) => (
-              <select {...c} value={currency} onChange={(e) => setCurrency(e.target.value)} className="input">
-                {currencies.length === 0 ? (
-                  <option value={currency}>{currency}</option>
-                ) : (
-                  <>
-                    <optgroup label="Common">
-                      {currencies.filter((o) => o.common).map((o) => (
-                        <option key={o.code} value={o.code}>
-                          {o.code}: {o.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="All currencies">
-                      {currencies.filter((o) => !o.common).map((o) => (
-                        <option key={o.code} value={o.code}>
-                          {o.code}: {o.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </>
+      <div>
+        <FormSection title="The job">
+          <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+            <Field id={id('company')} label="Company" required error={fields.error('company')}>
+              {(c) => <input {...c} maxLength={200} value={company} {...bind('company', (v) => (setDuplicates(null), setCompany(v)))} className="input" />}
+            </Field>
+            <Field id={id('role')} label="Role" required error={fields.error('role')}>
+              {(c) => <input {...c} maxLength={200} value={role} {...bind('role', (v) => (setDuplicates(null), setRole(v)))} className="input" />}
+            </Field>
+            <div className="sm:col-span-2">
+              <Field id={id('job_url')} label="Job posting link" error={fields.error('job_url')}>
+                {(c) => <input {...c} type="url" placeholder="https://" value={jobUrl} {...bind('job_url', setJobUrl)} className="input" />}
+              </Field>
+            </div>
+            <PlacePicker idBase={id('place')} initial={initialPlace ?? { country: null, city: null, location: initial.location }} onChange={setPlace} />
+            <Field id={id('work_mode')} label="Work mode">
+              {(c) => (
+                <select {...c} value={workMode} onChange={(e) => setWorkMode(e.target.value as WorkMode | '')} className="input">
+                  {/* Left unset unless the posting says: nothing is guessed. */}
+                  <option value="">Not specified</option>
+                  {WORK_MODES.map((m) => (
+                    <option key={m} value={m}>
+                      {workModeLabel[m]}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+            <div className="grid gap-x-5 gap-y-4 sm:col-span-2 sm:grid-cols-3">
+              <Field id={id('salary_currency')} label="Salary currency">
+                {(c) => (
+                  <select {...c} value={currency} onChange={(e) => setCurrency(e.target.value)} className="input">
+                    {currencies.length === 0 ? (
+                      <option value={currency}>{currency}</option>
+                    ) : (
+                      <>
+                        <optgroup label="Common">
+                          {currencies.filter((o) => o.common).map((o) => (
+                            <option key={o.code} value={o.code}>
+                              {o.code}: {o.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="All currencies">
+                          {currencies.filter((o) => !o.common).map((o) => (
+                            <option key={o.code} value={o.code}>
+                              {o.code}: {o.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </>
+                    )}
+                  </select>
                 )}
-              </select>
+              </Field>
+              <Field id={id('salary_min')} label="Salary min" error={fields.error('salary_min')}>
+                {(c) => <input {...c} inputMode="numeric" value={salaryMin} {...bind('salary_min', setSalaryMin)} className="input figure" />}
+              </Field>
+              <Field id={id('salary_max')} label="Salary max" error={fields.error('salary_max')}>
+                {(c) => <input {...c} inputMode="numeric" value={salaryMax} {...bind('salary_max', setSalaryMax)} className="input figure" />}
+              </Field>
+            </div>
+          </div>
+        </FormSection>
+
+        <FormSection title="Where it stands">
+          <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+            {status !== 'saved' && (
+              <Field id={id('date_applied')} label="Date applied" required error={fields.error('date_applied')}>
+                {(c) => <input {...c} type="date" value={dateApplied} {...bind('date_applied', setDateApplied)} className="input" />}
+              </Field>
             )}
-          </Field>
-          <Field id={id('salary_min')} label="Salary min" error={fields.error('salary_min')}>
-            {(c) => <input {...c} inputMode="numeric" value={salaryMin} {...bind('salary_min', setSalaryMin)} className="input figure" />}
-          </Field>
-          <Field id={id('salary_max')} label="Salary max" error={fields.error('salary_max')}>
-            {(c) => <input {...c} inputMode="numeric" value={salaryMax} {...bind('salary_max', setSalaryMax)} className="input figure" />}
-          </Field>
-        </div>
-        {showsRoundFields(status, round.trim() !== '' || roundsTotal.trim() !== '') && (
-          <>
-            <Field id={id('interview_round')} label="Interview round" hint="Which round you are in." error={fields.error('interview_round')}>
-              {(c) => <input {...c} inputMode="numeric" value={round} {...bind('interview_round', setRound)} className="input figure" />}
+            <Field id={id('follow_up')} label="Follow up by">
+              {(c) => <input {...c} type="date" value={followUp} onChange={(e) => setFollowUp(e.target.value)} className="input" />}
             </Field>
-            <Field id={id('interview_rounds_total')} label="Total rounds" hint="If you know how many." error={fields.error('interview_rounds_total')}>
-              {(c) => <input {...c} inputMode="numeric" value={roundsTotal} {...bind('interview_rounds_total', setRoundsTotal)} className="input figure" />}
+            <Field id={id('status')} label="Status">
+              {(c) => (
+                <select {...c} value={status} onChange={(e) => changeStatus(e.target.value as ApplicationStatus)} className="input">
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {statusLabel(s)}
+                    </option>
+                  ))}
+                </select>
+              )}
             </Field>
-          </>
-        )}
+            <Field id={id('resume')} label="Resume version">
+              {(c) => (
+                <input {...c} maxLength={100} placeholder="For example, tech-focused" value={resume} onChange={(e) => setResume(e.target.value)} className="input" />
+              )}
+            </Field>
+            {showsRoundFields(status, round.trim() !== '' || roundsTotal.trim() !== '') && (
+              <>
+                <Field id={id('interview_round')} label="Interview round" hint="Which round you are in." error={fields.error('interview_round')}>
+                  {(c) => <input {...c} inputMode="numeric" value={round} {...bind('interview_round', setRound)} className="input figure" />}
+                </Field>
+                <Field id={id('interview_rounds_total')} label="Total rounds" hint="If you know how many." error={fields.error('interview_rounds_total')}>
+                  {(c) => <input {...c} inputMode="numeric" value={roundsTotal} {...bind('interview_rounds_total', setRoundsTotal)} className="input figure" />}
+                </Field>
+              </>
+            )}
+          </div>
+        </FormSection>
+
+        <FormSection title="Labels and notes" last>
+          <div className="space-y-5">
+          <Field id={id('tags')} label="Tags" hint="Your own labels, like referral or dream job. Press Enter or a comma to add one.">
+            {(c) => <TagsInput control={c} value={tags} onChange={setTags} suggestions={knownTags} />}
+          </Field>
+
+          <Field id={id('notes')} label="Notes">
+            {(c) => <textarea {...c} rows={4} maxLength={10000} value={notes} onChange={(e) => setNotes(e.target.value)} className="input" />}
+          </Field>
+          </div>
+        </FormSection>
       </div>
-
-      <Field id={id('tags')} label="Tags" hint="Your own labels, like referral or dream job. Press Enter or a comma to add one.">
-        {(c) => <TagsInput control={c} value={tags} onChange={setTags} suggestions={knownTags} />}
-      </Field>
-
-      <Field id={id('notes')} label="Notes">
-        {(c) => <textarea {...c} rows={4} maxLength={10000} value={notes} onChange={(e) => setNotes(e.target.value)} className="input" />}
-      </Field>
 
       {duplicates && (
         <DuplicateWarning

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { STOP_AT } from '../routeStops'
+import { StopNames } from './Route'
 
 // Column layout shared by the real applications list and the landing page's
 // sample page: company and role | status | applied | follow up.
@@ -9,19 +9,6 @@ export const SAVED_LEDGER_COLUMNS = 'md:grid-cols-[minmax(0,1fr)_10.5rem_9rem_11
 
 // The list with a route per application: the status column is wider, and its header names the four stops.
 export const ROUTE_LEDGER_COLUMNS = 'md:grid-cols-[minmax(0,1fr)_17rem_8rem_10rem]'
-
-// The four stop names, each centered over its stop on the route below. The inset leaves room for half a label either side.
-function StopNames() {
-  return (
-    <span aria-hidden className="relative mx-6 block h-5 text-sm font-normal">
-      {['Applied', 'Screening', 'Interview', 'Offer'].map((name, i) => (
-        <span key={name} className="absolute top-0 -translate-x-1/2" style={{ left: `${STOP_AT[i]}%` }}>
-          {name}
-        </span>
-      ))}
-    </span>
-  )
-}
 
 export function LedgerHeader({ saved = false, route = false }: { saved?: boolean; route?: boolean }) {
   return (
