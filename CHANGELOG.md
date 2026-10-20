@@ -2,6 +2,26 @@
 
 Versions follow [semantic versioning](https://semver.org). Details of the reasoning behind each change are in the README and in `docs/`.
 
+## v0.2.0
+
+### Changed
+
+- **A new look, built around lines.** Every application is now drawn as a route with four stops (Applied, Screening, Interview, Offer): a solid line to where it is, a dashed one beyond it, and a larger stop for now. The applications list, the board cards and the detail page all show it, and a closed application keeps the stop it reached (a rejected one ends in a brick-red empty square). The status dropdown stays under the route, so changing a status is still one click and works from the keyboard. Each application has one line color (cobalt, tangerine, signal green or plum), picked from its id so it never changes.
+- **White page, new palette.** The warm paper background is now plain white. Cobalt is the color of actions and links, brick red is kept for trouble (overdue, rejected, delete), and the yellow highlight is gone: an overdue follow-up is brick-red text with the word "overdue". There is a new night palette for dark mode. Every text pairing is still checked at 4.5:1 and the line colors at 3:1, in both themes, by a test.
+- **New type.** Titles and headline figures are set in Fraunces, which replaces Newsreader. Hanken Grotesk and IBM Plex Mono stay.
+- **A route header.** The header's bottom rule is the line, and a filled square stop marks the current page.
+- **Detail page and forms.** The status history is a vertical route, newest on top. The add and edit form is three stops on a line (The job, Where it stands, Labels and notes); the fields, validation and inline messages are the same, with status, dates and resume now sitting together.
+- **Dashboard and board.** Headline figures are set large in the title serif, the response rate in cobalt. Board cards carry their route. Charts stay one color, since the line colors identify applications, not stages.
+- **Landing page.** Three decorative routes draw in under the intro (not at all for people who ask for less motion), the sample page uses the route column, and the four stages are stops on a line.
+
+### Added
+
+- Applications carry a `furthest_stage` (0 to 4), worked out from their status history, so a closed application can show how far it got. It is loaded in one extra query for the list and is not stored.
+
+### Not changed
+
+- Navigation names (Applications, Dashboard, FAQ), URLs, and every feature and rule from v0.1.4. There are no database migrations.
+
 ## v0.1.4
 
 ### Added

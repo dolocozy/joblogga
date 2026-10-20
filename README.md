@@ -4,11 +4,11 @@ A multi-user job application tracker: log applications, move them through a stat
 
 **Live at [joblogga.dolocozy.com](https://joblogga.dolocozy.com)**
 
-![The Joblogga applications list split down the middle: the left half in the light theme, the right half in the dark theme. A ruled ledger with a stage meter per status, tags, and an overdue follow-up highlighted](docs/screenshots/hero-light-dark.png)
+![The Joblogga applications list split down the middle: the left half in the light theme, the right half in the dark theme. A route per application on a white page, with the overdue follow-up in red](docs/screenshots/hero-light-dark.png)
 
 *Joblogga has a light and a dark theme. It follows your device's setting by default, and a Theme button on every page overrides it. The picture above is one screenshot, light on the left and dark on the right.*
 
-> **Status: v0.1.4, feature-complete for tracking job applications.** Accounts with email verification, password reset and account deletion, application tracking with status history, saved jobs, interview rounds, contacts, tags and archiving, real country and city locations, salary currency, duplicate warnings, CSV export and import, opt-in follow-up reminder emails, search and filters, a weekly goal, a dashboard with response rate, time in each stage and response rate by resume version, an offer comparison, a Kanban board, a light and a dark theme, a public FAQ and login rate limiting are all built, tested and deployed. See [Known limitations](#known-limitations).
+> **Status: v0.2.0, feature-complete for tracking job applications.** Accounts with email verification, password reset and account deletion, application tracking with status history, saved jobs, interview rounds, contacts, tags and archiving, real country and city locations, salary currency, duplicate warnings, CSV export and import, opt-in follow-up reminder emails, search and filters, a weekly goal, a dashboard with response rate, time in each stage and response rate by resume version, an offer comparison, a Kanban board, a light and a dark theme, a public FAQ and login rate limiting are all built, tested and deployed. See [Known limitations](#known-limitations).
 
 *Every screenshot here uses a demo account with fictional data.*
 
@@ -20,7 +20,7 @@ This project is built with [Claude Code](https://claude.com/claude-code) as a de
 
 ## Tech stack
 
-- **Frontend:** React + TypeScript, Vite, Tailwind CSS, Recharts, `@dnd-kit`, self-hosted fonts (Newsreader, Hanken Grotesk, IBM Plex Mono)
+- **Frontend:** React + TypeScript, Vite, Tailwind CSS, Recharts, `@dnd-kit`, self-hosted fonts (Fraunces, Hanken Grotesk, IBM Plex Mono)
 - **Backend:** Python, FastAPI
 - **Database:** SQLAlchemy 2.0 with Alembic migrations; PostgreSQL (Neon) in production, SQLite for local development
 - **Auth:** JWT (PyJWT) + bcrypt, with password reset by email ([Resend](https://resend.com))
@@ -73,11 +73,11 @@ A drop moves the card immediately and puts it back with an error if the server r
 
 Each picture below is shown in your GitHub theme: the light version if GitHub is light, the dark one if it is dark (where a viewer does not support that, the light one is shown). They come from a demo account with made-up companies, seeded by [`docs/screenshots/seed_demo.py`](docs/screenshots/seed_demo.py), and can be retaken after a release by following the [short note beside it](docs/screenshots/README.md).
 
-**Applications list.** A ruled ledger: the stage reached, the place (a city name used in several states, like Springfield or Portland, is told apart by its state), tags, and follow-ups that are due or overdue rise to the top.
+**Applications list.** Each application is a route with four stops, so you see where it stands (and, for a closed one, how far it got) at a glance: the place (a city name used in several states, like Springfield or Portland, is told apart by its state), tags, and follow-ups that are due or overdue rise to the top.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/applications-list-dark.png">
-  <img alt="The applications list: a follow-ups panel with one overdue date highlighted, search and filter controls, and ledger rows each with a stage meter, status, applied date and tags" src="docs/screenshots/applications-list-light.png">
+  <img alt="The applications list: a follow-ups panel with one overdue date in red, search and filter controls, and a row per application with a route of four stops, a status, the applied date and tags" src="docs/screenshots/applications-list-light.png">
 </picture>
 
 **Kanban board.** Drag a card to change its status (mouse, touch or keyboard). The board is a strip of columns that scrolls sideways; six are shown here.
@@ -101,17 +101,17 @@ Each picture below is shown in your GitHub theme: the light version if GitHub is
   <img alt="Two offers compared in columns: a USD offer and a EUR offer, with salary, work mode, location, interview rounds, dates, tags and notes, under a note that the currencies differ" src="docs/screenshots/offers-light.png">
 </picture>
 
-**Landing page.** What it is and who it is for, with the login and a sample logbook page. It looks the same in both themes apart from colour, so there is one picture.
+**Landing page.** What it is and who it is for, with the login and a sample page of routes. It looks the same in both themes apart from colour, so there is one picture.
 
-![The landing page: a headline, a short description, the login form, and a sample page of the logbook with made-up companies](docs/screenshots/landing.png)
+![The landing page: a headline, a short description, the login form, and a sample page of routes with made-up companies](docs/screenshots/landing.png)
 
 ## Design
 
-The interface is built around lines: every application is a route with four stops (Applied, Screening, Interview, Offer). It is a plain white page with near-black ink, a handful of saturated line colors (cobalt, tangerine, signal green, plum) taken from a transit map, and brick red kept for trouble such as overdue follow-ups. Cobalt is also the color of actions and links. Titles are set in Fraunces, dates and numbers in a monospace so columns line up. The header's bottom rule is the line, and a filled square stop marks the current page. The redesign is landing in phases; the applications list and the remaining screens move over in the following ones.
+The interface is built around lines: every application is a route with four stops (Applied, Screening, Interview, Offer). It is a plain white page with near-black ink, a handful of saturated line colors (cobalt, tangerine, signal green, plum) taken from a transit map, and brick red kept for trouble such as overdue follow-ups. Cobalt is also the color of actions and links. Titles are set in Fraunces, dates and numbers in a monospace so columns line up. The header's bottom rule is the line, and a filled square stop marks the current page. The list, the detail page and the forms, the board, the dashboard and the landing page all use it: a route per application, the status history as a vertical route, and the form as three stops on a line. Each application keeps one line color, picked from its id.
 
 ### Dark mode
 
-A dark theme (the same logbook by lamplight) follows the device's light/dark setting by default and keeps following it, for example at sunset. A **Theme** button in the header of every page, and on the landing and sign-in pages, steps through System, Light and Dark and back round to System, so there is always a way back to following the device; the choice is saved in this browser's `localStorage` only (it is a display preference, not account data, so there is no backend field and it does not follow you between devices). It covers the whole app, the dashboard charts included.
+A dark theme (the same lines at night) follows the device's light/dark setting by default and keeps following it, for example at sunset. A **Theme** button in the header of every page, and on the landing and sign-in pages, steps through System, Light and Dark and back round to System, so there is always a way back to following the device; the choice is saved in this browser's `localStorage` only (it is a display preference, not account data, so there is no backend field and it does not follow you between devices). It covers the whole app, the dashboard charts included.
 
 How it works, and why it is not a pile of `dark:` variants: every colour in the app already comes from a handful of design tokens (`frontend/src/index.css`), and the charts read the same tokens, so dark mode is a second set of values for those tokens under `html.dark`, set by `frontend/src/theme.ts`. Nothing can be missed on one screen, because no screen has its own colours. The `dark:` variant is still enabled for anything that ever needs one. A small script in `index.html` applies the saved or system choice before the page paints so a dark-mode reader never sees a flash of light; a test runs that script against the app's own logic so the two cannot drift. The dark palette keeps the light one's standard (text 4.5:1 or better, control borders 3:1), checked by a test that reads the stylesheet, which also fails if a colour is added without a dark value or a chart hard-codes one. Line colors are graphics, so they are checked at 3:1.
 
@@ -127,7 +127,7 @@ The rules that keep it from looking generic are enforced by a test (`frontend/sr
 | `/verify-email` | Where the verification link in the signup email lands (open to everyone) |
 | `/faq` | Frequently asked questions, in plain language (open to everyone, logged in or not) |
 | `/account` | Who you are, email reminders, the weekly goal, CSV export and import, and deleting your account |
-| `/applications`, `/applications/new`, `/applications/:id` | Your applications, as a ledger list, a Kanban board (`?view=board`), or the jobs you have saved but not applied to (`?view=saved`) |
+| `/applications`, `/applications/new`, `/applications/:id` | Your applications, as a list of routes, a Kanban board (`?view=board`), or the jobs you have saved but not applied to (`?view=saved`) |
 | `/dashboard` | Response rate and charts |
 | `/offers` | Your offers side by side (linked from the dashboard once you have two) |
 
