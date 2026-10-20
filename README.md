@@ -103,7 +103,7 @@ Each picture below is shown in your GitHub theme: the light version if GitHub is
 
 **Landing page.** What it is and who it is for, with the login and a sample page of routes. It looks the same in both themes apart from colour, so there is one picture.
 
-![The landing page: a headline, a short description, the login form, and a sample page of routes with made-up companies](docs/screenshots/landing.png)
+![The landing page: a headline, a short description, three routes, the login form, and a sample page of routes with made-up companies](docs/screenshots/landing.png)
 
 ## Design
 
