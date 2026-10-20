@@ -56,6 +56,16 @@
   --color-brick-deep: #ffa98c;
 }
 
+/* The landing page's routes draw themselves in from the left. A clip reveals them (reaching past the edges, where the end stops hang out), so the squares are never stretched. */
+@keyframes route-reveal {
+  from {
+    clip-path: inset(-12px 100% -12px -12px);
+  }
+  to {
+    clip-path: inset(-12px -12px -12px -12px);
+  }
+}
+
 @layer base {
   body {
     @apply bg-platform font-sans text-ink antialiased;

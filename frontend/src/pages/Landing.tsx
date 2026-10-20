@@ -6,17 +6,19 @@ import ThemeToggle from '../components/ThemeToggle'
 import SiteFooter from '../components/SiteFooter'
 import StatusBadge from '../components/StatusBadge'
 import Wordmark from '../components/Wordmark'
-import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader } from '../components/Ledger'
+import { DateCell, FollowUp, LedgerHeader, ROUTE_LEDGER_COLUMNS } from '../components/Ledger'
+import Route, { StopNames } from '../components/Route'
+import { stageCount } from '../status'
 import { warmUpServer } from '../api'
 import type { ApplicationStatus } from '../api'
 
 // Made-up companies, for showing what a page of the logbook looks like.
-const SAMPLE: { company: string; role: string; status: ApplicationStatus; applied: string; followUp?: string; overdue?: boolean }[] = [
+const SAMPLE: { company: string; role: string; status: ApplicationStatus; furthest?: number; applied: string; followUp?: string; overdue?: boolean }[] = [
   { company: 'Harbor Analytics', role: 'Data Analyst, Remote', status: 'interview', applied: 'Feb 24, 2026' },
   { company: 'Fernhill Health', role: 'Operations Analyst', status: 'screening', applied: 'Mar 2, 2026', followUp: 'Mar 9, 2026', overdue: true },
   { company: 'Northwind Studio', role: 'Program Coordinator, Portland', status: 'applied', applied: 'Mar 5, 2026', followUp: 'Mar 19, 2026' },
   { company: 'Pinecone Logistics', role: 'Planning Analyst', status: 'offer', applied: 'Feb 12, 2026' },
-  { company: 'Lakeside Museum', role: 'Events Manager', status: 'rejected', applied: 'Jan 30, 2026' },
+  { company: 'Lakeside Museum', role: 'Events Manager', status: 'rejected', furthest: 2, applied: 'Jan 30, 2026' },
 ]
 
 const FEATURES: [string, string][] = [
@@ -33,6 +35,26 @@ const STAGES: [string, string][] = [
   ['Interview', 'In the process'],
   ['Offer', 'Yours to accept or decline'],
 ]
+
+// Three made-up routes drawn in as the page loads (not at all for people who ask for less motion): the idea of the
+// whole app in one picture. Decorative, so hidden from screen readers; the sample table below says it in words.
+function HeroRoutes() {
+  const routes: { status: ApplicationStatus; id: number }[] = [
+    { status: 'offer', id: 0 },
+    { status: 'screening', id: 1 },
+    { status: 'applied', id: 2 },
+  ]
+  return (
+    <div aria-hidden className="mt-10 max-w-xl">
+      <StopNames />
+      {routes.map((r, i) => (
+        <div key={r.id} className="mx-6 mt-2 motion-safe:animate-[route-reveal_900ms_ease-out_both]" style={{ animationDelay: `${i * 220}ms` }}>
+          <Route status={r.status} furthest={stageCount[r.status]} lineId={r.id} />
+        </div>
+      ))}
+    </div>
+  )
+}
 
 // Each section keeps its heading in a left margin, like notes beside a ledger.
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -70,6 +92,7 @@ export default function Landing() {
               Joblogga keeps every application in one place: where it stands, when you applied, which resume you sent,
               and when to follow up. It replaces the spreadsheet and the twenty open tabs.
             </p>
+            <HeroRoutes />
           </div>
           <div className="sheet self-start p-6">
             <LoginForm />
@@ -81,18 +104,23 @@ export default function Landing() {
             What a page looks like
           </h2>
           <div className="sheet px-4 pb-2 pt-4 md:px-6">
-            <LedgerHeader />
+            <LedgerHeader route />
             <ul>
-              {SAMPLE.map((row) => (
+              {SAMPLE.map((row, i) => (
                 <li
                   key={row.company}
-                  className={`grid gap-x-4 gap-y-1 border-b border-rule py-3 last:border-0 md:items-center ${LEDGER_COLUMNS}`}
+                  className={`grid gap-x-4 gap-y-1 border-b border-rule py-3 last:border-0 md:items-center ${ROUTE_LEDGER_COLUMNS}`}
                 >
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{row.company}</p>
                     <p className="truncate text-sm text-ink-soft">{row.role}</p>
                   </div>
-                  <StatusBadge status={row.status} />
+                  <div>
+                    <div className="mx-6 mb-1 max-w-xs">
+                      <Route status={row.status} furthest={row.furthest ?? stageCount[row.status]} lineId={i} />
+                    </div>
+                    <StatusBadge status={row.status} meter={false} />
+                  </div>
                   <DateCell label="Applied">{row.applied}</DateCell>
                   <DateCell label="Follow up">
                     {row.followUp ? <FollowUp text={row.followUp} overdue={!!row.overdue} /> : <span className="text-ink-soft">None</span>}
@@ -127,9 +155,11 @@ export default function Landing() {
         </Section>
 
         <Section title="How it works">
-          <ol className="grid grid-cols-2 gap-x-4 gap-y-5 border-t-2 border-ink pt-3 sm:grid-cols-4">
+          <ol className="relative grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-4">
+            <span aria-hidden className="absolute left-0 right-0 top-[8px] hidden h-[5px] bg-cobalt sm:block" />
             {STAGES.map(([name, meaning]) => (
-              <li key={name}>
+              <li key={name} className="relative pt-7">
+                <span aria-hidden className="absolute left-0 top-[5px] h-[11px] w-[11px] rounded-field border-[3px] border-cobalt bg-platform" />
                 <p className="font-semibold">{name}</p>
                 <p className="text-sm text-ink-soft">{meaning}</p>
               </li>
