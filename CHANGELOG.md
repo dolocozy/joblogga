@@ -12,6 +12,8 @@ Versions follow [semantic versioning](https://semver.org). Details of the reason
 - **A route header.** The header's bottom rule is the line, and a filled square stop marks the current page.
 - **Detail page and forms.** The status history is a vertical route, newest on top. The add and edit form is three stops on a line (The job, Where it stands, Labels and notes); the fields, validation and inline messages are the same, with status, dates and resume now sitting together.
 - **Dashboard and board.** Headline figures are set large in the title serif, the response rate in cobalt. Board cards carry their route. Charts stay one color, since the line colors identify applications, not stages.
+- **Theme button: Light and Dark only.** It used to step through System, Light and Dark. Now it switches between Light and Dark. Until you choose, the app still shows your device's setting (and follows it at sunset), and the first click saves your choice. An older saved "system" value is ignored, so it simply follows the device.
+- **Filters in their own panel.** The Applications page showed up to ten filters at once above the list. Now only the search box and a Filters button sit above it; the button opens a panel with Company, Status, Work mode, Country, State or province, Tag, Archived and the date range, each with a visible name. The button shows how many filters are on ("Filters (2)"), and Clear filters stays beside it. Closing the panel keeps what you chose. The same panel is used on the board and the saved view.
 - **Landing page.** Three decorative routes draw in under the intro (not at all for people who ask for less motion), the sample page uses the route column, and the four stages are stops on a line.
 
 ### Added

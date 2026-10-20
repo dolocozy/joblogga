@@ -35,3 +35,7 @@ Short log of design and build decisions: date, decision, why.
 - **Board cards carry a route:** each card shows its route above the status dropdown (the small stage meter is dropped there). Column headers are unchanged.
 - **Offers page unchanged:** it already reads from the tokens, and every offer sits on the same stop, so a route there would say nothing.
 - **Nav names kept:** Applications, Dashboard and FAQ keep their names. Renaming them to Lines and Numbers would change URLs, tests, the FAQ and the README for no gain in clarity.
+
+## 2026-10-20 Theme button and filters panel
+- **Theme: light and dark only.** The three-way System/Light/Dark cycle was confusing. With no saved choice the app shows the device's theme and follows it; the first click saves a choice. There is no way back to "follow the device" short of clearing site data, which is the usual trade for a two-state toggle. An old saved "system" value is read as no choice.
+- **Filters in a panel:** search stays above the list; everything else moves into a panel opened by a Filters button that shows how many filters are on. The panel is hidden with CSS rather than unmounted, so chosen values survive closing it. Controls keep their accessible names; each also gets a visible label above it.
