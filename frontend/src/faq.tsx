@@ -60,7 +60,7 @@ export const FAQS: { question: string; answer: ReactNode }[] = [
   {
     question: 'Does it have a dark mode?',
     answer:
-      'Yes. It follows your device’s light or dark setting by default, and the Theme button in the page header steps through System, Light and Dark to override that. The choice is saved in your browser only, so it is not shared between devices.',
+      'Yes. It starts with your device’s light or dark setting, and the Theme button in the page header switches between Light and Dark. Once you pick one, your choice is saved in your browser only, so it is not shared between devices.',
   },
   {
     question: 'How do I report a problem or ask a question?',

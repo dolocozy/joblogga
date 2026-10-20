@@ -5,7 +5,7 @@ import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ThemeToggle from './components/ThemeToggle'
-import { applyTheme, CHROME_COLOR, isDark, storedTheme, storeTheme, THEME_KEY } from './theme'
+import { applyTheme, CHROME_COLOR, effectiveTheme, storedTheme, storeTheme, systemPrefersDark, THEME_KEY } from './theme'
 import type { Theme } from './theme'
 import { mockList, mockUpcoming, renderApp, signIn } from './test/helpers'
 
@@ -41,8 +41,8 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('the saved choice', () => {
-  it('is "system" when nothing is saved', () => {
-    expect(storedTheme()).toBe('system')
+  it('is nothing when nothing is saved', () => {
+    expect(storedTheme()).toBeNull()
   })
 
   it.each(['light', 'dark'] as const)('reads back %s', (value) => {
@@ -50,16 +50,16 @@ describe('the saved choice', () => {
     expect(storedTheme()).toBe(value)
   })
 
-  it.each(['', 'Dark', 'blue', 'null', '{"theme":"dark"}'])('treats an unknown saved value %j as system', (value) => {
+  it.each(['', 'Dark', 'blue', 'null', 'system', '{"theme":"dark"}'])('treats an unknown or old saved value %j as no choice', (value) => {
     localStorage.setItem(THEME_KEY, value)
-    expect(storedTheme()).toBe('system')
+    expect(storedTheme()).toBeNull()
   })
 
-  it('saves light and dark, and clears the entry for system', () => {
+  it('saves the choice', () => {
     storeTheme('dark')
     expect(localStorage.getItem(THEME_KEY)).toBe('dark')
-    storeTheme('system')
-    expect(localStorage.getItem(THEME_KEY)).toBeNull()
+    storeTheme('light')
+    expect(localStorage.getItem(THEME_KEY)).toBe('light')
   })
 
   it('survives storage that throws, both ways', () => {
@@ -69,23 +69,23 @@ describe('the saved choice', () => {
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('blocked')
     })
-    expect(storedTheme()).toBe('system')
+    expect(storedTheme()).toBeNull()
     expect(() => storeTheme('dark')).not.toThrow()
     vi.restoreAllMocks()
   })
 })
 
-describe('when the dark theme is on', () => {
-  const cases: [Theme, boolean, boolean][] = [
-    ['system', false, false],
-    ['system', true, true], // follows the device
-    ['light', true, false], // an explicit choice beats the device
-    ['dark', false, true],
-    ['light', false, false],
-    ['dark', true, true],
+describe('which theme is in effect', () => {
+  const cases: [Theme | null, boolean, Theme][] = [
+    [null, false, 'light'], // no choice: follows the device
+    [null, true, 'dark'],
+    ['light', true, 'light'], // a choice beats the device
+    ['dark', false, 'dark'],
+    ['light', false, 'light'],
+    ['dark', true, 'dark'],
   ]
-  it.each(cases)('%s with a device preferring dark=%s is dark=%s', (theme, prefersDark, expected) => {
-    expect(isDark(theme, prefersDark)).toBe(expected)
+  it.each(cases)('saved=%s with a device preferring dark=%s is %s', (saved, prefersDark, expected) => {
+    expect(effectiveTheme(saved, prefersDark)).toBe(expected)
   })
 
   it('puts the class on <html> and matches the browser chrome colour to it', () => {
@@ -97,23 +97,18 @@ describe('when the dark theme is on', () => {
     expect(isDarkNow()).toBe(false)
     expect(document.querySelector('meta[name="theme-color"]')).toHaveAttribute('content', CHROME_COLOR.light)
   })
-
-  it('copes with a browser that has no matchMedia at all', () => {
-    vi.stubGlobal('matchMedia', undefined)
-    expect(() => applyTheme('system')).not.toThrow()
-    expect(isDarkNow()).toBe(false)
-  })
 })
 
 describe('the toggle', () => {
-  it('defaults to following the system, and a dark device gets the dark theme without anyone choosing it', () => {
+  it('starts on the device theme, and a dark device gets the dark theme without anyone choosing it', () => {
     deviceTheme('dark')
     render(<ThemeToggle />)
-    expect(button()).toHaveTextContent('Theme: System')
+    expect(button()).toHaveTextContent('Theme: Dark')
     expect(isDarkNow()).toBe(true)
+    expect(localStorage.getItem(THEME_KEY)).toBeNull() // nothing is saved until someone chooses
   })
 
-  it('steps system, light, dark and back to system, applying and saving each', async () => {
+  it('switches between light and dark, applying and saving each', async () => {
     const user = userEvent.setup()
     deviceTheme('dark')
     render(<ThemeToggle />)
@@ -127,19 +122,14 @@ describe('the toggle', () => {
     expect(button()).toHaveTextContent('Theme: Dark')
     expect(isDarkNow()).toBe(true)
     expect(localStorage.getItem(THEME_KEY)).toBe('dark')
-
-    await user.click(button())
-    expect(button()).toHaveTextContent('Theme: System')
-    expect(localStorage.getItem(THEME_KEY)).toBeNull()
-    expect(isDarkNow()).toBe(true) // back to following the (dark) device
   })
 
   it('says what a click will do', async () => {
     deviceTheme('light')
     render(<ThemeToggle />)
-    expect(button()).toHaveAttribute('title', 'Switch to light')
-    await userEvent.setup().click(button())
     expect(button()).toHaveAttribute('title', 'Switch to dark')
+    await userEvent.setup().click(button())
+    expect(button()).toHaveAttribute('title', 'Switch to light')
   })
 
   it('remembers the choice for the next visit', () => {
@@ -150,7 +140,7 @@ describe('the toggle', () => {
     expect(isDarkNow()).toBe(true)
   })
 
-  it('keeps following the device while on system, and stops once a choice is made', async () => {
+  it('keeps following the device until a choice is made, and stops once it is', async () => {
     const user = userEvent.setup()
     const device = deviceTheme('light')
     render(<ThemeToggle />)
@@ -158,12 +148,13 @@ describe('the toggle', () => {
 
     device.switchTo('dark') // sunset
     expect(isDarkNow()).toBe(true)
+    expect(button()).toHaveTextContent('Theme: Dark')
     device.switchTo('light')
     expect(isDarkNow()).toBe(false)
 
-    await user.click(button()) // light, chosen
-    device.switchTo('dark')
-    expect(isDarkNow()).toBe(false) // the explicit choice holds
+    await user.click(button()) // dark, chosen
+    device.switchTo('light')
+    expect(isDarkNow()).toBe(true) // the choice holds
     expect(device.listenerCount()).toBe(0) // and nothing is still listening
   })
 
@@ -183,10 +174,16 @@ describe('the toggle', () => {
     })
     render(<ThemeToggle />)
     await user.click(button())
-    await user.click(button())
     expect(button()).toHaveTextContent('Theme: Dark')
     expect(isDarkNow()).toBe(true)
     vi.restoreAllMocks()
+  })
+
+  it('copes with a browser that has no matchMedia at all', () => {
+    vi.stubGlobal('matchMedia', undefined)
+    render(<ThemeToggle />)
+    expect(button()).toHaveTextContent('Theme: Light')
+    expect(isDarkNow()).toBe(false)
   })
 })
 
@@ -202,7 +199,7 @@ describe('the script that runs before the page paints', () => {
         new Function(script)()
         const early = isDarkNow()
         html().classList.remove('dark')
-        applyTheme(storedTheme())
+        applyTheme(effectiveTheme(storedTheme(), systemPrefersDark()))
         expect(early).toBe(isDarkNow())
         expect(early).toBe(value === 'dark' || (value === null && prefersDark))
       })
@@ -237,7 +234,6 @@ describe('where the toggle is', () => {
     await screen.findByRole('heading', { name: 'Applications' })
     expect(isDarkNow()).toBe(false)
 
-    await user.click(button()) // light
     await user.click(button()) // dark
     expect(isDarkNow()).toBe(true)
   })
@@ -258,8 +254,7 @@ describe('where the toggle is', () => {
     const user = userEvent.setup()
     deviceTheme('light')
     renderApp('/login')
-    await user.click(await screen.findByRole('button', { name: /^Theme:/ })) // light
-    await user.click(button()) // dark
+    await user.click(await screen.findByRole('button', { name: /^Theme:/ })) // dark
     await user.click(screen.getByRole('link', { name: /sign up|create an account/i }))
     expect(await screen.findByRole('button', { name: 'Theme: Dark' })).toBeInTheDocument()
     expect(isDarkNow()).toBe(true)
