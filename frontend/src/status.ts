@@ -19,6 +19,9 @@ export const statusLabel = (s: ApplicationStatus) => LABELS[s]
 // Statuses where nothing is left to do: no follow-up is due and nothing is overdue.
 export const isClosed = (s: ApplicationStatus) => s === 'offer_accepted' || s === 'offer_declined' || s === 'rejected' || s === 'withdrawn'
 
+// Endings that stop a route short (the application did not reach the end of its line): rejected, withdrawn, offer declined.
+export const isEnded = (s: ApplicationStatus) => s === 'rejected' || s === 'withdrawn' || s === 'offer_declined'
+
 // The statuses of jobs you have actually applied to: everything but Saved.
 export const APPLIED_STATUSES = STATUSES.filter((s) => s !== 'saved')
 

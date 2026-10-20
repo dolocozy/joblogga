@@ -1,6 +1,6 @@
 import type { ApplicationStatus } from '../api'
-import { STOP_AT } from '../routeStops'
-import { stageCount } from '../status'
+import { STOP_AT, lineFor } from '../routeStops'
+import { isEnded, stageCount } from '../status'
 
 // One application drawn as a route: four stops (Applied, Screening, Interview, Offer), a solid line for the ground it
 // covered, a dashed one for what is left, and a larger stop for where it is now. An application that ended (rejected,
@@ -8,18 +8,9 @@ import { stageCount } from '../status'
 // row still says how far it went. Each application has its own line color, picked from its id so it never changes.
 // Decorative: the status word beside it says the same thing, so it is hidden from screen readers.
 
-const LINES = [
-  { bar: 'bg-cobalt', ring: 'border-cobalt' },
-  { bar: 'bg-tangerine', ring: 'border-tangerine' },
-  { bar: 'bg-signal', ring: 'border-signal' },
-  { bar: 'bg-plum', ring: 'border-plum' },
-] as const
-
-const ENDED: ApplicationStatus[] = ['rejected', 'withdrawn', 'offer_declined']
-
 export default function Route({ status, furthest, lineId }: { status: ApplicationStatus; furthest: number; lineId: number }) {
-  const line = LINES[Math.abs(lineId) % LINES.length]!
-  const ended = ENDED.includes(status)
+  const line = lineFor(lineId)
+  const ended = isEnded(status)
   const reached = status === 'saved' ? 0 : Math.min(4, Math.max(furthest, stageCount[status]))
   // The stop the route sits on now (or ended on). Saved has none: nothing is reached yet.
   const here = reached === 0 ? (ended ? 0 : -1) : reached - 1
@@ -41,6 +32,20 @@ export default function Route({ status, furthest, lineId }: { status: Applicatio
         const look = i < here ? `${stopRing} bg-platform` : 'border-unreached bg-platform'
         return <span key={i} className={`absolute top-[8px] h-[11px] w-[11px] -translate-x-1/2 rounded-field border-[3px] ${look}`} style={place} />
       })}
+    </span>
+  )
+}
+
+// The four stop names, each centered over its stop on a route below. The inset leaves room for half a label either side,
+// so the route under it needs the same `mx-6`.
+export function StopNames() {
+  return (
+    <span aria-hidden className="relative mx-6 block h-5 text-sm font-normal">
+      {['Applied', 'Screening', 'Interview', 'Offer'].map((name, i) => (
+        <span key={name} className="absolute top-0 -translate-x-1/2" style={{ left: `${STOP_AT[i]}%` }}>
+          {name}
+        </span>
+      ))}
     </span>
   )
 }

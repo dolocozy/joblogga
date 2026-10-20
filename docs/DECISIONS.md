@@ -18,3 +18,8 @@ Short log of design and build decisions: date, decision, why.
 - **Closed applications keep their stop:** a rejected or withdrawn application shows the stop it reached, on a grey line, with an empty larger square (brick for rejected). That needed the API to say how far it got, so applications now carry `furthest_stage` (0 to 4), worked out from the status history and loaded in one extra query for the list.
 - **Line color by id:** cobalt, tangerine, signal or plum, picked from the application id so it never changes. The color is decoration; the status word and the stop names carry the meaning.
 - **Saved view and landing sample unchanged for now:** saved jobs have no route yet, and the landing sample moves in phase 5.
+
+## 2026-10-20 Detail page and forms (phase 3)
+- **Detail page:** the route sits under the title with the four stop names above it, and the status history is a vertical route (newest stop on top, larger), each entry a stop on a line in the application's color. The small stage meter beside the status word is gone there, since the route says the same thing.
+- **Forms:** the add and edit form is three stops on a vertical line: The job, Where it stands, Labels and notes. Field order within them changed (status, dates and resume now sit together) but labels, validation and inline errors are untouched.
+- **Shared pieces:** `lineFor(id)` and `STOP_AT` live in `routeStops.ts`, `isEnded` in `status.ts`, `StopNames` beside `Route`.
