@@ -316,3 +316,23 @@ def test_timestamps_are_utc_when_read_back_from_the_database(client, auth):
     assert len(stamps) == 4
     for stamp in stamps:
         assert stamp.endswith("Z") or stamp.endswith("+00:00"), stamp
+
+
+# --- furthest stage ---------------------------------------------------------
+
+
+def test_furthest_stage_keeps_how_far_a_closed_application_got(client, auth):
+    """The list draws a route per application, so a rejected one must still know it reached the interview."""
+    rejected = create(client, auth, company="Rejected Inc", status="applied")
+    for status in ("screening", "interview", "rejected"):
+        assert client.patch(f"/applications/{rejected['id']}", json={"status": status}, headers=auth).status_code == 200
+    saved = create(client, auth, company="Saved Inc", status="saved")
+    declined = create(client, auth, company="Declined Inc", status="offer_declined")
+    quick = create(client, auth, company="Quick Inc", status="applied")
+    client.patch(f"/applications/{quick['id']}", json={"status": "rejected"}, headers=auth)
+
+    items = {a["company"]: a for a in client.get("/applications", params={"limit": 200}, headers=auth).json()["items"]}
+    assert items["Rejected Inc"]["status"] == "rejected" and items["Rejected Inc"]["furthest_stage"] == 3
+    assert items["Saved Inc"]["furthest_stage"] == 0 and saved["furthest_stage"] == 0
+    assert items["Declined Inc"]["furthest_stage"] == 4 and declined["furthest_stage"] == 4  # sits on the Offer stop
+    assert items["Quick Inc"]["furthest_stage"] == 1

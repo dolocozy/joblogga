@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { exportApplicationsCsv, fetchCountries, fetchStates, fetchTags, fetchUpcoming, listApplications, updateApplication, WORK_MODES } from '../api'
 import type { Application, ApplicationStatus, Country, PlaceRef, TagCount, WorkMode } from '../api'
-import { DateCell, FollowUp, LEDGER_COLUMNS, LedgerHeader, SAVED_LEDGER_COLUMNS } from '../components/Ledger'
+import { DateCell, FollowUp, LedgerHeader, ROUTE_LEDGER_COLUMNS, SAVED_LEDGER_COLUMNS } from '../components/Ledger'
+import Route from '../components/Route'
 import PostingLink from '../components/PostingLink'
 import ArchivedNote from '../components/ArchivedNote'
 import RoundsNote from '../components/RoundsNote'
@@ -476,12 +477,12 @@ export default function Applications() {
         </>
       ) : (
         <>
-          <LedgerHeader saved={view === 'saved'} />
+          <LedgerHeader saved={view === 'saved'} route={view !== 'saved'} />
           <ul>
             {items.map((a) => (
               <li
                 key={a.id}
-                className={`grid gap-x-4 gap-y-1 border-b border-rule py-3 md:items-center ${view === 'saved' ? SAVED_LEDGER_COLUMNS : LEDGER_COLUMNS}`}
+                className={`grid gap-x-4 gap-y-1 border-b border-rule py-3 md:items-center ${view === 'saved' ? SAVED_LEDGER_COLUMNS : ROUTE_LEDGER_COLUMNS}`}
               >
                 {/* The posting link sits beside the company link, not inside it: a link nested in a link is invalid HTML. */}
                 <div className="flex min-w-0 items-center gap-x-4">
@@ -509,10 +510,16 @@ export default function Applications() {
                 </div>
                 {/* The status control sits beside the link (not inside it): a control nested in a link is invalid HTML. */}
                 <div>
+                  {view !== 'saved' && (
+                    <div className="mx-6 mb-1 max-w-xs">
+                      <Route status={a.status} furthest={a.furthest_stage} lineId={a.id} />
+                    </div>
+                  )}
                   <StatusSelect
                     value={a.status}
                     label={`Status for ${a.company}`}
                     disabled={busyId === a.id}
+                    meter={view === 'saved'}
                     onChange={(next) => changeStatus(a, next)}
                   />
                   <RoundsNote app={a} className="block" />

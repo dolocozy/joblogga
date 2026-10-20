@@ -189,6 +189,7 @@ export interface Application {
   archived: boolean // hidden from the default list and board; still in the dashboard and the export
   archived_at: string | null
   status: ApplicationStatus
+  furthest_stage: number // 0 to 4: the furthest of Applied, Screening, Interview and Offer it ever reached
   follow_up_date: string | null // YYYY-MM-DD
   created_at: string
   updated_at: string

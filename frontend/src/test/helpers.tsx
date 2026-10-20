@@ -33,6 +33,7 @@ export function makeApplication(overrides: Partial<Application> = {}): Applicati
     archived: false,
     archived_at: null,
     status: 'applied',
+    furthest_stage: 1,
     follow_up_date: null,
     created_at: '2026-03-01T12:00:00Z',
     updated_at: '2026-03-01T12:00:00Z',

@@ -7,15 +7,16 @@ interface Props {
   value: ApplicationStatus
   label: string // accessible name, e.g. "Status for Acme"
   disabled?: boolean
+  meter?: boolean // the small stage meter beside the word; off where a route already shows the stage
   onChange: (status: ApplicationStatus) => void
 }
 
 // Changes an application's status in place. Looks like the status word with an
 // underline, since it is a control and should read as one.
-export default function StatusSelect({ value, label, disabled, onChange }: Props) {
+export default function StatusSelect({ value, label, disabled, meter = true, onChange }: Props) {
   return (
     <span className="inline-flex items-center gap-2">
-      <StageMeter status={value} />
+      {meter && <StageMeter status={value} />}
       <select
         aria-label={label}
         value={value}
