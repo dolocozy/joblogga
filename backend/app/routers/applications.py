@@ -183,6 +183,8 @@ def list_applications(
         .order_by(Application.date_applied.desc().nulls_last(), Application.id.desc())
         .limit(limit)
         .offset(offset)
+        # Each row's furthest stage reads its history: load all of it in one extra query, not one per row.
+        .options(selectinload(Application.history))
     ).all()
     return ApplicationList(items=[ApplicationOut.model_validate(i) for i in items], total=total)
 

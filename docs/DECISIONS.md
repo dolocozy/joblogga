@@ -12,3 +12,9 @@ Short log of design and build decisions: date, decision, why.
 - **Nav labels unchanged:** Applications, Dashboard and FAQ keep their names for now; renaming them to Lines and Numbers is left for the phases that rebuild those pages.
 - **Square stops:** the radius rules (2px and 4px, nothing round) still hold, so stops are squares.
 - **Phases:** 1 tokens, fonts and header; 2 Lines view; 3 detail and forms; 4 dashboard, offers and board; 5 landing and auth; 6 screenshots and release.
+
+## 2026-10-20 Lines view on the applications list (phase 2)
+- **Route per row:** the status column became a four-stop route (solid line to where it is, dashed beyond, larger stop for now). The status dropdown stays under it, so changing status is still one click and works with a keyboard.
+- **Closed applications keep their stop:** a rejected or withdrawn application shows the stop it reached, on a grey line, with an empty larger square (brick for rejected). That needed the API to say how far it got, so applications now carry `furthest_stage` (0 to 4), worked out from the status history and loaded in one extra query for the list.
+- **Line color by id:** cobalt, tangerine, signal or plum, picked from the application id so it never changes. The color is decoration; the status word and the stop names carry the meaning.
+- **Saved view and landing sample unchanged for now:** saved jobs have no route yet, and the landing sample moves in phase 5.

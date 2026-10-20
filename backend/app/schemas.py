@@ -431,6 +431,7 @@ class ApplicationOut(BaseModel):
     archived: bool  # hidden from the default list and board; still counted in the dashboard and export
     archived_at: datetime | None
     status: ApplicationStatus
+    furthest_stage: int  # 0 to 4: the furthest of Applied, Screening, Interview and Offer it ever reached
     follow_up_date: date | None
     created_at: datetime
     updated_at: datetime

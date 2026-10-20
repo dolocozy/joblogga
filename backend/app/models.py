@@ -144,6 +144,17 @@ CLOSED_STATUSES = (
 # Statuses where an offer exists (or existed): the offers worth putting side by side.
 OFFER_STATUSES = (ApplicationStatus.OFFER, ApplicationStatus.OFFER_ACCEPTED, ApplicationStatus.OFFER_DECLINED)
 
+# How far along the four pipeline stops (Applied, Screening, Interview, Offer) each status is. The endings that are not
+# a stop (rejected, withdrawn) and Saved are 0; both offer endings sit on the Offer stop.
+STAGE_RANK = {
+    ApplicationStatus.APPLIED: 1,
+    ApplicationStatus.SCREENING: 2,
+    ApplicationStatus.INTERVIEW: 3,
+    ApplicationStatus.OFFER: 4,
+    ApplicationStatus.OFFER_ACCEPTED: 4,
+    ApplicationStatus.OFFER_DECLINED: 4,
+}
+
 
 def _status_enum() -> Enum:
     # Stored as a plain string (native_enum=False), not a Postgres ENUM type:
@@ -227,6 +238,16 @@ class Application(Base):
     @property
     def archived(self) -> bool:
         return self.archived_at is not None
+
+    @property
+    def furthest_stage(self) -> int:
+        """The furthest of the four stops this application ever reached (0 to 4), from its history and its current status.
+
+        A rejected application keeps the stop it got to, so the applications list can show where each one ended. The
+        current status counts too, for rows whose history was never recorded.
+        """
+        ranks = [STAGE_RANK.get(h.to_status, 0) for h in self.history]
+        return max([*ranks, STAGE_RANK.get(self.status, 0)])
 
     @property
     def location_display(self) -> str | None:
