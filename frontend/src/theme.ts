@@ -17,7 +17,7 @@ export const THEME_LABELS: Record<Theme, string> = { system: 'System', light: 'L
 export const NEXT_THEME: Record<Theme, Theme> = { system: 'light', light: 'dark', dark: 'system' }
 
 // The page and browser-chrome colours (the <meta name="theme-color"> follows the theme, so a phone's address bar matches).
-export const CHROME_COLOR = { light: '#f4efe5', dark: '#161a18' } as const
+export const CHROME_COLOR = { light: '#ffffff', dark: '#0f151b' } as const
 
 // Storage can be missing or throw (private windows, blocked site data), and can hold anything: only a known value counts.
 export function storedTheme(): Theme {

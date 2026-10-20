@@ -68,7 +68,7 @@ export default function Dashboard() {
             type="button"
             aria-pressed={r.weeks === weeks}
             onClick={() => pickRange(r.weeks)}
-            className={`btn btn-sm ${r.weeks === weeks ? 'bg-ink text-sheet' : 'border border-pencil text-ink hover:bg-ink/5'}`}
+            className={`btn btn-sm ${r.weeks === weeks ? 'bg-ink text-ticket' : 'border border-pencil text-ink hover:bg-ink/5'}`}
           >
             {r.label}
           </button>

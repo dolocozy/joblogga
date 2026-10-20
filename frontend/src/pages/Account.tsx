@@ -159,7 +159,7 @@ export default function Account() {
           {user?.reminder_emails ? 'Reminders are on.' : 'Reminders are off. Nothing is sent unless you turn them on.'}
         </p>
         {user?.reminder_emails && !user.email_verified && (
-          <p className="border-l-2 border-marker bg-marker/20 px-3 py-2 text-sm">
+          <p className="border-l-2 border-tangerine bg-tangerine/10 px-3 py-2 text-sm">
             Your email address is not verified yet, so no reminders will be sent until it is. Use the link in the verification email, or the banner at the top of the page to send it again.
           </p>
         )}

@@ -10,7 +10,7 @@ export default function StageMeter({ status }: { status: ApplicationStatus }) {
   return (
     <span aria-hidden className="inline-flex gap-0.5">
       {[0, 1, 2, 3].map((i) => (
-        <span key={i} className={`h-1.5 w-2 ${i < filled ? 'bg-pine' : `border ${hollow}`}`} />
+        <span key={i} className={`h-1.5 w-2 ${i < filled ? 'bg-cobalt' : `border ${hollow}`}`} />
       ))}
     </span>
   )

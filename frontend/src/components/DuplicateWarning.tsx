@@ -18,7 +18,7 @@ export default function DuplicateWarning({ matches, confirmLabel, busy, onConfir
   useEffect(() => heading.current?.focus(), [])
   const first = matches[0]
   return (
-    <div role="group" aria-label="Possible duplicate" className="border-l-2 border-marker bg-marker/20 px-4 py-3">
+    <div role="group" aria-label="Possible duplicate" className="border-l-2 border-tangerine bg-tangerine/10 px-4 py-3">
       <p ref={heading} tabIndex={-1} className="font-semibold outline-none">
         {matches.length === 1
           ? `You already have an application for ${first.company}, ${first.role}.`

@@ -22,7 +22,7 @@ export default function VerifyBanner() {
   }
 
   return (
-    <div className="border-b border-rule bg-marker/25">
+    <div className="border-b border-rule bg-tangerine/10">
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 text-sm md:px-6">
         <p className="min-w-0">
           Please verify your email address. We sent a link to <strong className="break-all">{user.email}</strong>. Without it, a password reset may not

@@ -21,7 +21,7 @@ const Missing = () => <span className="text-ink-soft">Not recorded</span>
 function Row({ label, offers, cell }: { label: string; offers: Offer[]; cell: (o: Offer) => ReactNode }) {
   return (
     <tr className="border-b border-rule align-top">
-      <th scope="row" className="sticky left-0 w-32 min-w-32 bg-paper py-3 pr-4 text-left text-sm font-semibold text-ink-soft">
+      <th scope="row" className="sticky left-0 w-32 min-w-32 bg-platform py-3 pr-4 text-left text-sm font-semibold text-ink-soft">
         {label}
       </th>
       {offers.map((o) => (
@@ -121,7 +121,7 @@ export default function Offers() {
           )}
 
           {currencies.length > 1 && (
-            <p role="note" className="mb-4 border-l-2 border-marker bg-marker/20 px-3 py-2 text-sm">
+            <p role="note" className="mb-4 border-l-2 border-tangerine bg-tangerine/10 px-3 py-2 text-sm">
               These offers are in different currencies ({currencies.join(', ')}). Amounts are shown as entered and are not converted, so they cannot be compared
               directly.
             </p>
@@ -135,7 +135,7 @@ export default function Offers() {
                 <caption className="sr-only">Offers side by side</caption>
                 <thead>
                   <tr className="border-b-2 border-ink align-bottom">
-                    <td className="sticky left-0 bg-paper" />
+                    <td className="sticky left-0 bg-platform" />
                     {compared.map((o) => (
                       <th key={o.id} scope="col" className="min-w-52 py-2 pr-4 text-left font-normal">
                         <Link to={`/applications/${o.id}`} className="block text-lg font-semibold hover:underline">

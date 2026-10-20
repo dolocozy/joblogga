@@ -42,17 +42,17 @@ export default function LoginForm() {
       <h2 className="text-2xl">Log in</h2>
 
       {typeof notice === 'string' && !serverError && (
-        <p role="status" className="border-l-2 border-pine bg-pine/5 px-3 py-2 text-sm">
+        <p role="status" className="border-l-2 border-cobalt bg-cobalt/5 px-3 py-2 text-sm">
           {notice}
         </p>
       )}
       {accountDeleted && !serverError && typeof notice !== 'string' && (
-        <p role="status" className="border-l-2 border-pine bg-pine/5 px-3 py-2 text-sm">
+        <p role="status" className="border-l-2 border-cobalt bg-cobalt/5 px-3 py-2 text-sm">
           Your account and all of its data have been deleted.
         </p>
       )}
       {sessionExpired && !serverError && typeof notice !== 'string' && (
-        <p role="status" className="border-l-2 border-marker bg-marker/20 px-3 py-2 text-sm">
+        <p role="status" className="border-l-2 border-tangerine bg-tangerine/10 px-3 py-2 text-sm">
           Your session has expired. Please log in again.
         </p>
       )}

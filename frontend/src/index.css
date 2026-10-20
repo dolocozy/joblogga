@@ -1,35 +1,38 @@
 @import "tailwindcss";
 
-/* Joblogga design system: a logbook. Warm paper, dark ink, one pen color (pine)
-   for actions, a red pen (brick) for trouble, and a highlighter (marker) for
-   follow-up dates. Every text/background pairing below was contrast-checked. */
+/* Joblogga design system: lines. Every application is a route with four stops, so the
+   interface is a plain white page, near-black ink, and a handful of saturated line colors
+   (cobalt, tangerine, signal, plum) borrowed from a transit map. Cobalt is also the color of
+   actions and links; brick is kept for trouble. Every text/background pairing was contrast-checked. */
 @theme {
-  --color-paper: #f4efe5; /* page */
-  --color-sheet: #fffcf6; /* forms, login, chart panels */
-  --color-ink: #1f2622; /* text: 13.5:1 on paper */
-  --color-ink-soft: #565c57; /* secondary text: 6.0:1 on paper */
-  --color-rule: #d6ccb8; /* ledger lines (decorative only) */
-  --color-pencil: #857d6a; /* control borders: 3.6:1 or better */
-  --color-pine: #2d5b4c; /* primary actions, links, offers: 6.8:1 on paper */
-  --color-pine-deep: #234a3d; /* pine, pressed/hover */
-  --color-brick: #b2401f; /* overdue, rejected, delete: 5.0:1 on paper */
-  --color-brick-deep: #8f3218;
-  --color-marker: #f0c94a; /* highlighter; only ever behind ink text (9.7:1) */
-  --color-on-marker: #1f2622; /* text on a SOLID marker wash: dark in both themes (ink turns light in dark mode) */
+  --color-platform: #ffffff; /* page */
+  --color-ticket: #ffffff; /* forms, login, chart panels (marked out by a thin rule, not a tint) */
+  --color-ink: #101820; /* text: 17.7:1 on the page */
+  --color-ink-soft: #4a525a; /* secondary text: 7.9:1 on the page */
+  --color-rule: #d9dcdf; /* hairlines between rows and around panels (decorative only) */
+  --color-pencil: #7b8590; /* control borders: 3.7:1 or better */
+  --color-unreached: #c3c7cc; /* the dashed track and stops a route has not reached yet (decorative only) */
+  --color-cobalt: #2347d6; /* primary actions, links, the first line color: 7.1:1 on the page */
+  --color-cobalt-deep: #1a37a8; /* cobalt, pressed/hover */
+  --color-tangerine: #f26b1d; /* line color: a line or a fill (3.05:1 on the page), never text */
+  --color-signal: #00805a; /* line color and offers: 5.0:1 on the page */
+  --color-plum: #8a2d6b; /* line color: 7.9:1 on the page */
+  --color-brick: #c4380f; /* overdue, rejected, delete: 5.4:1 on the page */
+  --color-brick-deep: #9e2b0a;
 
-  --font-serif: "Newsreader Variable", Georgia, serif;
+  --font-serif: "Fraunces Variable", Georgia, serif;
   --font-sans: "Hanken Grotesk Variable", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
-  /* Two radii, by role: small for fields and sheets, a touch more for buttons. */
+  /* Two radii, by role: small for fields and sheets, a touch more for buttons and the current stop. */
   --radius-field: 2px;
   --radius-button: 4px;
 }
 
-/* Dark mode: the same logbook by lamplight. Every colour in the app comes from the tokens above, so a second set of values
+/* Dark mode: the same lines by night service. Every colour in the app comes from the tokens above, so a second set of values
    is all it takes (no per-element dark: variants to forget, and the charts follow because they read the tokens too).
    It applies when <html> has the "dark" class, which src/theme.ts sets from the saved choice or, by default, the system
-   preference. Every pairing was contrast-checked: text 6.5:1 or better, control borders 4.3:1, the marker wash with ink 6.9:1. */
+   preference. Every pairing was contrast-checked: text 4.5:1 or better, control borders 3:1. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
@@ -37,22 +40,25 @@
 }
 :root.dark {
   color-scheme: dark; /* native controls, scrollbars and date pickers follow */
-  --color-paper: #161a18;
-  --color-sheet: #1e2421;
-  --color-ink: #ece7db;
-  --color-ink-soft: #a8aca4;
-  --color-rule: #38423d;
-  --color-pencil: #7e8882;
-  --color-pine: #7cc0a6; /* lighter pine: 8.3:1 on paper, and dark sheet-coloured text on it is 7.5:1 */
-  --color-pine-deep: #9ad3bd; /* hover: lighter still, as the light theme's hover is darker */
-  --color-brick: #ee8c73;
-  --color-brick-deep: #f4a590;
-  /* --color-marker stays the same yellow; it sits behind translucent washes and dark on-marker text. */
+  --color-platform: #0f151b;
+  --color-ticket: #172029;
+  --color-ink: #e9e6dc;
+  --color-ink-soft: #a9b1b8;
+  --color-rule: #2c3843;
+  --color-pencil: #7f8b96;
+  --color-unreached: #4a5560;
+  --color-cobalt: #7c95ff; /* lighter cobalt, and dark text on it clears 4.5:1 */
+  --color-cobalt-deep: #9db0ff; /* hover: lighter still, as the light theme's hover is darker */
+  --color-tangerine: #ff8a47;
+  --color-signal: #4fd1a1;
+  --color-plum: #d58ac0;
+  --color-brick: #ff8f6b;
+  --color-brick-deep: #ffa98c;
 }
 
 @layer base {
   body {
-    @apply bg-paper font-sans text-ink antialiased;
+    @apply bg-platform font-sans text-ink antialiased;
   }
   /* Titles are set in the serif; body and figures stay in the sans. */
   h1,
@@ -73,14 +79,14 @@
     @apply inline-flex items-center justify-center rounded-button px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60;
   }
   .btn-primary {
-    @apply bg-pine text-sheet hover:bg-pine-deep;
+    @apply bg-cobalt text-ticket hover:bg-cobalt-deep;
   }
   .btn-secondary {
     @apply border border-ink text-ink hover:bg-ink/5;
   }
   /* The irreversible confirm button: filled, so it cannot be mistaken for a routine action. */
   .btn-destructive {
-    @apply bg-brick text-sheet hover:bg-brick-deep;
+    @apply bg-brick text-ticket hover:bg-brick-deep;
   }
   .btn-danger {
     @apply px-2 text-brick hover:text-brick-deep hover:underline;
@@ -89,16 +95,16 @@
     @apply px-3 py-1;
   }
   .link {
-    @apply text-pine underline underline-offset-2 hover:text-pine-deep;
+    @apply text-cobalt underline underline-offset-2 hover:text-cobalt-deep;
   }
   .field-label {
     @apply text-sm font-semibold text-ink;
   }
   .input {
-    @apply block w-full rounded-field border border-pencil bg-sheet px-3 py-2 text-ink placeholder:text-pencil aria-invalid:border-brick aria-invalid:border-2;
+    @apply block w-full rounded-field border border-pencil bg-ticket px-3 py-2 text-ink placeholder:text-pencil aria-invalid:border-brick aria-invalid:border-2;
   }
   .sheet {
-    @apply rounded-field border border-rule bg-sheet;
+    @apply rounded-field border border-rule bg-ticket;
   }
   /* Dates, salaries and counts sit in mono so columns line up like a ledger. */
   .figure {
@@ -106,14 +112,14 @@
   }
 }
 
-/* Chart colors, defined once and referenced by role. Series 1 is pine: it clears
-   3:1 on the sheet (7.6:1) and both charts have a single series, so identity comes
+/* Chart colors, defined once and referenced by role. Series 1 is cobalt: it clears
+   3:1 on the panel (7.1:1) and both charts have a single series, so identity comes
    from the chart title. These point at the tokens, so dark mode recolours the charts with no extra rules. */
 :root {
-  --viz-surface: var(--color-sheet);
+  --viz-surface: var(--color-ticket);
   --viz-ink: var(--color-ink);
   --viz-ink-2: var(--color-ink-soft);
   --viz-grid: var(--color-rule);
   --viz-axis: var(--color-pencil);
-  --viz-series-1: var(--color-pine);
+  --viz-series-1: var(--color-cobalt);
 }
