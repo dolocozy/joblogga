@@ -23,3 +23,10 @@ Short log of design and build decisions: date, decision, why.
 - **Detail page:** the route sits under the title with the four stop names above it, and the status history is a vertical route (newest stop on top, larger), each entry a stop on a line in the application's color. The small stage meter beside the status word is gone there, since the route says the same thing.
 - **Forms:** the add and edit form is three stops on a vertical line: The job, Where it stands, Labels and notes. Field order within them changed (status, dates and resume now sit together) but labels, validation and inline errors are untouched.
 - **Shared pieces:** `lineFor(id)` and `STOP_AT` live in `routeStops.ts`, `isEnded` in `status.ts`, `StopNames` beside `Route`.
+
+## 2026-10-20 Landing and sign-in pages (phase 5)
+- **Hero:** three made-up routes under the intro text draw in from the left as the page loads (a clip reveal, so the stops are never stretched; nothing moves for people who ask for reduced motion). They are decorative and hidden from screen readers.
+- **Sample page:** the landing's sample list uses the same route column as the real list, including a rejected row that stops at Screening.
+- **How it works:** the four stages are stops on a line (the line is hidden on phones, where they stack two across).
+- **Headline unchanged:** "A logbook for your job search" stays, since the logbook is still what the app is; the routes are how it looks inside.
+- **Sign-in, sign-up and reset pages:** already one centered white panel with the new wordmark, so no change beyond the tokens.
