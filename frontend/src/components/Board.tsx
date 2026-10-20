@@ -23,6 +23,7 @@ import { statusLabel, statusText } from '../status'
 import { dateLine } from '../appliedOn'
 import { placeLine, roleLine } from '../workMode'
 import { FollowUp } from './Ledger'
+import Route from './Route'
 import StageMeter from './StageMeter'
 import ArchivedNote from './ArchivedNote'
 import PostingLink from './PostingLink'
@@ -88,8 +89,11 @@ function BoardCard({ app, today, busy, onMove }: { app: Application; today: stri
       </div>
       <PostingLink url={app.job_url} company={app.company} className="mt-2 inline-block" />
       {/* A plain control for changing status, so moving a card never depends on being able to drag. */}
-      <div className="mt-3">
-        <StatusSelect value={app.status} label={`Status for ${app.company}`} disabled={busy} onChange={(next) => onMove(app, next)} />
+      <div className="mx-5 mt-3">
+        <Route status={app.status} furthest={app.furthest_stage} lineId={app.id} />
+      </div>
+      <div className="mt-1">
+        <StatusSelect value={app.status} label={`Status for ${app.company}`} disabled={busy} meter={false} onChange={(next) => onMove(app, next)} />
         <RoundsNote app={app} className="mt-1 block" />
         <ArchivedNote app={app} className="mt-1 block" />
       </div>
