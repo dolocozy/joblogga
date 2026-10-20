@@ -30,3 +30,8 @@ Short log of design and build decisions: date, decision, why.
 - **How it works:** the four stages are stops on a line (the line is hidden on phones, where they stack two across).
 - **Headline unchanged:** "A logbook for your job search" stays, since the logbook is still what the app is; the routes are how it looks inside.
 - **Sign-in, sign-up and reset pages:** already one centered white panel with the new wordmark, so no change beyond the tokens.
+## 2026-10-20 Dashboard, board and offers (phase 4)
+- **Numbers in Fraunces:** the dashboard's headline figures and the weekly goal count are set in the title serif, the response rate large and in cobalt. Charts keep one color (cobalt): the line colors identify applications, and using them for stages in the charts would have given one color two meanings.
+- **Board cards carry a route:** each card shows its route above the status dropdown (the small stage meter is dropped there). Column headers are unchanged.
+- **Offers page unchanged:** it already reads from the tokens, and every offer sits on the same stop, so a route there would say nothing.
+- **Nav names kept:** Applications, Dashboard and FAQ keep their names. Renaming them to Lines and Numbers would change URLs, tests, the FAQ and the README for no gain in clarity.

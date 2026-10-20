@@ -21,7 +21,7 @@ function StatTile({ label, value }: { label: string; value: number }) {
   return (
     <div className="lg:px-6 lg:first:pl-0">
       <p className="text-sm text-ink-soft">{label}</p>
-      <p className="mt-1 text-3xl font-semibold">{value.toLocaleString()}</p>
+      <p className="mt-1 font-serif text-4xl font-medium">{value.toLocaleString()}</p>
     </div>
   )
 }
@@ -111,8 +111,8 @@ export default function Dashboard() {
           <div className="grid gap-6 border-y border-rule py-6 sm:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-rule">
             <div className="lg:pr-6">
               <p className="text-sm text-ink-soft">Response rate</p>
-              {/* The one headline number: 48px, in the same sans as everything else. */}
-              <p className="mt-1 text-5xl font-semibold">
+              {/* The one headline number, large and in the title serif; cobalt, the color of the main line. */}
+              <p className="mt-1 font-serif text-6xl font-medium text-cobalt">
                 {stats.response.rate === null ? '—' : `${Math.round(stats.response.rate * 100)}%`}
               </p>
               <p className="mt-2 text-sm text-ink-soft">

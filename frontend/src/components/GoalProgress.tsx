@@ -23,7 +23,7 @@ export default function GoalProgress({ goal }: { goal: Goal }) {
         </Link>
       </div>
       <p className="mt-1">
-        <span className="text-3xl font-semibold">{done}</span> of {target} applications
+        <span className="font-serif text-4xl font-medium">{done}</span> of {target} applications
       </p>
       <div
         role="progressbar"
