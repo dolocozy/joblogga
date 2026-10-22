@@ -188,10 +188,25 @@ async function shoot(chrome, token, shot, theme, file) {
 
 const only = process.env.ONLY?.split(',') // e.g. ONLY=dashboard,offers to redo just those
 const token = await demoToken()
+
+// The detail page is shot for one application with a long history, an interview round and an overdue follow-up. Its id is
+// looked up by company name, because ids differ from one seeded database to the next.
+async function applicationId(company) {
+  const res = await fetch(`${API}/applications?company=${encodeURIComponent(company)}`, { headers: { authorization: `Bearer ${token}` } })
+  const found = (await res.json()).items.find((a) => a.company === company)
+  if (!found) throw new Error(`The demo data has no application at ${company}.`)
+  return found.id
+}
+const DETAIL = {
+  name: 'application-detail',
+  path: `/applications/${await applicationId('Marlow & Finch')}`,
+  fullPage: true,
+  ready: `${noLoading} && document.body.innerText.includes('Status history') && document.body.innerText.includes('Where it stands')`,
+}
 const chrome = await startChrome()
 try {
   const wanted = (shot) => !only || only.includes(shot.name)
-  for (const theme of ['light', 'dark']) for (const shot of SHOTS.filter(wanted)) await shoot(chrome, token, shot, theme, `${shot.name}-${theme}.png`)
+  for (const theme of ['light', 'dark']) for (const shot of [...SHOTS, DETAIL].filter(wanted)) await shoot(chrome, token, shot, theme, `${shot.name}-${theme}.png`)
   if (wanted(LANDING)) await shoot(chrome, token, LANDING, 'light', 'landing.png')
   if (process.env.LANDING_BOTH) await shoot(chrome, token, LANDING, 'dark', 'landing-dark.png')
 } finally {

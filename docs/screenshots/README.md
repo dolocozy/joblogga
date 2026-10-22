@@ -37,5 +37,5 @@ python3 docs/screenshots/optimize.py
 ## Sizes and choices
 
 - Pages are shot at 1280 CSS pixels wide, at 1.5x so text stays sharp (1920 pixels in the file). The Kanban board is the exception, at 1340: it is a strip of nine columns that scrolls sideways, and 1340 ends the picture exactly after the sixth full column instead of cutting one in half.
-- The list and board are the top of the page, not the whole page. The dashboard, offers and the landing page's hero are shown whole. On the dashboard the resume-version card is shown as its table, because that is where a version with too few applications is labelled "too few to judge".
+- The list and board are the top of the page, not the whole page. The application detail shot is Marlow & Finch (an interview at round 2 of 3 with an overdue follow-up), looked up by name. The detail page, dashboard, offers and the landing page's hero are shown whole. On the dashboard the resume-version card is shown as its table, because that is where a version with too few applications is labelled "too few to judge".
 - Each page is shot in light and dark with the theme set explicitly (the Theme button's saved choice), not left to the system preference. The landing page has one version, since its two themes differ only in colour.
