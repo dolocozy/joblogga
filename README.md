@@ -73,11 +73,11 @@ A drop moves the card immediately and puts it back with an error if the server r
 
 Each picture below is shown in your GitHub theme: the light version if GitHub is light, the dark one if it is dark (where a viewer does not support that, the light one is shown). They come from a demo account with made-up companies, seeded by [`docs/screenshots/seed_demo.py`](docs/screenshots/seed_demo.py), and can be retaken after a release by following the [short note beside it](docs/screenshots/README.md).
 
-**Applications list.** Each application is a route with four stops, so you see where it stands (and, for a closed one, how far it got) at a glance: the place (a city name used in several states, like Springfield or Portland, is told apart by its state), tags, and follow-ups that are due or overdue rise to the top.
+**Applications list.** Each application is a route with four stops, so you see where it stands (and, for a closed one, how far it got) at a glance. Only the search box and a Filters button sit above the list; the button opens a panel with the other filters and shows how many are on. Each row also shows the place (a city name used in several states, like Springfield or Portland, is told apart by its state), tags, and follow-ups that are due or overdue rise to the top.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/applications-list-dark.png">
-  <img alt="The applications list: a follow-ups panel with one overdue date in red, search and filter controls, and a row per application with a route of four stops, a status, the applied date and tags" src="docs/screenshots/applications-list-light.png">
+  <img alt="The applications list: a follow-ups panel with one overdue date in red, a search box with a Filters button, and a row per application with a route of four stops, a status, the applied date and tags" src="docs/screenshots/applications-list-light.png">
 </picture>
 
 **Kanban board.** Drag a card to change its status (mouse, touch or keyboard). The board is a strip of columns that scrolls sideways; six are shown here.
@@ -85,6 +85,13 @@ Each picture below is shown in your GitHub theme: the light version if GitHub is
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/kanban-board-dark.png">
   <img alt="The Kanban board with a column per status (Saved, Applied, Screening, Interview, Offer, Offer accepted) and a card for each application, showing tags, interview round and an overdue follow-up" src="docs/screenshots/kanban-board-light.png">
+</picture>
+
+**Application detail.** The route sits under the title, the status history is a vertical route (newest stop on top), and the form is three stops on a line: the job, where it stands, and labels and notes. Each application keeps one line color.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/application-detail-dark.png">
+  <img alt="An application's detail page: the title, a route with four stops ending at Interview, the edit form in three sections (The job, Where it stands, Labels and notes) on a vertical line, and a contacts section and a vertical status history on the right" src="docs/screenshots/application-detail-light.png">
 </picture>
 
 **Dashboard.** This week against your weekly goal, response rate, applications per week, where applications stand, time spent in each stage, and response rate by resume version. Each chart has a table twin; the resume card is shown as its table here, where a version with too few applications reads "too few to judge" instead of a misleading percentage.

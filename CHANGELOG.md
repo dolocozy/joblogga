@@ -18,6 +18,7 @@ Versions follow [semantic versioning](https://semver.org). Details of the reason
 
 ### Added
 
+- A README picture of the application detail page, in light and dark, and all other README screenshots retaken in the new look.
 - Applications carry a `furthest_stage` (0 to 4), worked out from their status history, so a closed application can show how far it got. It is loaded in one extra query for the list and is not stored.
 
 ### Not changed
